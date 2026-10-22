@@ -1,0 +1,26 @@
+name: CI
+
+# Runs the end-to-end tests on every push to main and on pull requests. Linux is
+# enough: the server and its tests need only Bun, and Linux minutes are the cheap ones.
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+      - run: bun build server.ts --target=bun --outfile=/dev/null
+      - run: bun test/scenarios.ts

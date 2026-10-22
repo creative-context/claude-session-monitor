@@ -156,6 +156,8 @@ sh app/build.sh --release  # the universal app, zipped for a release
 
 None of them reads your sessions or the Claude app's files. The app runs its own copy of the server, so rebuild it after changing `server.ts`, `cron.ts` or `public/`.
 
+Every push to `main` runs the tests on GitHub Actions. Publishing a release builds the universal app on macOS and attaches the zip to it.
+
 ## Lessons from other projects
 
 | Lesson | From |

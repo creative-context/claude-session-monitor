@@ -1,0 +1,58 @@
+name: Release
+
+# When a release is published, builds the universal app on macOS and attaches the zip
+# to it. Only here, not on every push: on a private repository a macOS minute counts as
+# ten. Run it by hand to build a release's zip as a workflow artifact, and to replace
+# the one attached to the release if you tick "attach".
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to build, such as v0.2.0
+        required: true
+      attach:
+        description: Attach the zip to the release, replacing the one there
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name || inputs.tag }}
+
+jobs:
+  app:
+    runs-on: macos-15
+    timeout-minutes: 20
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: oven-sh/setup-bun@v2
+      - run: bun test/scenarios.ts
+      - name: The version in Info.plist matches the tag
+        run: |
+          VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" app/Info.plist)
+          [ "v$VERSION" = "$TAG" ] || { echo "app/Info.plist says $VERSION but the tag is $TAG"; exit 1; }
+      - run: sh app/build.sh --release
+      - name: The app is universal and carries its server
+        run: |
+          APP="build/Claude Session Monitor.app"
+          lipo -archs "$APP/Contents/MacOS/ClaudeSessionMonitor" | grep -q x86_64
+          lipo -archs "$APP/Contents/MacOS/ClaudeSessionMonitor" | grep -q arm64
+          test -f "$APP/Contents/Resources/server/server.ts"
+          codesign --verify "$APP"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Claude-Session-Monitor-${{ env.TAG }}
+          path: build/Claude-Session-Monitor-*.zip
+      - name: Attach the zip to the release
+        if: github.event_name == 'release' || inputs.attach
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" build/Claude-Session-Monitor-*.zip --clobber

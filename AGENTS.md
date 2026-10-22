@@ -11,6 +11,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `public/index.html`: the whole page, styles and script, on the Obsidian theme's tokens. The fonts next to it are under the OFL (`licenses/`).
 - `app/main.swift`: the native app. `app/build.sh` builds it universal and copies the server, the page and the hook into it.
 - `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots.
+- `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
 - `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome (the command is at the top of the file). Edit the HTML, never the PNG.
 - `docs/screenshot.png`: the app's window on the demo data (`bun test/demo.ts 4747`).
 
@@ -36,8 +37,8 @@ sh app/build.sh --release  # build and zip for a release
 ## Releasing
 
 1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `app/Info.plist`, the version line, badge and zip name in `README.md`, and add a `## x.y.z` section to `CHANGELOG.md`.
-2. Run `bun test/scenarios.ts`, then `sh app/build.sh --release`.
-3. Commit and push.
-4. Publish the release on that commit, with its CHANGELOG section as the notes and the zip attached:
-   `gh release create vx.y.z --target <commit> --title vx.y.z --notes-file <notes> build/Claude-Session-Monitor-x.y.z.zip`.
+2. Commit, push, and wait for CI to pass on `main`.
+3. Publish the release on that commit, with its CHANGELOG section as the notes:
+   `gh release create vx.y.z --target <commit> --title vx.y.z --notes-file <notes>`.
+4. The Release workflow tests it again on macOS, checks that `Info.plist` matches the tag, builds the universal app and attaches `Claude-Session-Monitor-x.y.z.zip`. Check that the zip is on the release.
 5. Never move or delete a published tag. A fix is a new patch version.
