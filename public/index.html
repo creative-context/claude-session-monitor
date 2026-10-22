@@ -1,0 +1,1226 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Claude Session Monitor</title>
+<style>
+  /* Fonts from the Obsidian theme, served locally (OFL-1.1, via Fontsource). */
+  @font-face {
+    font-family: "Inter Variable";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 100 900;
+    src: url(inter-latin-wght-normal.woff2) format("woff2-variations");
+  }
+  @font-face {
+    font-family: "Space Grotesk Variable";
+    font-style: normal;
+    font-display: swap;
+    font-weight: 300 700;
+    src: url(space-grotesk-latin-wght-normal.woff2) format("woff2-variations");
+  }
+
+  /* Obsidian tokens (astryx-theme-obsidian 0.2): same names and values as the
+     theme. Dark only. The --csm-* tokens are this page's own. */
+  :root {
+    color-scheme: dark;
+
+    --color-background-body: #08090A;
+    --color-background-card: #FFFFFF08;   /* 3% veil */
+    --color-overlay-hover: #FFFFFF0A;     /* 4% */
+    --obsidian-veil-selected: #FFFFFF0F;  /* 6% */
+    --color-overlay-pressed: #FFFFFF14;   /* 8% */
+
+    --color-text-primary: #F7F8F8;
+    --obsidian-text-hover: #D5D8DC;
+    --color-text-secondary: #8A8F98;
+    --color-text-disabled: #62666D;       /* only for things that are off, never for text to read */
+    --csm-text-on-tint: #A3A8B0;          /* secondary text on colored cards, 5.4:1 or more */
+
+    --color-accent: #2D72D2;
+    --color-accent-muted: #2D72D23D;
+    --color-text-accent: #6FA6E8;
+
+    --color-warning: #C87619;
+    --color-warning-muted: #C8761940;
+    --color-text-orange: #FDB876;
+    --color-success: #238551;
+    --color-success-muted: #23855140;
+    --color-text-green: #A5F690;
+    --color-error: #CD4246;
+    --color-error-muted: #CD424640;
+    --color-text-red: #FFB2B8;
+    --color-on-accent: #FFFFFF;
+    --color-on-light: #0D0E10;
+
+    --font-family-body: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    --font-family-heading: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", -apple-system, sans-serif;
+    --font-weight-medium: 510;
+    --radius-inner: 4px;
+    --radius-element: 6px;
+    --radius-container: 8px;
+    --duration-fast: 100ms;
+    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+    /* Type scale: three sizes, each with a fixed line height so cards keep their height. */
+    --csm-text-title: 1rem;       /* 16px: card and window titles */
+    --csm-lh-title: 20px;
+    --csm-text-body: 0.75rem;     /* 12px: what a session is doing */
+    --csm-lh-body: 16px;
+    --csm-text-meta: 0.6875rem;   /* 11px: tags, time, counts */
+    --csm-lh-meta: 14px;
+
+    /* Card geometry */
+    --csm-card-w: 288px;
+    --csm-card-h: 164px;
+    --csm-tag-h: 20px;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; }
+  body {
+    background: var(--color-background-body);
+    color: var(--color-text-primary);
+    font-family: var(--font-family-body);
+    font-size: var(--csm-text-body);
+    line-height: var(--csm-lh-body);
+    font-feature-settings: "cv11", "ss01";
+    font-variant-numeric: tabular-nums;
+    -webkit-font-smoothing: antialiased;
+  }
+  /* One stroke for every icon at every size: 1.25 px on screen, whatever the icon's size. */
+  svg.i { width: 12px; height: 12px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.25px; stroke-linecap: round; stroke-linejoin: round; }
+  svg.i * { vector-effect: non-scaling-stroke; }
+  button { font: inherit; color: inherit; }
+  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  code { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 0.95em; color: var(--color-text-primary); }
+
+  /* In the app it should feel like a Mac window, not a web page: the arrow cursor (the
+     hand is for links), no text selection, and its own context menu. */
+  body.embed, body.embed * { cursor: default !important; }
+  body.embed { -webkit-user-select: none; user-select: none; }
+
+  /* The page fills its window and reflows to any size: the header, then the views,
+     which scroll when their content doesn't fit. */
+  .strip { display: flex; flex-direction: column; gap: 12px; height: 100%; padding: 12px 16px 0; }
+  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -8px; padding: 0 8px 16px; }
+  .view[hidden] { display: none; }
+
+  /* In the app (?embed) the window has a transparent title bar: the header sits on the
+     same line as the window buttons (left) and the toolbar (right), which holds the
+     view switch, search, status and sound in place of the page's own. */
+  body.embed .strip { padding-top: var(--csm-chrome-top, 12px); }
+  body.embed header { padding-right: var(--csm-chrome-right, 0px); }
+  body.embed #link, body.embed #sound, body.embed .nav { display: none; }
+  .lights { display: none; flex: none; width: var(--csm-lights-w, 56px); height: 1px; margin-right: -8px; }
+  body.embed .lights { display: block; }
+
+  /* ---------- tags ---------- */
+  .tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    height: var(--csm-tag-h);
+    padding: 0 6px;
+    border-radius: var(--radius-inner);
+    background: var(--obsidian-veil-selected);
+    color: var(--color-text-secondary);
+    font-size: var(--csm-text-meta);
+    line-height: var(--csm-lh-meta);
+    white-space: nowrap;
+    min-width: 0;
+  }
+  .tag > span { overflow: hidden; text-overflow: ellipsis; }
+  .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); font-weight: var(--font-weight-medium); }
+  .tag.s-waiting, .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
+  .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); font-weight: var(--font-weight-medium); }
+  .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); font-weight: var(--font-weight-medium); }
+  .tag.s-idle, .tag.s-ended { color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 8px; height: 24px; flex: none; container-type: inline-size; }
+  /* In a narrow window the less important counts give way first. */
+  @container (max-width: 760px) { #counts .low { display: none; } }
+  header .name {
+    flex: none;
+    font-family: var(--font-family-heading);
+    font-size: var(--csm-text-title);
+    line-height: var(--csm-lh-title);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: -0.02em;
+    margin-right: 6px;
+  }
+  #counts { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+  header .spacer { flex: 1; }
+  .link { display: inline-flex; align-items: center; gap: 6px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
+  .link i { width: 6px; height: 6px; border-radius: 50%; background: #26A756; }
+  .link.off i { background: var(--color-error); }
+  .icon-btn {
+    all: unset;
+    box-sizing: border-box;
+    cursor: pointer;
+    display: inline-grid;
+    place-items: center;
+    width: 24px;
+    height: 24px;
+    border-radius: var(--radius-element);
+    color: var(--color-text-secondary);
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+  }
+  .icon-btn:hover { background: var(--color-overlay-hover); color: var(--obsidian-text-hover); }
+  .icon-btn:active { background: var(--color-overlay-pressed); }
+  .icon-btn[aria-pressed="true"] { color: var(--color-text-primary); }
+  .icon-btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+  .icon-btn svg.i { width: 15px; height: 15px; }
+
+  /* ---------- view switch and search (in the browser; the app has them in its toolbar) ---------- */
+  .nav { display: flex; align-items: center; gap: 8px; flex: none; }
+  .seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-container); background: var(--color-background-card); }
+  .seg button {
+    all: unset;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 24px; padding: 0 10px;
+    border-radius: var(--radius-element);
+    color: var(--color-text-secondary);
+    font-size: var(--csm-text-body);
+    cursor: pointer;
+  }
+  .seg button:hover { color: var(--obsidian-text-hover); }
+  .seg button[aria-selected="true"] { background: var(--color-overlay-pressed); color: var(--color-text-primary); }
+  .search { position: relative; flex: 0 1 260px; }
+  .search svg.i { position: absolute; left: 9px; top: 7px; color: var(--color-text-secondary); }
+  .search input {
+    all: unset; box-sizing: border-box; width: 100%; height: 28px;
+    padding: 0 10px 0 28px; border-radius: var(--radius-element);
+    background: var(--color-background-card); color: var(--color-text-primary);
+    font-size: var(--csm-text-body);
+  }
+  .search input:focus { background: var(--obsidian-veil-selected); }
+  .search input::placeholder { color: var(--color-text-secondary); }
+
+  /* ---------- groups ---------- */
+  .group + .group { margin-top: 20px; }
+  .group-head {
+    display: flex; align-items: center; gap: 6px;
+    margin: 0 0 8px;
+    font-family: var(--font-family-heading);
+    font-size: var(--csm-text-body);
+    line-height: var(--csm-lh-body);
+    font-weight: var(--font-weight-medium);
+    color: var(--obsidian-text-hover);
+  }
+  .group-head svg.i { width: 14px; height: 14px; }
+  .group-head .count { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
+  .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
+  /* Active is the zone that matters: its header is a title, the rest are labels. */
+  .group.active .group-head { font-size: var(--csm-text-title); line-height: var(--csm-lh-title); color: var(--color-text-primary); letter-spacing: -0.02em; }
+  .group.active .group-head svg.i { width: 16px; height: 16px; }
+  .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); letter-spacing: 0; }
+  /* The rest of the week sits a step back from the active zone. */
+  .group.active + .group { margin-top: 28px; }
+
+  /* As many 288 px columns as fit, stretched to fill the width; one column, as wide as
+     the window, when it's narrower than a card. */
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--csm-card-w)), 1fr));
+    grid-auto-rows: var(--csm-card-h);
+    gap: 8px;
+  }
+
+  /* ---------- cards ---------- */
+  /* Surfaces, no lines: the whole card takes the color of its state, strongest for
+     what needs you. Needs you > error > working > agents working > done >
+     idle and closed (no color). */
+  @property --tint { syntax: "<color>"; inherits: false; initial-value: transparent; }
+  .card {
+    --tint: var(--color-background-card);
+    all: unset;
+    box-sizing: border-box; /* all: unset drops it, and the padding would add to the height */
+    cursor: pointer;
+    min-width: 0;
+    height: var(--csm-card-h);
+    display: flex;
+    flex-direction: column;
+    padding: 12px 12px 10px;
+    background: var(--tint);
+    border-radius: var(--radius-container);
+    overflow: hidden;
+    position: relative;
+    transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+  }
+  /* What needs you (blocked, or a question) and errors get the strongest tint; work in
+     progress a quieter blue; done a faint green, and only in Active, so green keeps its
+     meaning when twenty finished sessions fill the rest of the week. */
+  .card.waiting, .card.asks { --tint: color-mix(in srgb, var(--color-warning) 34%, transparent); }
+  .card.error { --tint: color-mix(in srgb, var(--color-error) 34%, transparent); }
+  .card.working { --tint: color-mix(in srgb, var(--color-accent) 16%, transparent); }
+  .card.working.background { --tint: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+  .card.done { --tint: color-mix(in srgb, var(--color-success) 14%, transparent); }
+  .group:not(.active) .card.done { --tint: var(--color-background-card); }
+  /* A question or an error more than a day old no longer needs you (it isn't counted
+     either), so it keeps its tag color but drops the loud card. */
+  .card.stale { --tint: var(--color-background-card); }
+  /* Hover and press add one step of light on top of the state color; press responds
+     on the way down, not on release. */
+  .card:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
+  .card:active {
+    background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint);
+    transform: scale(0.985);
+  }
+  .card:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+
+  /* On a colored card the status tag is solid. */
+  .card .tag.s-working { background: var(--color-accent); color: var(--color-on-accent); }
+  .card .tag.s-waiting, .card .tag.s-asks { background: var(--color-warning); color: var(--color-on-light); }
+  .card.stale .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); }
+  .card.stale .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); }
+  .card .tag.s-done { background: var(--color-success); color: var(--color-on-accent); }
+  .card .tag.s-error { background: var(--color-error); color: var(--color-on-accent); }
+
+  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
+  .time { display: inline-flex; align-items: center; gap: 4px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; }
+
+  .title {
+    margin-top: 8px;
+    font-family: var(--font-family-heading);
+    font-size: var(--csm-text-title);
+    line-height: var(--csm-lh-title);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: -0.02em;
+    color: var(--color-text-primary);
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    overflow-wrap: anywhere;
+  }
+
+  .detail { margin-top: 4px; color: var(--color-text-secondary); }
+  .detail .line { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+  .detail .line .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .detail .line svg.i { width: 13px; height: 13px; }
+  .detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+  .detail b { color: var(--color-text-primary); font-weight: 400; }
+  .detail .sub { color: var(--color-text-secondary); }
+  /* Secondary text on a colored card. Plain gray drops below 4.5:1 on the strong tints
+     (3.8:1 on orange, 4.3:1 on red), so those use their own light color (orange 6.1 to
+     7.3:1, red 7.0 to 8.3:1) and the blue and green cards a lighter gray (6.3 to 7.5:1). */
+  .card { --meta: var(--color-text-secondary); }
+  .card.working, .card.done { --meta: var(--csm-text-on-tint); }
+  .card.waiting, .card.asks { --meta: var(--color-text-orange); }
+  .card.error { --meta: var(--color-text-red); }
+  .group:not(.active) .card.done, .card.stale { --meta: var(--color-text-secondary); }
+  .card .time, .card .detail, .card .detail .sub, .card .tags .tag { color: var(--meta); }
+  .waiting .detail, .waiting .detail b, .asks .detail, .asks .detail b { color: var(--color-text-orange); }
+  .error .detail { color: var(--color-text-red); }
+  .card.stale .detail, .card.stale .detail b { color: var(--color-text-secondary); }
+
+  .tags { margin-top: auto; display: flex; gap: 4px; overflow: hidden; }
+  .tags .tag { flex: 0 1 auto; }
+  .tags .tag.name { flex: 0 100 auto; min-width: 40px; }
+
+  /* The plan's progress, one segment per step: done, the one it's on, still to do. The
+     row is taller than the 2 px line so its tooltip is easy to hover. */
+  .bar { display: flex; align-items: flex-end; gap: 3px; height: 10px; }
+  .bar span { flex: 1; height: 2px; border-radius: 1px; background: var(--color-overlay-pressed); }
+  .bar span.on { background: var(--color-text-accent); }
+  .bar span.now { background: color-mix(in srgb, var(--color-text-accent) 45%, transparent); }
+
+  /* Paused or closed sessions step down in brightness, not opacity. */
+  .idle .title, .ended .title { color: var(--color-text-secondary); }
+  .idle .detail, .ended .detail, .idle .detail b, .ended .detail b { color: var(--color-text-secondary); }
+
+  /* ---------- history ---------- */
+  /* A readable line length: the time stays near the title on a wide window. */
+  .hlist { display: flex; flex-direction: column; gap: 4px; max-width: 960px; }
+  #history .group-head { max-width: 960px; }
+  mark { background: color-mix(in srgb, var(--color-warning) 40%, transparent); color: inherit; border-radius: 2px; }
+  .hrow {
+    --tint: var(--color-background-card);
+    all: unset; box-sizing: border-box; cursor: pointer;
+    display: grid;
+    grid-template-columns: 16px minmax(0, 1fr) auto auto;
+    grid-template-rows: auto auto;
+    column-gap: 10px; row-gap: 2px;
+    align-items: center;
+    padding: 10px 12px;
+    border-radius: var(--radius-container);
+    background: var(--tint);
+    transition: --tint 450ms var(--ease-standard);
+  }
+  /* A session that is live right now keeps its state's color here too, quieter than on
+     its card, and updates as it changes. */
+  .hrow.live.s-working { --tint: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+  .hrow.live.s-waiting, .hrow.live.s-asks { --tint: color-mix(in srgb, var(--color-warning) 24%, transparent); }
+  .hrow.live.s-error { --tint: color-mix(in srgb, var(--color-error) 24%, transparent); }
+  .hrow.live .htime { color: var(--csm-text-on-tint); }
+  .hrow.live.s-waiting .htime, .hrow.live.s-asks .htime { color: var(--color-text-orange); }
+  .hrow.live.s-error .htime { color: var(--color-text-red); }
+  .hrow:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
+  .hrow:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); }
+  .hrow .hicon svg.spin { animation: spin 2.4s linear infinite; }
+  .hrow.fresh .hicon svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
+  .hrow .hstate { font-size: var(--csm-text-meta); font-weight: var(--font-weight-medium); white-space: nowrap; }
+  .hrow.s-working .hstate { color: var(--color-text-accent); }
+  .hrow.s-waiting .hstate, .hrow.s-asks .hstate { color: var(--color-text-orange); }
+  .hrow.s-error .hstate { color: var(--color-text-red); }
+
+  /* ---------- connection ---------- */
+  .banner {
+    display: flex; align-items: center; gap: 8px;
+    margin-bottom: 12px; padding: 8px 12px;
+    border-radius: var(--radius-container);
+    background: color-mix(in srgb, var(--color-error) 18%, transparent);
+    color: var(--color-text-red);
+  }
+  .banner svg.i { width: 14px; height: 14px; }
+  .banner b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+  .hrow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+  .hrow .hicon { grid-row: 1 / 3; align-self: start; padding-top: 2px; color: var(--color-text-secondary); }
+  .hrow .hicon svg.i { width: 16px; height: 16px; }
+  .hrow:not(:has(.hsnip)) .hicon { grid-row: 1; align-self: center; padding-top: 0; } /* one line when there's nothing more to say */
+  .hrow.s-waiting .hicon, .hrow.s-asks .hicon { color: var(--color-text-orange); }
+  .hrow.s-error .hicon { color: var(--color-text-red); }
+  .hrow.s-done .hicon { color: var(--color-text-green); }
+  .hrow.s-working .hicon { color: var(--color-text-accent); }
+  .hrow .htitle {
+    display: flex; align-items: baseline; gap: 8px; min-width: 0;
+    font-family: var(--font-family-heading); font-weight: var(--font-weight-medium);
+    font-size: var(--csm-text-body); color: var(--color-text-primary);
+    white-space: nowrap;
+  }
+  .hrow .htitle .t { overflow: hidden; text-overflow: ellipsis; }
+  .hrow .htitle .hstate { font-family: var(--font-family-body); flex: none; }
+  .hrow .htime { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
+  .hrow .hsnip { grid-column: 2 / 5; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hrow.s-asks .hsnip, .hrow.s-waiting .hsnip { color: var(--color-text-orange); }
+  .hrow.s-error .hsnip { color: var(--color-text-red); }
+  .more { display: flex; justify-content: center; margin-top: 12px; }
+
+  /* ---------- buttons ---------- */
+  .btn {
+    all: unset; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px;
+    height: 28px; padding: 0 12px;
+    border-radius: var(--radius-element);
+    background: var(--obsidian-veil-selected);
+    color: var(--color-text-primary);
+    font-size: var(--csm-text-body);
+  }
+  .btn:hover { background: var(--color-overlay-pressed); }
+  .btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+  .btn svg.i { width: 13px; height: 13px; }
+
+  /* ---------- empty states ---------- */
+  .empty-state {
+    min-height: 100%;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 6px; padding: 40px 16px; text-align: center;
+  }
+  .empty-state h3 {
+    margin: 14px 0 0;
+    font-family: var(--font-family-heading);
+    font-size: var(--csm-text-title);
+    line-height: var(--csm-lh-title);
+    font-weight: var(--font-weight-medium);
+    letter-spacing: -0.02em;
+  }
+  .empty-state p { margin: 0 0 10px; max-width: 360px; color: var(--color-text-secondary); }
+  /* Three small session cards, as surfaces: working, needs you, done. */
+  .art { position: relative; width: 184px; height: 92px; }
+  .mini {
+    position: absolute; width: 96px; height: 62px; padding: 10px;
+    display: flex; flex-direction: column; gap: 7px;
+    border-radius: 10px;
+  }
+  .mini i { width: 8px; height: 8px; border-radius: 50%; }
+  .mini b { height: 5px; border-radius: 3px; background: #FFFFFF2E; }
+  .mini b + b { width: 60%; background: #FFFFFF14; }
+  .mini.m1 { left: 0; top: 22px; background: color-mix(in srgb, var(--color-accent) 22%, var(--color-background-body)); }
+  .mini.m1 i { background: var(--color-text-accent); }
+  .mini.m2 { left: 44px; top: 0; z-index: 1; background: color-mix(in srgb, var(--color-warning) 34%, var(--color-background-body)); }
+  .mini.m2 i { background: #FB8C00; }
+  .mini.m3 { left: 88px; top: 26px; background: color-mix(in srgb, var(--color-success) 16%, var(--color-background-body)); }
+  .mini.m3 i { background: #26A756; }
+  .badge {
+    display: grid; place-items: center;
+    width: 56px; height: 56px; border-radius: 16px;
+    background: var(--obsidian-veil-selected); color: var(--color-text-secondary);
+  }
+  .badge svg.i { width: 26px; height: 26px; }
+  .badge svg.spin { animation: spin 2.4s linear infinite; }
+  .badge.off { color: var(--color-text-red); background: var(--color-error-muted); }
+  .empty-state.loading { animation: enter 320ms 300ms var(--ease-standard) both; } /* no flash on a fast load */
+
+  /* ---------- motion ---------- */
+  /* Calm and in step. No bounce (nothing here comes from a flick), one easing curve,
+     colors that fade between states, icons that breathe or turn together. */
+  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes enter { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+  .tag svg.spin { animation: spin 2.4s linear infinite; }
+  .tag.s-working svg.bot { animation: breathe 2.4s ease-in-out infinite; }
+  /* What needs you breathes for its first minute, to catch the eye, then holds still. */
+  .card.fresh .tag svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
+  .card.new { animation: enter 320ms var(--ease-standard) both; }
+  /* Increase Contrast (macOS Accessibility): brighter secondary text, and a thin edge on
+     cards and rows so they hold their shape. The only place the page draws lines. */
+  @media (prefers-contrast: more) {
+    :root { --color-text-secondary: #B4B9C1; --csm-text-on-tint: #C4C8CE; }
+    .card, .hrow { box-shadow: inset 0 0 0 1px #FFFFFF40; }
+  }
+  /* Reduce Motion: nothing moves, turns or breathes, but colors still cross-fade, as
+     macOS itself does. */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { animation: none !important; }
+    .card { transition: --tint 450ms var(--ease-standard); }
+    .card:active { transform: none; }
+  }
+</style>
+</head>
+<body>
+<main class="strip" aria-label="Claude sessions">
+  <header>
+    <span class="lights" aria-hidden="true"></span>
+    <span class="name">Sessions</span>
+    <span id="counts"></span>
+    <span class="spacer"></span>
+    <span id="link" class="link off" title="Connection to the local server"><i></i><span>Connecting…</span></span>
+    <button id="sound" class="icon-btn" type="button" aria-pressed="false"></button>
+  </header>
+  <nav class="nav" aria-label="Views">
+    <div class="seg" role="tablist">
+      <button type="button" role="tab" data-view="week" aria-selected="true"></button>
+      <button type="button" role="tab" data-view="history" aria-selected="false"></button>
+    </div>
+    <label class="search"><span class="sr"></span><input id="q" type="search" placeholder="Search all sessions" aria-label="Search all sessions"></label>
+  </nav>
+  <div class="content" id="content">
+    <div id="banner"></div>
+    <section id="week" class="view" aria-label="Last 7 days"></section>
+    <section id="history" class="view" aria-label="All sessions" hidden></section>
+  </div>
+  <div id="announce" class="sr" aria-live="polite"></div>
+</main>
+
+<script>
+  const params = new URLSearchParams(location.search);
+  const embed = params.has("embed");
+  if (embed) document.body.classList.add("embed");
+  const bridge = () => window.webkit?.messageHandlers?.strip;
+
+  // ---------------------------------------------------------------- icons
+  // Drawn for this app on a 24 px grid, all in the same 1.25 px stroke.
+  const svg = (d, cls = "") => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
+  const ICON = {
+    folder: svg('<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>'),
+    flow: svg('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M6.5 10v3a2 2 0 0 0 2 2H14"/>'),
+    agents: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/>'),
+    spinner: svg('<path d="M21 12a9 9 0 1 1-9-9"/>', "spin"),
+    alert: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.5h.01"/>', "pulse"),
+    question: svg('<path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.1 2.2c-.6.3-.9.7-.9 1.3"/><path d="M12 15.8h.01"/>', "pulse"),
+    error: svg('<path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/>', "pulse"),
+    check: svg('<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/>'),
+    moon: svg('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
+    power: svg('<path d="M12 3v8"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/>'),
+    bot: svg('<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><path d="M9 13.5v1"/><path d="M15 13.5v1"/>', "bot"),
+    terminal: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M12.5 15H17"/>'),
+    file: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
+    pencil: svg('<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="m14.5 7.5 2 2"/>'),
+    search: svg('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
+    globe: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
+    star: svg('<path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/>'),
+    plug: svg('<path d="M9 3v5"/><path d="M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>'),
+    unplug: svg('<path d="M9 3v5"/><path d="M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/><path d="m3 3 18 18"/>'),
+    browser: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M6.5 6.5h.01"/><path d="M9 6.5h.01"/>'),
+    bulb: svg('<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
+    listChecks: svg('<path d="m4 7 2 2 3.5-3.5"/><path d="m4 15 2 2 3.5-3.5"/><path d="M13 7.5h7"/><path d="M13 15.5h7"/>'),
+    compress: svg('<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/><path d="m3 21 7-7"/>'),
+    clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
+    sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'),
+    history: svg('<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/>'),
+    calendar: svg('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>'),
+    layers: svg('<path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>'),
+    grid: svg('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
+    activity: svg('<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
+    arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
+    // A speaker, not a bell: on a Mac a bell reads as notifications, and this is sound.
+    speaker: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>'),
+    speakerOff: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="m15.5 9.5 5 5"/><path d="m20.5 9.5-5 5"/>'),
+  };
+  // A question keeps its own icon, but it needs you just like a blocked session does.
+  const STATUS_ICON = {
+    working: ICON.spinner, waiting: ICON.alert, asks: ICON.question, error: ICON.error,
+    done: ICON.check, idle: ICON.moon, ended: ICON.power,
+  };
+  const LABEL = { working: "Working", waiting: "Needs you", asks: "Needs you", error: "Error", done: "Done", idle: "Idle", ended: "Closed" };
+  const TOOLS = {
+    Read: ["Reading", "file"], Edit: ["Editing", "pencil"], MultiEdit: ["Editing", "pencil"], Write: ["Writing", "pencil"],
+    NotebookEdit: ["Editing", "pencil"], Bash: ["Running", "terminal"], Grep: ["Searching", "search"],
+    Glob: ["Finding files", "search"], WebFetch: ["Reading the web", "globe"], WebSearch: ["Searching the web", "globe"],
+    Agent: ["Delegating", "bot"], Task: ["Delegating", "bot"], Skill: ["Using skill", "star"],
+    TodoWrite: ["Updating todos", "listChecks"], ToolSearch: ["Loading tools", "plug"],
+    Compact: ["Compacting context", "compress"], Workflow: ["Starting a workflow", "flow"],
+  };
+  const MCP = {
+    Claude_Browser: ["Using the browser", "browser"], "claude-in-chrome": ["Using Chrome", "browser"],
+    "computer-use": ["Controlling the Mac", "browser"], ccd_session: ["Managing sessions", "grid"],
+    ccd_session_mgmt: ["Managing sessions", "grid"], visualize: ["Drawing a visual", "star"],
+  };
+
+  const $content = document.getElementById("content");
+  const $banner = document.getElementById("banner");
+  const $week = document.getElementById("week");
+  const $history = document.getElementById("history");
+  const $counts = document.getElementById("counts");
+  const $link = document.getElementById("link");
+  const $sound = document.getElementById("sound");
+  const $q = document.getElementById("q");
+  const $announce = document.getElementById("announce");
+  document.querySelector('[data-view="week"]').innerHTML = `${ICON.grid}<span>Last 7 Days</span>`;
+  document.querySelector('[data-view="history"]').innerHTML = `${ICON.history}<span>All Sessions</span>`;
+  document.querySelector(".search .sr").outerHTML = ICON.search;
+
+  let state = { now: Date.now(), needs: 0, sessions: [] };
+  let live = new Map(); // sid → session, for what is in the last 7 days
+  let ready = false; // the first update has arrived
+  let link = "connecting"; // connecting, live or offline
+  let skew = 0;
+  let view = "week";
+  let query = "";
+  const seen = new Map(); // sid → what we last alerted on
+
+  const DAY = 864e5;
+  const FRESH_MS = 60_000; // what needs you breathes for this long, then holds still
+  const now = () => Date.now() + skew;
+  const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
+  const base = (p) => (typeof p === "string" && p.startsWith("/") ? p.split("/").filter(Boolean).pop() : p);
+  const plural = (n, one, many) => `${n} ${n === 1 ? one : many}`;
+  const tag = (inner, cls = "", title = "") => `<span class="tag ${cls}"${title ? ` title="${esc(title)}"` : ""}>${inner}</span>`;
+  const kTokens = (n) => (n >= 999_500 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
+  const dayStart = (back = 0) => { const d = new Date(now()); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - back); return d.getTime(); };
+  const scratch = document.createElement("div");
+  const plain = (html) => { scratch.innerHTML = html; return scratch.textContent.replace(/\s+/g, " ").trim(); };
+
+  function describe(tool) {
+    if (TOOLS[tool]) return TOOLS[tool];
+    if (tool?.startsWith("mcp__")) {
+      const server = tool.split("__")[1] || "";
+      return MCP[server] || [`Using ${/^[0-9a-f-]{20,}$/.test(server) ? "a connector" : server}`, "plug"];
+    }
+    return [`Using ${tool}`, "plug"];
+  }
+
+  // What a session (or one of its agents) is doing: the tool's icon, then its target.
+  function action(tool, detail) {
+    if (!tool) return "";
+    const [verb, icon] = describe(tool);
+    const d = base(detail);
+    return `<span title="${esc(verb)}">${ICON[icon]}</span><span class="txt">${d ? `<b>${esc(d)}</b>` : esc(verb)}</span>`;
+  }
+
+  // One way to write time everywhere: "now", "6m ago", "6h ago", "yesterday", "3d ago",
+  // and spans as "45m" or "1h 5m".
+  function ago(t) {
+    const s = Math.max(0, Math.round((now() - t) / 1000));
+    if (s < 45) return "now";
+    const m = Math.round(s / 60);
+    if (m < 60) return `${m}m ago`;
+    const h = Math.round(m / 60);
+    if (h < 24) return `${h}h ago`;
+    const d = Math.round(h / 24);
+    return d === 1 ? "yesterday" : `${d}d ago`;
+  }
+  function span(t) {
+    const m = Math.max(0, Math.round((now() - t) / 60000));
+    return m < 1 ? "<1m" : m < 60 ? `${m}m` : `${Math.floor(m / 60)}h ${m % 60}m`;
+  }
+  const clock = (t) => new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  function dayLabel(t) {
+    if (t >= dayStart(0)) return "Today";
+    if (t >= dayStart(1)) return "Yesterday";
+    const d = new Date(t);
+    if (t >= dayStart(6)) return d.toLocaleDateString("en-US", { weekday: "long" });
+    const sameYear = d.getFullYear() === new Date(now()).getFullYear();
+    return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
+  }
+
+  // The one rule for "needs you" comes from the server, so the window, the Dock badge
+  // and the menu bar always agree: blocked on you, or a question or an error from the
+  // last day.
+  const needsYou = (s) => s.needsYou ?? (s.status === "waiting" || ((s.status === "asks" || s.status === "error") && now() - s.last < DAY));
+  const isFresh = (s) => (s.status === "waiting" || s.status === "asks" || s.status === "error") && needsYou(s) && now() - (s.since || s.last) < FRESH_MS;
+
+  const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s);
+  const label = (s) => (s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
+  const statusIcon = (s) => (s.background ? ICON.bot : STATUS_ICON[s.status] || ICON.check);
+  const busiest = (s) => [...(s.agents || [])].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0))[0];
+  const agentLine = (a) => {
+    const d = base(a.detail);
+    return `${ICON.bot}<span class="txt"><span class="sub">${esc(a.label || "Agent")} ·</span> ${a.tool ? `<b>${esc(d || describe(a.tool)[0])}</b>` : "Thinking…"}</span>`;
+  };
+
+  // Two fixed lines under the title: what is happening, and its context.
+  function detail(s) {
+    const wrap = (html) => `<div class="wrap">${html}</div>`;
+    const lines = (a, b) => `<div class="line">${a}</div>${b ? `<div class="line">${b}</div>` : ""}`;
+    const plan = s.plan?.current
+      ? `${ICON.listChecks}<span class="txt"><span class="sub">Step ${s.plan.index} of ${s.plan.total} ·</span> ${esc(s.plan.current)}</span>` : "";
+    const agent = busiest(s);
+
+    if (s.status === "waiting") return wrap(esc(s.wait || "Waiting for your answer"));
+    if (s.status === "asks") return wrap(`<b>${esc(s.ask || "It asked you something")}</b>`);
+    if (s.status === "error") return wrap(esc(s.error || "The turn ended with an error"));
+    if (s.background) {
+      const wf = s.workflows?.[0];
+      const head = wf
+        ? `${ICON.flow}<span class="txt">Workflow <b>${esc(wf.name)}</b>${wf.phase ? ` · ${esc(wf.phase)}` : ""}</span>`
+        : `${ICON.agents}<span class="txt">${plural(s.agentCount, "agent", "agents")} in the background</span>`;
+      return lines(head, agent ? agentLine(agent) : "");
+    }
+    if (s.status === "working") {
+      return lines(action(s.tool, s.detail) || `${ICON.bulb}<span class="txt">Thinking…</span>`, plan || (agent ? agentLine(agent) : ""));
+    }
+    if (s.note) return wrap(esc(s.note));
+    if (s.recap) return wrap(esc(s.recap));
+    if (s.status === "done") return wrap(`Finished at ${clock(s.last)}`);
+    if (s.status === "idle") return wrap("Open, waiting for a message");
+    if (s.status === "ended") return wrap(`Closed at ${clock(s.since || s.last)}`);
+    return "";
+  }
+
+  function tags(s) {
+    const out = [];
+    if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
+    const wf = s.workflows?.[0];
+    if (wf || s.agentCount) {
+      const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);
+      const since = wf?.startedAt ?? Math.min(...(s.agents || []).map((a) => a.startedAt || Date.now()));
+      const bits = [
+        s.agentCount ? plural(s.agentCount, "agent", "agents") : "",
+        wf && !s.background && wf.name !== "Workflow" ? wf.name : "", // the generic name says nothing
+        since ? span(since) : "",
+        tokens ? `${kTokens(tokens)} tokens` : "",
+      ].filter(Boolean);
+      const tip = [
+        wf ? `Workflow ${wf.name}` : "", wf?.description,
+        since ? `Running for ${span(since)}` : "", tokens ? `${kTokens(tokens)} tokens` : "", "",
+        ...(s.agents || []).map((a) => `${a.label || "Agent"}${a.phase ? ` (${a.phase})` : ""}${a.tokens ? ` · ${kTokens(a.tokens)} tokens` : ""}`),
+      ].filter((x) => x !== undefined).join("\n").trim();
+      out.push(tag(`${wf ? ICON.flow : ICON.agents}<span>${esc(bits.join(" · "))}</span>`, "", tip));
+    }
+    return `<div class="tags">${out.join("")}</div>`;
+  }
+
+  function bar(s) {
+    if (!s.plan || !(s.status === "working" || s.status === "waiting") || s.background) return "";
+    const segs = Array.from({ length: s.plan.total }, (_, i) =>
+      `<span class="${i < s.plan.done ? "on" : i === s.plan.index - 1 ? "now" : ""}"></span>`).join("");
+    const tip = `Plan: ${s.plan.done} of ${s.plan.total} steps done${s.plan.current ? `, now on step ${s.plan.index}` : ""}`;
+    return `<div class="bar" title="${tip}" aria-hidden="true">${segs}</div>`;
+  }
+
+  // ---------------------------------------------------------------- Last 7 Days
+
+  // Active comes first: what needs you, what is working, and anything touched in the last
+  // two hours, in order of urgency. Then the rest of today, yesterday and earlier.
+  const ACTIVE_MS = 2 * 60 * 60 * 1000;
+  const SECTIONS = [
+    { id: "active", label: "Active", hint: "last 2 hours", icon: ICON.activity,
+      test: (s) => needsYou(s) || s.status === "working" || now() - s.last < ACTIVE_MS },
+    { id: "today", label: "Earlier today", icon: ICON.sun, test: (s) => s.last >= dayStart(0) },
+    { id: "yesterday", label: "Yesterday", icon: ICON.calendar, test: (s) => s.last >= dayStart(1) },
+    { id: "earlier", label: "Earlier", icon: ICON.layers, test: () => true },
+  ];
+
+  const cards = new Map(); // sid → card element, kept between updates
+  const groups = new Map(); // section id → section element
+
+  function upsertCard(s) {
+    let el = cards.get(s.sid);
+    if (!el) {
+      el = document.createElement("button");
+      el.type = "button";
+      el.dataset.sid = s.sid;
+      if (seen.size) el.classList.add("new"); // not on the first draw
+      el.addEventListener("animationend", (e) => { if (e.animationName === "enter") el.classList.remove("new"); });
+      cards.set(s.sid, el);
+    }
+    const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${el.classList.contains("new") ? " new" : ""}`;
+    if (el.className !== cls) el.className = cls;
+    const when = ago(s.status === "working" ? s.last : s.since);
+    const inner = `
+      <div class="top">
+        ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
+        <span class="time">${ICON.clock}${when}</span>
+      </div>
+      <div class="title">${esc(s.title)}</div>
+      <div class="detail">${detail(s)}</div>
+      ${tags(s)}
+      ${bar(s)}`;
+    if (el._inner !== inner) {
+      el.innerHTML = inner;
+      el._inner = inner;
+      syncIcons(el);
+      // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
+      el.setAttribute("aria-label", [s.title, label(s), plain(detail(s)), s.project ? `in ${s.project}` : "", when].filter(Boolean).join(". "));
+    }
+    el.title = (s.agents || []).length
+      ? `Open in the Claude app\n\n${s.agents.map((a) => `${a.label || "Agent"}: ${describe(a.tool || "Agent")[0]}`).join("\n")}`
+      : "Open in the Claude app";
+    return el;
+  }
+
+  function emptyWeek() {
+    return `<div class="empty-state">
+      <div class="art" aria-hidden="true">
+        <span class="mini m1"><i></i><b></b><b></b></span>
+        <span class="mini m2"><i></i><b></b><b></b></span>
+        <span class="mini m3"><i></i><b></b><b></b></span>
+      </div>
+      <h3>No sessions in the last 7 days</h3>
+      <p>Start a session in the Claude app, or run <code>claude</code> in a terminal. It shows up here as soon as it does something, and stays for 7 days.</p>
+      <button class="btn" type="button" data-go="history">${ICON.history}Show All Sessions</button>
+    </div>`;
+  }
+
+  // Shown only if the first update takes a moment; it fades in after 300 ms.
+  const loadingState = () => `<div class="empty-state loading"><div class="badge">${ICON.spinner}</div><h3>Loading sessions</h3></div>`;
+
+  function offlineState() {
+    return `<div class="empty-state"><div class="badge off">${ICON.unplug}</div>
+      <h3>Can't reach the monitor</h3>
+      <p>${embed
+        ? "The app runs it for you and keeps trying. If this stays, quit the app and open it again."
+        : "Start it with <code>bun server.ts</code> in the project folder. This page connects on its own as soon as it's up."}</p></div>`;
+  }
+
+  function renderWeek() {
+    if (!ready) {
+      cards.clear();
+      groups.clear();
+      $week.innerHTML = link === "offline" ? offlineState() : loadingState();
+      syncIcons($week);
+      return;
+    }
+    const list = state.sessions;
+    if (!list.length) {
+      cards.clear();
+      groups.clear();
+      $week.innerHTML = emptyWeek();
+      return;
+    }
+    $week.querySelector(":scope > .empty-state")?.remove();
+
+    // Cards are kept between updates, one per session. A status change then fades the
+    // card's color instead of redrawing it, and a card that changes place slides there.
+    const before = new Map([...cards].map(([sid, el]) => [sid, el.isConnected ? el.getBoundingClientRect() : null]));
+    const buckets = new Map(SECTIONS.map((g) => [g.id, []]));
+    for (const s of list) buckets.get(SECTIONS.find((g) => g.test(s)).id).push(s);
+    // Newest first inside the day sections; the server's order (urgency) in Active.
+    for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => b.last - a.last);
+
+    const keep = new Set();
+    let prev = null;
+    for (const g of SECTIONS) {
+      const items = buckets.get(g.id);
+      let sec = groups.get(g.id);
+      if (!items.length) {
+        sec?.remove();
+        groups.delete(g.id);
+        continue;
+      }
+      if (!sec) {
+        sec = document.createElement("section");
+        sec.className = `group ${g.id}`;
+        sec.setAttribute("aria-label", g.label);
+        sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2><div class="grid"></div>`;
+        groups.set(g.id, sec);
+      }
+      const want = prev ? prev.nextSibling : $week.firstChild;
+      if (sec !== want) $week.insertBefore(sec, want);
+      prev = sec;
+      sec.querySelector(".count").textContent = items.length;
+      const grid = sec.querySelector(".grid");
+      items.forEach((s, i) => {
+        const el = upsertCard(s);
+        keep.add(s.sid);
+        if (grid.children[i] !== el) grid.insertBefore(el, grid.children[i] || null);
+      });
+    }
+    for (const [sid, el] of cards) if (!keep.has(sid)) { el.remove(); cards.delete(sid); }
+
+    // FLIP: start each moved card where it was on screen and let it glide to its new
+    // place. Starting from the on-screen position keeps it smooth even mid-move.
+    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      for (const [sid, el] of cards) {
+        const a = before.get(sid);
+        if (!a) continue;
+        const b = el.getBoundingClientRect();
+        const dx = a.left - b.left;
+        const dy = a.top - b.top;
+        if (Math.abs(dx) > 1 || Math.abs(dy) > 1) {
+          el.animate([{ transform: `translate(${dx}px, ${dy}px)` }, { transform: "none" }],
+            { duration: 380, easing: "cubic-bezier(0.2, 0, 0, 1)" });
+        }
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- All Sessions
+
+  const hist = { items: [], total: 0, ready: false, html: "", req: 0 };
+
+  async function loadHistory(reset) {
+    const q = query;
+    const req = ++hist.req; // a refresh and a "Show more" can cross; only the newest counts
+    // A refresh keeps as many rows as were already shown.
+    const limit = reset ? Math.max(60, hist.items.length) : 60;
+    const offset = reset ? 0 : hist.items.length;
+    try {
+      const r = await fetch(`/api/history?limit=${limit}&offset=${offset}&q=${encodeURIComponent(q)}`).then((x) => x.json());
+      if (q !== query || req !== hist.req) return; // a newer request is on its way
+      hist.items = reset ? r.sessions : hist.items.concat(r.sessions);
+      hist.total = r.total;
+      hist.ready = true;
+      renderHistory();
+    } catch {
+      // The server is restarting; the next update tries again.
+    }
+  }
+
+  // Marks every match of the search in a piece of text.
+  function hl(text) {
+    const raw = String(text ?? "");
+    if (!query) return esc(raw);
+    const lower = raw.toLowerCase();
+    const q = query.toLowerCase();
+    let out = "";
+    let i = 0;
+    for (let j; (j = lower.indexOf(q, i)) !== -1; i = j + q.length) {
+      out += esc(raw.slice(i, j)) + `<mark>${esc(raw.slice(j, j + q.length))}</mark>`;
+    }
+    return out + esc(raw.slice(i));
+  }
+
+  // A row reads from the database, then takes the live state of the session if it is
+  // still in the last 7 days, so a row that is working right now looks and moves like
+  // its card.
+  function merged(h) {
+    const s = live.get(h.sid);
+    return s ? { ...h, ...s, project: s.project || h.project, cwd: s.cwd || h.cwd } : h;
+  }
+
+  function historyRow(h) {
+    const st = LABEL[h.status] ? h.status : "ended";
+    const isLive = live.has(h.sid) && (st === "working" || needsYou(h));
+    let snip = st === "waiting" ? h.wait : st === "asks" ? h.ask : st === "error" ? h.error : h.note || h.recap || h.ask || "";
+    // A search that matched only the first prompt shows the prompt, so you can see why.
+    const q = query.toLowerCase();
+    if (q && !`${h.title} ${snip}`.toLowerCase().includes(q) && h.prompt?.toLowerCase().includes(q)) snip = h.prompt;
+    let icon = h.background ? ICON.bot : STATUS_ICON[st] || ICON.check;
+    if (!isLive) icon = icon.replace(/ (spin|pulse|bot)"/, '"');
+    const what = isLive ? `<span class="hstate">${esc(label(h))}</span>` : `<span class="sr">${esc(label(h))}.</span>`;
+    return `<button type="button" class="hrow s-${st}${isLive ? " live" : ""}${isLive && isFresh(h) ? " fresh" : ""}" data-sid="${esc(h.sid)}" title="Open in the Claude app">
+      <span class="hicon" title="${esc(label(h))}">${icon}</span>
+      <span class="htitle"><span class="t">${hl(h.title)}</span>${what}</span>
+      ${h.project ? tag(`${ICON.folder}<span>${hl(h.project)}</span>`, "name", h.project) : "<span></span>"}
+      <span class="htime">${clock(h.last)}</span>
+      ${snip ? `<span class="hsnip">${hl(snip)}</span>` : ""}
+    </button>`;
+  }
+
+  function renderHistory() {
+    let html;
+    if (!hist.ready) {
+      html = link === "offline" ? offlineState() : loadingState();
+    } else if (!hist.items.length) {
+      html = query
+        ? `<div class="empty-state"><div class="badge">${ICON.search}</div>
+            <h3>No sessions match “${esc(query)}”</h3>
+            <p>Try a project name or a word from the task.</p></div>`
+        : `<div class="empty-state"><div class="badge">${ICON.history}</div>
+            <h3>No sessions yet</h3>
+            <p>Every session is kept here for good, and you can search them all. The last 7 days are here too.</p></div>`;
+    } else {
+      const items = hist.items.map(merged).sort((a, b) => b.last - a.last);
+      const days = [];
+      for (const h of items) {
+        const d = dayLabel(h.last);
+        if (days.at(-1)?.label !== d) days.push({ label: d, items: [] });
+        days.at(-1).items.push(h);
+      }
+      html = days.map((d) => `<section class="group" aria-label="${esc(d.label)}">
+          <h2 class="group-head">${d.label === "Today" ? ICON.sun : ICON.calendar}<span>${esc(d.label)}</span><span class="count">${d.items.length}</span></h2>
+          <div class="hlist">${d.items.map(historyRow).join("")}</div>
+        </section>`).join("") +
+        (hist.items.length < hist.total
+          ? `<div class="more"><button class="btn" type="button" data-more>${ICON.arrowDown}Show ${Math.min(60, hist.total - hist.items.length)} More</button></div>` : "");
+    }
+    // Live updates arrive often; redraw only when something on screen changed.
+    if (html === hist.html) return;
+    hist.html = html;
+    const next = document.createElement("template");
+    next.innerHTML = html;
+    const PARTS = "[data-sid], .group-head .count, [data-more]";
+    const shape = (root) => [...root.querySelectorAll(".group-head > span:not(.count), [data-sid], [data-more]")]
+      .map((e) => e.dataset.sid ?? e.textContent).join("|");
+    const was = shape($history);
+    if (was && shape(next.content) === was) {
+      // Same rows in the same order: change each one in place, so a new state fades its
+      // color like a card does, and hover and focus stay where they are.
+      const old = $history.querySelectorAll(PARTS);
+      next.content.querySelectorAll(PARTS).forEach((n, i) => {
+        const o = old[i];
+        if (o.className !== n.className) o.className = n.className;
+        if (o._html !== n.innerHTML) { o.innerHTML = n.innerHTML; o._html = n.innerHTML; }
+      });
+    } else {
+      const focused = $history.contains(document.activeElement) ? document.activeElement.closest("[data-sid]")?.dataset.sid : null;
+      $history.innerHTML = html;
+      $history.querySelectorAll(PARTS).forEach((o) => { o._html = o.innerHTML; });
+      if (focused) $history.querySelector(`[data-sid="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    }
+    syncIcons($history);
+  }
+
+  // A new session shows up in All Sessions too, without waiting for a search or a switch.
+  let historyTimer;
+  function refreshHistory() {
+    if (view !== "history" || !hist.ready) return renderHistory();
+    const loaded = new Set(hist.items.map((h) => h.sid));
+    const oldest = hist.items.at(-1)?.last ?? 0;
+    const missing = !query && state.sessions.some((s) => !loaded.has(s.sid) && s.last >= oldest);
+    if (missing) { clearTimeout(historyTimer); historyTimer = setTimeout(() => loadHistory(true), 400); }
+    renderHistory();
+  }
+
+  // ---------------------------------------------------------------- views
+
+  function setView(v, fromApp) {
+    if (v !== "week" && v !== "history") return;
+    view = v;
+    $week.hidden = v !== "week";
+    $history.hidden = v !== "history";
+    document.querySelectorAll(".seg [data-view]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
+    $content.scrollTop = 0;
+    if (v === "history") { renderHistory(); loadHistory(true); }
+    if (!fromApp) bridge()?.postMessage({ view: v }); // keep the app's toolbar switch in step
+  }
+
+  let searchTimer;
+  function search(q, fromApp) {
+    query = String(q ?? "").trim();
+    if ($q.value !== q) $q.value = q ?? "";
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      if (query && view !== "history") setView("history", fromApp);
+      else if (view === "history") loadHistory(true);
+    }, 180);
+  }
+
+  // The app drives these from its toolbar.
+  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true) };
+
+  document.querySelector(".seg").addEventListener("click", (e) => {
+    const b = e.target.closest("[data-view]");
+    if (b) setView(b.dataset.view);
+  });
+  $q.addEventListener("input", () => search($q.value));
+
+  $content.addEventListener("click", (e) => {
+    const go = e.target.closest("[data-go]");
+    if (go) return setView(go.dataset.go);
+    if (e.target.closest("[data-more]")) return loadHistory(false);
+    const item = e.target.closest("[data-sid]");
+    if (item) fetch(`/api/open/${encodeURIComponent(item.dataset.sid)}`, { method: "POST", headers: { "x-csm": "1" } });
+  });
+
+  // In the app, a right click opens the app's own menu for that session, and anywhere
+  // else no web menu (Reload, Inspect) at all.
+  const sessionFor = (sid) => live.get(sid) ?? hist.items.find((h) => h.sid === sid);
+  document.addEventListener("contextmenu", (e) => {
+    if (!embed) return;
+    e.preventDefault();
+    const item = e.target.closest("[data-sid]");
+    if (!item) return;
+    const s = sessionFor(item.dataset.sid);
+    bridge()?.postMessage({ menu: { sid: item.dataset.sid, title: s?.title ?? "", cwd: s?.cwd ?? "" } });
+  });
+
+  // Arrow keys move between cards the way they look on screen; Home and End jump to the
+  // first and last. Return or Space opens the session, as a click does.
+  $content.addEventListener("keydown", (e) => {
+    const from = e.target.closest?.(".card, .hrow");
+    if (!from || e.metaKey || e.altKey || e.ctrlKey) return;
+    const items = [...(view === "week" ? $week : $history).querySelectorAll(".card, .hrow")];
+    const i = items.indexOf(from);
+    let to;
+    if (e.key === "Home") to = items[0];
+    else if (e.key === "End") to = items.at(-1);
+    else if (e.key === "ArrowLeft") to = items[i - 1];
+    else if (e.key === "ArrowRight") to = items[i + 1];
+    else if (e.key === "ArrowUp" || e.key === "ArrowDown") {
+      const down = e.key === "ArrowDown";
+      const a = from.getBoundingClientRect();
+      const cx = a.left + a.width / 2;
+      const all = items.filter((el) => el !== from).map((el) => ({ el, b: el.getBoundingClientRect() }))
+        .filter(({ b }) => (down ? b.top >= a.bottom - 1 : b.bottom <= a.top + 1));
+      if (all.length) {
+        // The nearest row first, then the item in it closest to the same column.
+        const edge = down ? Math.min(...all.map((c) => c.b.top)) : Math.max(...all.map((c) => c.b.bottom));
+        const row = all.filter((c) => Math.abs((down ? c.b.top : c.b.bottom) - edge) < 4);
+        row.sort((p, q) => Math.abs(p.b.left + p.b.width / 2 - cx) - Math.abs(q.b.left + q.b.width / 2 - cx));
+        to = row[0].el;
+      }
+    } else return;
+    e.preventDefault();
+    if (to) { to.focus({ preventScroll: true }); to.scrollIntoView({ block: "nearest" }); }
+  });
+
+  // ---------------------------------------------------------------- header
+
+  function renderHeader() {
+    const list = state.sessions;
+    const needs = state.needs ?? list.filter(needsYou).length;
+    const working = list.filter((s) => s.status === "working").length;
+    const agents = list.reduce((k, s) => k + (s.agentCount || 0), 0);
+    const counts = [
+      needs ? tag(`${ICON.alert.replace(" pulse", "")}<span>${needs} ${needs === 1 ? "needs" : "need"} you</span>`, "s-waiting") : "",
+      working ? tag(`${ICON.spinner}<span>${working} working</span>`, "s-working") : "",
+      agents ? tag(`${ICON.agents}<span>${plural(agents, "agent", "agents")}</span>`, "low") : "",
+      list.length ? tag(`${ICON.calendar}<span>${list.length} in 7 days</span>`, "low") : "",
+    ].join("");
+    if ($counts._html !== counts) {
+      $counts.innerHTML = counts;
+      $counts._html = counts;
+      syncIcons($counts);
+    }
+  }
+
+  function renderBanner() {
+    const html = ready && link === "offline"
+      ? `<div class="banner" role="status">${ICON.unplug}<span><b>Can't reach the monitor.</b> Showing what it last sent while it tries again.</span></div>`
+      : "";
+    if ($banner.innerHTML !== html) $banner.innerHTML = html;
+  }
+
+  let freshTimer;
+  function render() {
+    renderHeader();
+    renderBanner();
+    renderWeek();
+    if (view === "history") refreshHistory();
+    // Redraw when the first breathing minute of something that needs you runs out.
+    clearTimeout(freshTimer);
+    const ends = state.sessions.filter(isFresh).map((s) => (s.since || s.last) + FRESH_MS - now());
+    if (ends.length) freshTimer = setTimeout(render, Math.max(50, Math.min(...ends) + 50));
+  }
+
+  // Animated icons breathe or turn in step with each other, whenever their card was
+  // drawn: each starts at the same point of a shared 2.4 s clock.
+  function syncIcons(root) {
+    const offset = `-${Math.round(performance.now() % 2400)}ms`;
+    root.querySelectorAll("svg.spin, svg.pulse, svg.bot").forEach((d) => { d.style.animationDelay = offset; });
+  }
+
+  // ---------------------------------------------------------------- sound
+
+  // In the app the alert sound is the system's, played by the app when sound is on; in
+  // a browser, a soft chime, off until you turn it on (that click also unlocks audio).
+  let audio = null;
+  let soundOn = false;
+  try { soundOn = localStorage.getItem("csm-sound") === "1"; } catch {}
+  function paintSound() {
+    const text = soundOn ? "Turn Off Alert Sound" : "Turn On Alert Sound";
+    $sound.innerHTML = soundOn ? ICON.speaker : ICON.speakerOff;
+    $sound.setAttribute("aria-pressed", String(soundOn));
+    $sound.setAttribute("aria-label", text);
+    $sound.title = text;
+  }
+  $sound.addEventListener("click", () => {
+    soundOn = !soundOn;
+    try { localStorage.setItem("csm-sound", soundOn ? "1" : "0"); } catch {}
+    if (soundOn) { audio = audio || new AudioContext(); audio.resume(); chime(); }
+    paintSound();
+  });
+  function chime() {
+    if (!soundOn) return;
+    audio = audio || new AudioContext();
+    const t = audio.currentTime;
+    [[880, 0], [1320, 0.12]].forEach(([f, d]) => {
+      const o = audio.createOscillator(), g = audio.createGain();
+      o.type = "sine"; o.frequency.value = f;
+      g.gain.setValueAtTime(0.0001, t + d);
+      g.gain.exponentialRampToValueAtTime(0.18, t + d + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, t + d + 0.35);
+      o.connect(g).connect(audio.destination);
+      o.start(t + d); o.stop(t + d + 0.4);
+    });
+  }
+  paintSound();
+
+  // ---------------------------------------------------------------- live updates
+
+  // What is worth a sound and a spoken note: a session starts waiting on you, or ends
+  // its turn with a question or an error.
+  const alertKey = (s) =>
+    s.status === "waiting" ? `w:${s.wait}` : s.status === "asks" ? `a:${s.ask}` : s.status === "error" ? `e:${s.error}` : s.status;
+
+  function receive(next) {
+    const first = !ready;
+    const changed = [];
+    for (const s of next.sessions) {
+      const key = alertKey(s);
+      if (!first && seen.get(s.sid) !== key && /^[wae]:/.test(key)) changed.push(s);
+    }
+    state = next;
+    live = new Map(next.sessions.map((s) => [s.sid, s]));
+    ready = true;
+    skew = next.now - Date.now();
+    render();
+    seen.clear();
+    for (const s of next.sessions) seen.set(s.sid, alertKey(s));
+    if (!seen.size) seen.set("", "");
+    const needs = next.needs ?? next.sessions.filter(needsYou).length;
+    document.title = needs ? `(${needs}) Claude Session Monitor` : "Claude Session Monitor";
+    if (changed.length) {
+      const text = changed.map((s) => `${s.title}: ${s.status === "error" ? "error" : "needs you"}`).join(". ");
+      if (bridge()) bridge().postMessage({ alert: true, announce: text }); // the app speaks it and plays the sound
+      else { $announce.textContent = text; chime(); }
+    }
+  }
+
+  function setLink(v) {
+    if (link === v) return;
+    link = v;
+    $link.classList.toggle("off", v !== "live");
+    $link.lastElementChild.textContent = v === "live" ? "Live" : v === "offline" ? "Offline" : "Connecting…";
+    render();
+  }
+
+  // The server pings every 10 s. With no word from it for 25 s the connection is dead
+  // even if it never closed, so start over.
+  let es = null;
+  let heard = 0;
+  function connect() {
+    es?.close();
+    es = new EventSource("/api/stream");
+    heard = Date.now();
+    es.onopen = () => { heard = Date.now(); setLink("live"); };
+    es.onmessage = (m) => { heard = Date.now(); setLink("live"); receive(JSON.parse(m.data)); };
+    es.addEventListener("ping", () => { heard = Date.now(); setLink("live"); });
+    es.onerror = () => setLink("offline"); // EventSource keeps retrying on its own
+  }
+  setInterval(() => {
+    if (Date.now() - heard > 25_000) { setLink("offline"); connect(); }
+  }, 5000);
+  render();
+  connect();
+  setInterval(render, 15000); // keeps "5m ago" fresh
+</script>
+</body>
+</html>
