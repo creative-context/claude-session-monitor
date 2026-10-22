@@ -196,15 +196,17 @@
 
   /* ---------- groups ---------- */
   .group + .group { margin-top: 20px; }
-  /* Last 7 Days: Active as cards, and under it the rest of the week as rows. A long day
-     in a wide window goes into two columns, read down the first and on into the second. */
-  #week { container: week / inline-size; }
+  /* Last 7 Days: Active as cards, and under it the rest of the week as rows. In it and in
+     All Sessions, a long day in a wide window goes into two columns, read down the first
+     and on into the second. */
+  #week, #history { container: list / inline-size; }
   .wsplit { display: flex; flex-direction: column; gap: 28px; }
   .wmain:empty, .wside:empty { display: none; }
   .wside .hlist { max-width: none; } /* as wide as the cards above, so the edges line up */
-  @container week (min-width: 1100px) {
-    .wside .hlist.long { display: block; columns: 2; column-gap: 8px; }
-    .wside .hlist.long .hrow { width: 100%; margin-bottom: 4px; break-inside: avoid; }
+  @container list (min-width: 1100px) {
+    #history .hlist, #history .group-head { max-width: none; } /* as wide as Last 7 Days, so both columns have room */
+    .hlist.long { display: block; columns: 2; column-gap: 8px; }
+    .hlist.long .hrow { width: 100%; margin-bottom: 4px; break-inside: avoid; }
   }
   .group-head {
     display: flex; align-items: center; gap: 6px;
@@ -1131,7 +1133,7 @@
       }
       html = days.map((d) => `<section class="group" aria-label="${esc(d.label)}">
           <h2 class="group-head">${d.label === "Today" ? ICON.sun : ICON.calendar}<span>${esc(d.label)}</span><span class="count">${d.items.length}</span></h2>
-          <div class="hlist">${d.items.map(historyRow).join("")}</div>
+          <div class="hlist${d.items.length > LONG_DAY ? " long" : ""}">${d.items.map(historyRow).join("")}</div>
         </section>`).join("") +
         (hist.items.length < hist.total
           ? `<div class="more"><button class="btn" type="button" data-more>${ICON.arrowDown}Show ${Math.min(60, hist.total - hist.items.length)} More</button></div>` : "");

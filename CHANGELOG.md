@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- All Sessions splits a long day into two columns in a wide window, as Last 7 Days does.
+
 ## 0.3.2
 
 - The page's header row lines up with the window buttons and the toolbar to the pixel. It sat one device pixel lower.
