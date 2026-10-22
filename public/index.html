@@ -191,6 +191,15 @@
 
   /* ---------- groups ---------- */
   .group + .group { margin-top: 20px; }
+  /* Last 7 Days: Active as cards, and under it the rest of the week as rows. A long day
+     in a wide window goes into two columns, read down the first and on into the second. */
+  #week { container: week / inline-size; }
+  .wsplit { display: flex; flex-direction: column; gap: 28px; }
+  .wmain:empty, .wside:empty { display: none; }
+  @container week (min-width: 1100px) {
+    .wside .hlist.long { display: block; columns: 2; column-gap: 8px; max-width: none; }
+    .wside .hlist.long .hrow { width: 100%; margin-bottom: 4px; break-inside: avoid; }
+  }
   .group-head {
     display: flex; align-items: center; gap: 6px;
     margin: 0 0 8px;
@@ -264,12 +273,13 @@
   .card.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
 
   /* On a colored card the status tag is solid. */
-  .card .tag.s-working { background: var(--color-accent); color: var(--color-on-accent); }
+  /* State tags a step darker than the theme's fills, so white text reaches 5.8:1. */
+  .card .tag.s-working { background: #2864BC; color: var(--color-on-accent); }
   .card .tag.s-waiting, .card .tag.s-asks { background: var(--color-warning); color: var(--color-on-light); }
   .card.stale .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); }
   .card.stale .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); }
-  .card .tag.s-done { background: var(--color-success); color: var(--color-on-accent); }
-  .card .tag.s-error { background: var(--color-error); color: var(--color-on-accent); }
+  .card .tag.s-done { background: #1D7244; color: var(--color-on-accent); }
+  .card .tag.s-error { background: #B5383C; color: var(--color-on-accent); }
 
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
   .time { display: inline-flex; align-items: center; gap: 4px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; }
@@ -314,13 +324,15 @@
 
   /* The plan's progress, one segment per step: done, the one it's on, still to do. The
      row is taller than the 2 px line so its tooltip is easy to hover. */
-  .bar { display: flex; align-items: flex-end; gap: 3px; height: 10px; }
-  .bar span { flex: 1; height: 2px; border-radius: 1px; background: var(--color-overlay-pressed); }
-  .bar span.on { background: var(--color-text-accent); }
-  .bar span.now { background: color-mix(in srgb, var(--color-text-accent) 45%, transparent); }
+  .bar { display: flex; align-items: center; gap: 8px; height: 12px; margin-top: 2px; }
+  .bar .segs { flex: 1; display: flex; align-items: center; gap: 3px; }
+  .bar .segs span { flex: 1; height: 2px; border-radius: 1px; background: var(--color-overlay-pressed); }
+  .bar .segs span.on { background: var(--color-text-accent); }
+  .bar .segs span.now { background: color-mix(in srgb, var(--color-text-accent) 45%, transparent); }
+  .bar .n { font-size: 10px; line-height: 12px; color: var(--meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* Paused or closed sessions step down in brightness, not opacity. */
-  .idle .title, .ended .title { color: var(--color-text-secondary); }
+  .idle .title, .ended .title { color: var(--csm-text-on-tint); }
   .idle .detail, .ended .detail, .idle .detail b, .ended .detail b { color: var(--color-text-secondary); }
 
   /* ---------- history ---------- */
@@ -339,7 +351,7 @@
     padding: 10px 12px;
     border-radius: var(--radius-container);
     background: var(--tint);
-    transition: --tint 450ms var(--ease-standard);
+    transition: --tint 450ms var(--ease-standard), box-shadow 700ms var(--ease-standard);
   }
   /* A session that is live right now keeps its state's color here too, quieter than on
      its card, and updates as it changes. */
@@ -352,6 +364,8 @@
   .hrow:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
   .hrow:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); }
   .hrow .hicon svg.spin { animation: spin 2.4s linear infinite; }
+  .hrow .tag.name { max-width: 160px; }
+  .hrow.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
   .hrow.fresh .hicon svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
   .hrow .hstate { font-size: var(--csm-text-meta); font-weight: var(--font-weight-medium); white-space: nowrap; }
   .hrow.s-working .hstate { color: var(--color-text-accent); }
@@ -375,17 +389,16 @@
   .dots i.r-error { background: var(--color-error); }
   .dots i.r-working { background: var(--color-text-accent); }
   .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
-  /* A run of a scheduled task says so next to its state, where there's room. A narrow
-     card keeps only the icon (the name is in the tooltip). */
-  .card { container-type: inline-size; }
   .top .time { margin-left: auto; }
-  .top .tag.sched { flex: none; color: var(--meta); }
-  @container (max-width: 330px) { .top .tag.sched > span { display: none; } }
 
   /* ---------- count details ---------- */
   /* Each count in the header opens a card with what's behind it, on hover or focus. */
   #counts .tag[data-pop]:hover, #counts .tag[data-pop][aria-expanded="true"] { background-image: linear-gradient(#FFFFFF0F, #FFFFFF0F); }
   #counts .tag[data-pop]:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+  /* A small chevron says a count opens something. */
+  #counts .tag[data-pop] { padding-right: 5px; transition: background-color var(--duration-fast) var(--ease-standard); }
+  #counts .tag[data-pop] svg.chev { width: 9px; height: 9px; margin-left: -1px; opacity: 0.6; }
+  #counts .tag[data-pop]:hover svg.chev, #counts .tag[data-pop][aria-expanded="true"] svg.chev { opacity: 1; }
   .pop {
     position: fixed; z-index: 20; width: 340px; max-height: min(60vh, 420px); overflow: auto;
     padding: 6px; border-radius: 10px;
@@ -606,6 +619,7 @@
     calendarClock: svg('<path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/>'),
     pause: svg('<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>'),
     alarm: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5v4"/><path d="M12 16.5h.01"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
+    chev: svg('<path d="m6 9 6 6 6-6"/>', "chev"),
     arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
     // A speaker, not a bell: on a Mac a bell reads as notifications, and this is sound.
     speaker: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>'),
@@ -720,6 +734,8 @@
   const needsYou = (s) => s.needsYou ?? (s.status === "waiting" || ((s.status === "asks" || s.status === "error") && now() - s.last < DAY));
   const isFresh = (s) => (s.status === "waiting" || s.status === "asks" || s.status === "error") && needsYou(s) && now() - (s.since || s.last) < FRESH_MS;
 
+  // The server calls a workflow it can't name "Workflow"; that name says nothing.
+  const wfNamed = (wf) => Boolean(wf?.name) && wf.name !== "Workflow";
   const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s);
   const label = (s) => (s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
   const statusIcon = (s) => (s.background ? ICON.bot : STATUS_ICON[s.status] || ICON.check);
@@ -743,7 +759,7 @@
     if (s.background) {
       const wf = s.workflows?.[0];
       const head = wf
-        ? `${ICON.flow}<span class="txt">Workflow <b>${esc(wf.name)}</b>${wf.phase ? ` · ${esc(wf.phase)}` : ""}</span>`
+        ? `${ICON.flow}<span class="txt">${wfNamed(wf) ? `Workflow <b>${esc(wf.name)}</b>` : "A workflow"}${wf.phase ? ` · ${esc(wf.phase)}` : ""}</span>`
         : `${ICON.agents}<span class="txt">${plural(s.agentCount, "agent", "agents")} in the background</span>`;
       return lines(head, agent ? agentLine(agent) : "");
     }
@@ -767,7 +783,7 @@
       const since = wf?.startedAt ?? Math.min(...(s.agents || []).map((a) => a.startedAt || Date.now()));
       const bits = [
         s.agentCount ? plural(s.agentCount, "agent", "agents") : "",
-        wf && !s.background && wf.name !== "Workflow" ? wf.name : "", // the generic name says nothing
+        wf && !s.background && wfNamed(wf) ? wf.name : "",
         since ? span(since) : "",
         tokens ? `${kTokens(tokens)} tokens` : "",
       ].filter(Boolean);
@@ -786,7 +802,8 @@
     const segs = Array.from({ length: s.plan.total }, (_, i) =>
       `<span class="${i < s.plan.done ? "on" : i === s.plan.index - 1 ? "now" : ""}"></span>`).join("");
     const tip = `Plan: ${s.plan.done} of ${s.plan.total} steps done${s.plan.current ? `, now on step ${s.plan.index}` : ""}`;
-    return `<div class="bar" title="${tip}" aria-hidden="true">${segs}</div>`;
+    // The count next to the segments says what they are: steps of the plan, done of total.
+    return `<div class="bar" title="${tip}" aria-hidden="true"><span class="segs">${segs}</span><span class="n">${s.plan.done}/${s.plan.total} done</span></div>`;
   }
 
   // ---------------------------------------------------------------- Last 7 Days
@@ -820,11 +837,12 @@
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
     const when = ago(s.status === "working" ? s.last : s.since);
-    const sched = s.task ? tag(`${ICON.calendarClock}<span>Scheduled</span>`, "sched", s.taskName ? `A run of ${s.taskName}` : "A scheduled run") : "";
+    // A run of a scheduled task shows a calendar clock by its time instead of the plain clock.
+    const timeTip = s.task ? ` title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}"` : "";
     const inner = `
       <div class="top">
-        ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}${sched}
-        <span class="time">${ICON.clock}${when}</span>
+        ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
+        <span class="time"${timeTip}>${s.task ? ICON.calendarClock : ICON.clock}${when}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
@@ -835,7 +853,7 @@
       el._inner = inner;
       syncIcons(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), plain(detail(s)), s.project ? `in ${s.project}` : "", when].filter(Boolean).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.task ? "Scheduled run" : "", plain(detail(s)), s.project ? `in ${s.project}` : "", when].filter(Boolean).join(". "));
     }
     el.title = (s.agents || []).length
       ? `Open in the Claude app\n\n${s.agents.map((a) => `${a.label || "Agent"}: ${describe(a.tool || "Agent")[0]}`).join("\n")}`
@@ -867,6 +885,56 @@
         : "Start it with <code>bun server.ts</code> in the project folder. This page connects on its own as soon as it's up."}</p></div>`;
   }
 
+  // A row for a session of the rest of the week: state, title, folder and time, and the
+  // recap or the question on a second line. Only Active gets cards.
+  function weekRow(s, earlier) {
+    const st = LABEL[s.status] ? s.status : "ended";
+    const snip = st === "asks" ? s.ask : st === "error" ? s.error : s.note || s.recap || "";
+    const time = earlier ? `${new Date(s.last).toLocaleDateString("en-US", { weekday: "short" })} ${clock(s.last)}` : clock(s.last);
+    const sched = s.task ? `<span class="hsched" title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : "";
+    const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time].filter(Boolean).join(". ");
+    return `<button type="button" class="hrow s-${st}${isStale(s) ? " stale" : ""}" data-sid="${esc(s.sid)}" title="Open in the Claude app" aria-label="${esc(aria)}">
+      <span class="hicon" title="${esc(label(s))}">${still(statusIcon(s))}</span>
+      <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}</span>
+      ${s.project ? tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project) : "<span></span>"}
+      <span class="htime">${time}</span>
+      ${snip ? `<span class="hsnip">${esc(snip)}</span>` : ""}
+    </button>`;
+  }
+
+  // Redraws a list of rows only where it changed, so hover, focus and a ring stay put.
+  function morphRows(listEl, html) {
+    if (listEl._html === html) return;
+    listEl._html = html;
+    const next = document.createElement("template");
+    next.innerHTML = html;
+    const fresh = [...next.content.children];
+    const old = [...listEl.children];
+    if (fresh.length !== old.length || fresh.some((n, i) => n.dataset.sid !== old[i].dataset.sid)) {
+      const focused = listEl.contains(document.activeElement) ? document.activeElement.dataset.sid : null;
+      listEl.replaceChildren(...fresh);
+      for (const el of listEl.children) el._html = el.innerHTML;
+      if (focused) listEl.querySelector(`[data-sid="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+      return;
+    }
+    fresh.forEach((n, i) => {
+      const o = old[i];
+      const cls = n.className + (o.classList.contains("found") ? " found" : "");
+      if (o.className !== cls) o.className = cls;
+      for (const a of ["title", "aria-label"]) if (o.getAttribute(a) !== n.getAttribute(a)) o.setAttribute(a, n.getAttribute(a));
+      if (o._html !== n.innerHTML) { o.innerHTML = n.innerHTML; o._html = n.innerHTML; }
+    });
+  }
+
+  const LONG_DAY = 6; // more rows than this, and a wide window splits the day in two columns
+
+  function weekShell() {
+    if ($week.querySelector(":scope > .wsplit")) return;
+    cards.clear();
+    groups.clear();
+    $week.innerHTML = `<div class="wsplit"><div class="wmain"></div><div class="wside"></div></div>`;
+  }
+
   function renderWeek() {
     if (!ready) {
       cards.clear();
@@ -882,45 +950,61 @@
       $week.innerHTML = emptyWeek();
       return;
     }
-    $week.querySelector(":scope > .empty-state")?.remove();
+    weekShell();
+    const $main = $week.querySelector(".wmain");
+    const $side = $week.querySelector(".wside");
 
     // Cards are kept between updates, one per session. A status change then fades the
     // card's color instead of redrawing it, and a card that changes place slides there.
     const before = new Map([...cards].map(([sid, el]) => [sid, el.isConnected ? el.getBoundingClientRect() : null]));
     const buckets = new Map(SECTIONS.map((g) => [g.id, []]));
     for (const s of list) buckets.get(SECTIONS.find((g) => g.test(s)).id).push(s);
-    // Newest first inside the day sections; the server's order (urgency) in Active.
+    // Newest first in the day sections; the server's order (urgency) in Active.
     for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => b.last - a.last);
 
+    const section = (g, body) => {
+      const sec = document.createElement("section");
+      sec.className = `group ${g.id}`;
+      sec.setAttribute("aria-label", g.label);
+      sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2>${body}`;
+      groups.set(g.id, sec);
+      return sec;
+    };
+
+    // Active: cards.
+    const active = buckets.get("active");
     const keep = new Set();
-    let prev = null;
-    for (const g of SECTIONS) {
-      const items = buckets.get(g.id);
-      let sec = groups.get(g.id);
-      if (!items.length) {
-        sec?.remove();
-        groups.delete(g.id);
-        continue;
-      }
-      if (!sec) {
-        sec = document.createElement("section");
-        sec.className = `group ${g.id}`;
-        sec.setAttribute("aria-label", g.label);
-        sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2><div class="grid"></div>`;
-        groups.set(g.id, sec);
-      }
-      const want = prev ? prev.nextSibling : $week.firstChild;
-      if (sec !== want) $week.insertBefore(sec, want);
-      prev = sec;
-      sec.querySelector(".count").textContent = items.length;
+    let sec = groups.get("active");
+    if (!active.length) {
+      sec?.remove();
+      groups.delete("active");
+    } else {
+      if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="grid"></div>`));
+      sec.querySelector(".count").textContent = active.length;
       const grid = sec.querySelector(".grid");
-      items.forEach((s, i) => {
+      active.forEach((s, i) => {
         const el = upsertCard(s);
         keep.add(s.sid);
         if (grid.children[i] !== el) grid.insertBefore(el, grid.children[i] || null);
       });
     }
     for (const [sid, el] of cards) if (!keep.has(sid)) { el.remove(); cards.delete(sid); }
+
+    // The rest of the week: compact rows, by day.
+    let prev = null;
+    for (const g of SECTIONS.slice(1)) {
+      const items = buckets.get(g.id);
+      sec = groups.get(g.id);
+      if (!items.length) { sec?.remove(); groups.delete(g.id); continue; }
+      if (!sec) sec = section(g, `<div class="hlist"></div>`);
+      const want = prev ? prev.nextSibling : $side.firstChild;
+      if (sec !== want) $side.insertBefore(sec, want);
+      prev = sec;
+      sec.querySelector(".count").textContent = items.length;
+      const rows = sec.querySelector(".hlist");
+      rows.classList.toggle("long", items.length > LONG_DAY);
+      morphRows(rows, items.map((s) => weekRow(s, g.id === "earlier")).join(""));
+    }
 
     // FLIP: start each moved card where it was on screen and let it glide to its new
     // place. Starting from the on-screen position keeps it smooth even mid-move.
@@ -1337,7 +1421,7 @@
     const agents = list.reduce((k, s) => k + (s.agentCount || 0), 0);
     // Each count is a button: hover or focus shows what's behind it.
     const count = (kind, inner, cls) =>
-      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">${inner}</span>`;
+      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">${inner}${ICON.chev}</span>`;
     const counts = [
       needs ? count("needs", `${ICON.alert.replace(" pulse", "")}<span>${needs} ${needs === 1 ? "needs" : "need"} you</span>`, "s-waiting") : "",
       working ? count("working", `${ICON.spinner}<span>${working} working</span>`, "s-working") : "",
@@ -1383,7 +1467,7 @@
   function doing(s) {
     if (s.background) {
       const wf = s.workflows?.[0];
-      return wf ? `Workflow ${wf.name}${wf.phase ? ` · ${wf.phase}` : ""}` : `${plural(s.agentCount, "agent", "agents")} in the background`;
+      return wf ? `${wfNamed(wf) ? `Workflow ${wf.name}` : "A workflow"}${wf.phase ? ` · ${wf.phase}` : ""}` : `${plural(s.agentCount, "agent", "agents")} in the background`;
     }
     return s.tool ? act(s.tool, s.detail) : "Thinking…";
   }
@@ -1507,13 +1591,13 @@
     hidePop();
     if (view !== "week") setView("week");
     const sids = new Set(state.sessions.filter(match).map((s) => s.sid));
-    const els = [...$week.querySelectorAll(".card")].filter((el) => sids.has(el.dataset.sid));
+    const els = [...$week.querySelectorAll(".card, .hrow")].filter((el) => sids.has(el.dataset.sid));
     if (!els.length) return;
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     els[0].scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
     els[0].focus({ preventScroll: true });
     clearTimeout(foundTimer);
-    $week.querySelectorAll(".card.found").forEach((el) => el.classList.remove("found"));
+    $week.querySelectorAll(".found").forEach((el) => el.classList.remove("found"));
     if (!ring) return;
     els.forEach((el) => el.classList.add("found"));
     foundTimer = setTimeout(() => els.forEach((el) => el.classList.remove("found")), 1600);

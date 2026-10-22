@@ -44,7 +44,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 - **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.
 - **It never slows Claude down.** The hook writes one short line and exits, never with an error, so it can't block or break a session.
 
-![The app's window with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then the earlier ones, with runs of scheduled tasks marked Scheduled](docs/screenshot.png)
+![The app's window with demo data: an Active zone of cards with two sessions that need you, one with an error, two working and one done, and under it the rest of the week as rows, with runs of scheduled tasks marked by a calendar clock](docs/screenshot.png)
 
 **Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code, [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
 
@@ -96,9 +96,9 @@ To work on this repository itself, an agent reads [`AGENTS.md`](AGENTS.md), whic
 
 ## What it shows
 
-- **Last 7 Days** (⌘1). On top, **Active**: what needs you, what's working, and anything touched in the last two hours, most urgent first. Then the rest of today, yesterday and earlier. After 7 days a session leaves this view on its own.
+- **Last 7 Days** (⌘1). **Active** comes as cards: what needs you, what's working, and anything touched in the last two hours, most urgent first. Under it, the rest of today, yesterday and earlier come as rows, and a long day splits into two columns in a wide window. After 7 days a session leaves this view on its own.
 - **All Sessions** (⌘2). Every session ever, grouped by day and searchable by title, first prompt, project or last recap. The ones still going keep their color and update as they change. On first run it fills in from the sessions the Claude app already has.
-- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. Its runs show up in the other views too, marked Scheduled.
+- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. Its runs show up in the other views too, with a calendar clock by their time.
 
 Hover a count in the header (needs you, working, agents, last 7 days) to see what's behind it, and click the count or one of its rows to jump to those cards. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
 

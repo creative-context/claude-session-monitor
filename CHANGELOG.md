@@ -4,6 +4,11 @@
 
 - Each count in the header shows what's behind it on hover or focus: the sessions that need you and what they ask, what each working session is doing, every agent with its session and tokens, and the last 7 days by state. The arrow keys move through the rows, and Escape closes it.
 - A click on a count, or on one of its rows, jumps to those cards in Last 7 Days and rings them for a moment.
+- Last 7 Days shows only Active as cards. Under it, the rest of the week comes as rows, and a day with more than six splits into two columns in a wide window.
+- The counts in the header show a small chevron, so they read as controls. The plan bar says how many steps are done, such as "2/5 done".
+- A workflow with no name reads "A workflow", not "Workflow Workflow".
+- A run of a scheduled task shows a calendar clock by its time instead of a Scheduled tag.
+- The Working, Done and Error tags are a step darker, so their white text reaches 5.8:1. Idle and Closed titles are easier to read.
 - The page uses Apple's system fonts, SF Pro (titles in Semibold) and SF Mono, like the rest of the Mac, instead of Inter and Space Grotesk. It ships no font files now. The colors stay the Obsidian theme's.
 - The window moves again when you drag its top row, as with any title bar, except over the counts. A double click there does what System Settings says (zoom by default).
 

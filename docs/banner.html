@@ -52,19 +52,21 @@
   .top { display: flex; align-items: center; gap: 6px; height: 18px; }
   .tag { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 510; white-space: nowrap; background: #FFFFFF0F; color: var(--meta); }
   .needs .tag.state { background: var(--warning); color: #0D0E10; }
-  .error .tag.state { background: var(--error); color: #fff; }
-  .working .tag.state, .agents .tag.state { background: var(--accent); color: #fff; }
-  .done .tag.state { background: var(--success); color: #fff; }
+  .error .tag.state { background: #B5383C; color: #fff; }
+  .working .tag.state, .agents .tag.state { background: #2864BC; color: #fff; }
+  .done .tag.state { background: #1D7244; color: #fff; }
   .time { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--meta); white-space: nowrap; }
   .title { margin-top: 7px; font: 600 14px/18px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .detail { margin-top: 3px; font-size: 11px; line-height: 15px; color: var(--meta); }
   .detail .line { display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; }
   .detail b { font-weight: 400; color: var(--ink); }
   .tags { margin-top: auto; display: flex; gap: 5px; }
-  .bar { display: flex; gap: 3px; margin-top: 7px; }
-  .bar span { flex: 1; height: 2px; border-radius: 1px; background: #FFFFFF14; }
-  .bar span.on { background: #6FA6E8; }
-  .bar span.now { background: color-mix(in srgb, #6FA6E8 45%, transparent); }
+  .bar { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
+  .bar .segs { flex: 1; display: flex; gap: 3px; }
+  .bar .segs span { flex: 1; height: 2px; border-radius: 1px; background: #FFFFFF14; }
+  .bar .segs span.on { background: #6FA6E8; }
+  .bar .segs span.now { background: color-mix(in srgb, #6FA6E8 45%, transparent); }
+  .bar .n { font-size: 10px; color: var(--meta); }
   svg { width: 11px; height: 11px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.25px; stroke-linecap: round; stroke-linejoin: round; }
   svg * { vector-effect: non-scaling-stroke; }
 </style>
@@ -87,7 +89,7 @@
         <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>billing-api</span></div>
       </div>
       <div class="card needs">
-        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.1 2.2c-.6.3-.9.7-.9 1.3"/><path d="M12 15.8h.01"/></svg>Needs you</span><span class="tag"><svg viewBox="0 0 24 24"><path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/></svg>Scheduled</span><span class="time">9m ago</span></div>
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.1 2.2c-.6.3-.9.7-.9 1.3"/><path d="M12 15.8h.01"/></svg>Needs you</span><span class="time"><svg viewBox="0 0 24 24"><path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/></svg>9m ago</span></div>
         <div class="title">Release notes for 2.4</div>
         <div class="detail">Should I publish them to the changelog now?</div>
         <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>docs</span></div>
@@ -107,7 +109,7 @@
           <div class="line"><svg viewBox="0 0 24 24"><path d="m4 7 2 2 3.5-3.5"/><path d="m4 15 2 2 3.5-3.5"/><path d="M13 7.5h7"/><path d="M13 15.5h7"/></svg>Step 3 of 5 · Fix and add a test</div>
         </div>
         <div class="tags"></div>
-        <div class="bar"><span class="on"></span><span class="on"></span><span class="now"></span><span></span><span></span></div>
+        <div class="bar"><span class="segs"><span class="on"></span><span class="on"></span><span class="now"></span><span></span><span></span></span><span class="n">2/5 done</span></div>
       </div>
 
       <div class="card agents">
