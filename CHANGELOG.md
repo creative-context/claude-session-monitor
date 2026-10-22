@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fixed: a finished plan stayed on the card as "6/6 done" when the next request came in. A new request now drops a plan with every step done, and the bar only shows while a step is in progress.
+
 ## 0.3.0
 
 - **Check for Updates…** in the app menu and the menu bar item. The app also looks on its own 10 seconds after it opens and once a day, and when a newer version is out it sends a notification (once per version), shows a notice in the window with Download and Later, and adds Update to the menu bar item. Settings › Updates turns the daily check off. It is the app's only network request, to GitHub's public releases API.

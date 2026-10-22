@@ -210,6 +210,12 @@ ev(id(21), { ev: "PermissionRequest", agent: "wf21a", tool: "Bash", d: "Delete t
 ev(id(21), { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash" });
 ev(id(21), { ev: "PreToolUse", agent: "wf21b", tool: "Read", d: "notes.md" }); // another agent keeps going
 
+// 22. A finished plan doesn't carry over into the next request.
+ev(id(22), { ev: "UserPromptSubmit", prompt: "Ship it" });
+ev(id(22), { ev: "PreToolUse", tool: "mcp__ccd_turn__update_plan", x: { items: [{ c: "Build", s: "completed" }, { c: "Ship", s: "completed" }] } });
+ev(id(22), { ev: "Stop" });
+ev(id(22), { ev: "UserPromptSubmit", prompt: "And one more thing" });
+
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
@@ -284,6 +290,7 @@ try {
   check("a run that didn't happen counts as missed", typeof task("t-hourly")?.missed === "number" && task("t-hourly")?.lastRun === null, task("t-hourly"));
   check("20 an agent's permission, once its tool ran, no longer needs you", find(s, 20)?.status !== "waiting" && find(s, 20)?.needsYou === false, find(s, 20));
   check("21 an agent's unanswered permission needs you, whatever other agents do", find(s, 21)?.status === "waiting" && find(s, 21)?.needsYou === true, find(s, 21));
+  check("22 a finished plan is dropped when the next request comes", find(s, 22)?.status === "working" && find(s, 22)?.plan === null, find(s, 22)?.plan);
   check("the needs count matches the cards that need you", snap.needs === s.filter((x) => x.needsYou).length && snap.needs > 0, [snap.needs, s.filter((x) => x.needsYou).length]);
 
   // Answer the question and approve the permission

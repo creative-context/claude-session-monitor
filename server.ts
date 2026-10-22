@@ -280,6 +280,8 @@ function apply(e: Ev) {
     case "UserPromptSubmit":
       setStatus(s, "working", e.t);
       s.prompt = e.prompt ?? s.prompt;
+      // A plan with every step done belongs to the last request, not to this one.
+      if (s.plan?.length && s.plan.every((st) => st.s === "completed")) s.plan = undefined;
       s.recap = s.ask = s.note = s.tool = s.detail = undefined;
       s.inFlight = 0;
       break;

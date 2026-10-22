@@ -820,7 +820,8 @@
   }
 
   function bar(s) {
-    if (!s.plan || !(s.status === "working" || s.status === "waiting") || s.background) return "";
+    // Only a plan still in progress; one with every step done has nothing left to show.
+    if (!s.plan || s.plan.done >= s.plan.total || !(s.status === "working" || s.status === "waiting") || s.background) return "";
     const segs = Array.from({ length: s.plan.total }, (_, i) =>
       `<span class="${i < s.plan.done ? "on" : i === s.plan.index - 1 ? "now" : ""}"></span>`).join("");
     const tip = `Plan: ${s.plan.done} of ${s.plan.total} steps done${s.plan.current ? `, now on step ${s.plan.index}` : ""}`;
