@@ -27,13 +27,40 @@ extension NSToolbarItem.Identifier {
     static let sound = NSToolbarItem.Identifier("sound")
 }
 
+// The page fills the window, title bar included, and a web view never lets a click there
+// move the window. So the header row in the title bar drags the window like a title bar,
+// except over the controls the page reports (the counts, for one). A double click does
+// what System Settings says a title bar double click does.
+final class PageView: WKWebView {
+    var holes: [CGRect] = [] // in the page's CSS pixels
+    var titlebarHeight: CGFloat = 0 // in points, from the top
+
+    override func mouseDown(with event: NSEvent) {
+        var p = convert(event.locationInWindow, from: nil)
+        if !isFlipped { p.y = bounds.height - p.y }
+        let css = CGPoint(x: p.x / pageZoom, y: p.y / pageZoom)
+        guard p.y <= titlebarHeight, !holes.contains(where: { $0.contains(css) }), let window else {
+            return super.mouseDown(with: event)
+        }
+        if event.clickCount == 2 {
+            switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
+            case "Minimize": window.performMiniaturize(nil)
+            case "None": break
+            default: window.performZoom(nil)
+            }
+        } else {
+            window.performDrag(with: event)
+        }
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSToolbarDelegate,
     WKNavigationDelegate, WKScriptMessageHandler {
 
     let defaults = UserDefaults.standard
     var window: NSWindow!
-    var web: WKWebView!
+    var web: PageView!
     var statusItem: NSStatusItem!
     var liveLabel: NSTextField!
     var soundItem: NSToolbarItem?
@@ -181,7 +208,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "strip") // the page asks for the alert sound
-        web = WKWebView(frame: .zero, configuration: config)
+        web = PageView(frame: .zero, configuration: config)
         web.setValue(false, forKey: "drawsBackground")
         web.navigationDelegate = self
         web.autoresizingMask = [.width, .height]
@@ -222,6 +249,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     // Tells the page where the window buttons are, so its header lines up with them and
     // leaves room on the left (buttons) and right (toolbar items).
     func syncPageChrome() {
+        // The title bar's height, where the page's header row drags the window. None in full screen.
+        web?.titlebarHeight = window.styleMask.contains(.fullScreen) ? 0 : window.frame.height - window.contentLayoutRect.height
         guard pageLoaded, let content = window.contentView,
               let close = window.standardWindowButton(.closeButton),
               let zoomButton = window.standardWindowButton(.zoomButton) else { return }
@@ -242,7 +271,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         (() => { const s = document.documentElement.style;
           s.setProperty('--csm-chrome-top', '\(top)px');
           s.setProperty('--csm-lights-w', '\(slot)px');
-          s.setProperty('--csm-chrome-right', '\(right)px'); })();
+          s.setProperty('--csm-chrome-right', '\(right)px');
+          requestAnimationFrame(() => window.csm?.reportChrome?.()); })();
         """
         web.evaluateJavaScript(js, completionHandler: nil)
     }
@@ -384,6 +414,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         }
         if let v = body["view"] as? String, let i = views.firstIndex(of: v) { viewSwitch?.selectedSegment = i }
         if let info = body["menu"] as? [String: Any] { showSessionMenu(info) }
+        if let holes = body["holes"] as? [[Double]] {
+            web.holes = holes.compactMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil }
+        }
     }
 
     // MARK: session menu

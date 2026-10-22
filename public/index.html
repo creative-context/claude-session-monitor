@@ -1265,7 +1265,19 @@
   }
 
   // The app drives these from its toolbar.
-  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true) };
+  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => reportChrome() };
+
+  // In the app the header row sits in the title bar, and the app drags the window by it.
+  // It needs to know where the things you can click are, so it leaves those alone.
+  function reportChrome() {
+    if (!bridge()) return;
+    const holes = [...document.querySelectorAll("#counts [data-pop], #link, #sound, .nav, #pop.open")]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.width && r.height)
+      .map((r) => [r.left, r.top, r.width, r.height]);
+    bridge().postMessage({ holes });
+  }
+  addEventListener("resize", () => requestAnimationFrame(reportChrome));
 
   document.querySelector(".seg").addEventListener("click", (e) => {
     const b = e.target.closest("[data-view]");
@@ -1349,6 +1361,7 @@
       $counts.innerHTML = counts;
       $counts._html = counts;
       syncIcons($counts);
+      requestAnimationFrame(reportChrome);
       // The counts were redrawn: keep an open card on its count, or close it if that count is gone.
       if (popKind) {
         const anchor = $counts.querySelector(`[data-pop="${popKind}"]`);
@@ -1457,6 +1470,7 @@
     fillPop();
     placePop();
     $pop.classList.add("open");
+    reportChrome();
   }
 
   function hidePop() {
@@ -1466,6 +1480,7 @@
     popKind = null;
     popAnchor = null;
     $pop.classList.remove("open");
+    reportChrome();
   }
 
   const toCountOrPop = (el) => el && ($pop.contains(el) || el.closest?.("#counts [data-pop]"));
