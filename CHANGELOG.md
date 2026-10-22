@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.1
 
 - Fixed: a finished plan stayed on the card as "6/6 done" when the next request came in. A new request now drops a plan with every step done, and the bar only shows while a step is in progress.
 
