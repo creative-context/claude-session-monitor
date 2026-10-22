@@ -2,14 +2,13 @@
 <!-- README banner. Drawn at the size GitHub shows it (880×440) and captured at 3× with headless Chrome:
      chrome --headless=new --hide-scrollbars --force-device-scale-factor=3 --window-size=880,440 \
        --screenshot=docs/banner.png docs/banner.html
-     The cards copy the app's own colors and type, with made-up sessions. -->
+     The cards copy the app's own colors and type (Apple's SF Pro, so render it on a Mac), with
+     made-up sessions. -->
 <html lang="en-US">
 <head>
 <meta charset="utf-8">
 <title>Claude Session Monitor</title>
 <style>
-  @font-face { font-family: "Inter Variable"; font-weight: 100 900; src: url("../public/inter-latin-wght-normal.woff2") format("woff2"); }
-  @font-face { font-family: "Space Grotesk Variable"; font-weight: 300 700; src: url("../public/space-grotesk-latin-wght-normal.woff2") format("woff2"); }
   :root {
     --bg: #050506;
     --panel: #0d0e10;
@@ -28,7 +27,7 @@
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { width: 880px; height: 440px; overflow: hidden; }
-  body { background: var(--bg); color: var(--ink); font: 14px/1.4 "Inter Variable", Inter, system-ui, sans-serif; position: relative; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.4 -apple-system, BlinkMacSystemFont, system-ui, sans-serif; position: relative; }
 
   .intro { position: absolute; left: 44px; top: 0; bottom: 0; width: 300px; display: flex; flex-direction: column; justify-content: center; }
   .intro h1 { font-size: 44px; line-height: 1.08; font-weight: 600; letter-spacing: -0.02em; }
@@ -57,7 +56,7 @@
   .working .tag.state, .agents .tag.state { background: var(--accent); color: #fff; }
   .done .tag.state { background: var(--success); color: #fff; }
   .time { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--meta); white-space: nowrap; }
-  .title { margin-top: 7px; font: 500 14px/18px "Space Grotesk Variable", sans-serif; letter-spacing: -0.01em; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title { margin-top: 7px; font: 600 14px/18px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .detail { margin-top: 3px; font-size: 11px; line-height: 15px; color: var(--meta); }
   .detail .line { display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; }
   .detail b { font-weight: 400; color: var(--ink); }

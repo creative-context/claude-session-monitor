@@ -32,8 +32,8 @@ mkdir -p "$SERVER"
 cp server.ts cron.ts install-hooks.ts "$SERVER/"
 cp -R public hooks "$SERVER/"
 chmod 755 "$SERVER/hooks/session-hook.sh"
-# The fonts' license travels with the fonts, and the app's with the app.
-cp -R licenses LICENSE "$APP/Contents/Resources/"
+# The app's license travels with it.
+cp LICENSE "$APP/Contents/Resources/"
 
 # Icon: draw once at 1024 px, then let sips and iconutil make the sizes.
 if [ ! -f build/AppIcon.icns ] || [ app/make-icon.swift -nt build/AppIcon.icns ]; then

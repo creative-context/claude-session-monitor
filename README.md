@@ -44,7 +44,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 - **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.
 - **It never slows Claude down.** The hook writes one short line and exits, never with an error, so it can't block or break a session.
 
-![The app's window with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then earlier sessions of the day, with runs of scheduled tasks marked Scheduled](docs/screenshot.png)
+![The app's window with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then the earlier ones, with runs of scheduled tasks marked Scheduled](docs/screenshot.png)
 
 **Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code, [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
 
@@ -142,7 +142,7 @@ It never stores whole conversations.
 
 1. **Hook** (`hooks/session-hook.sh`). Claude Code runs it on every event of every session, and it appends one short line to `events.jsonl`. No network, no output, and it always exits 0. It takes about 12 ms.
 2. **Server** (`server.ts`, Bun). It reads that file, keeps a small state per session, saves it to `sessions.db` and streams it to the page. `cron.ts` reads the scheduled tasks' schedules, to say them in words and to work out the next run and a missed one.
-3. **Page** (`public/index.html`). The cards, the three views and their empty and offline states. It uses the tokens of the [Obsidian theme](https://github.com/creative-context/astryx-theme-obsidian) and its fonts, Inter and Space Grotesk, served locally.
+3. **Page** (`public/index.html`). The cards, the three views and their empty and offline states. It uses the colors of the [Obsidian theme](https://github.com/creative-context/astryx-theme-obsidian) and Apple\'s system fonts, SF Pro and SF Mono, so it ships no font files.
 4. **App** (`app/main.swift`). A standard macOS window with a transparent title bar, the usual menus, Settings, a toolbar for the views, search and sound, a Dock icon and a menu bar item. It runs the server it carries and starts it again if it stops.
 
 ## Develop
@@ -177,4 +177,4 @@ Every push to `main` runs the tests on GitHub Actions. Publishing a release buil
 
 ## License
 
-[MIT](LICENSE). Inter and Space Grotesk are under the SIL Open Font License 1.1, see [`licenses/`](licenses/).
+[MIT](LICENSE).

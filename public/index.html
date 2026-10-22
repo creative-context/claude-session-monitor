@@ -6,21 +6,9 @@
 <meta name="color-scheme" content="dark">
 <title>Claude Session Monitor</title>
 <style>
-  /* Fonts from the Obsidian theme, served locally (OFL-1.1, via Fontsource). */
-  @font-face {
-    font-family: "Inter Variable";
-    font-style: normal;
-    font-display: swap;
-    font-weight: 100 900;
-    src: url(inter-latin-wght-normal.woff2) format("woff2-variations");
-  }
-  @font-face {
-    font-family: "Space Grotesk Variable";
-    font-style: normal;
-    font-display: swap;
-    font-weight: 300 700;
-    src: url(space-grotesk-latin-wght-normal.woff2) format("woff2-variations");
-  }
+  /* Apple's system fonts, as the rest of the Mac draws them: SF Pro (Text or Display,
+     picked by size, with its own tracking) and SF Mono. No font files. The colors are
+     the Obsidian theme's. */
 
   /* Obsidian tokens (astryx-theme-obsidian 0.2): same names and values as the
      theme. Dark only. The --csm-* tokens are this page's own. */
@@ -55,9 +43,11 @@
     --color-on-accent: #FFFFFF;
     --color-on-light: #0D0E10;
 
-    --font-family-body: "Inter Variable", "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-    --font-family-heading: "Space Grotesk Variable", "Space Grotesk", "Inter Variable", -apple-system, sans-serif;
+    --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
+    --font-family-heading: var(--font-family-body);
+    --font-family-mono: ui-monospace, "SF Mono", Menlo, monospace;
     --font-weight-medium: 510;
+    --font-weight-heading: 600; /* titles in Semibold, as in Mail and Finder */
     --radius-inner: 4px;
     --radius-element: 6px;
     --radius-container: 8px;
@@ -95,7 +85,7 @@
   svg.i * { vector-effect: non-scaling-stroke; }
   button { font: inherit; color: inherit; }
   .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  code { font-family: "SF Mono", ui-monospace, Menlo, monospace; font-size: 0.95em; color: var(--color-text-primary); }
+  code { font-family: var(--font-family-mono); font-size: 0.95em; color: var(--color-text-primary); }
 
   /* In the app it should feel like a Mac window, not a web page: the arrow cursor (the
      hand is for links), no text selection, and its own context menu. */
@@ -148,8 +138,7 @@
     font-family: var(--font-family-heading);
     font-size: var(--csm-text-title);
     line-height: var(--csm-lh-title);
-    font-weight: var(--font-weight-medium);
-    letter-spacing: -0.02em;
+    font-weight: var(--font-weight-heading);
     margin-right: 6px;
   }
   #counts { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
@@ -215,9 +204,9 @@
   .group-head .count { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   /* Active is the zone that matters: its header is a title, the rest are labels. */
-  .group.active .group-head { font-size: var(--csm-text-title); line-height: var(--csm-lh-title); color: var(--color-text-primary); letter-spacing: -0.02em; }
+  .group.active .group-head { font-size: var(--csm-text-title); line-height: var(--csm-lh-title); color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   .group.active .group-head svg.i { width: 16px; height: 16px; }
-  .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); letter-spacing: 0; }
+  .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); font-weight: 400; }
   /* The rest of the week sits a step back from the active zone. */
   .group.active + .group { margin-top: 28px; }
 
@@ -290,8 +279,7 @@
     font-family: var(--font-family-heading);
     font-size: var(--csm-text-title);
     line-height: var(--csm-lh-title);
-    font-weight: var(--font-weight-medium);
-    letter-spacing: -0.02em;
+    font-weight: var(--font-weight-heading);
     color: var(--color-text-primary);
     display: -webkit-box;
     -webkit-line-clamp: 2;
@@ -418,7 +406,7 @@
   .prow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: -2px; }
   .prow .pi { grid-row: 1 / 3; align-self: start; padding-top: 2px; display: inline-flex; color: var(--color-text-secondary); }
   .prow .pi svg.i { width: 14px; height: 14px; }
-  .prow .pt { font-family: var(--font-family-heading); font-weight: var(--font-weight-medium); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .pt { font-family: var(--font-family-heading); font-weight: var(--font-weight-heading); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .prow .pm { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
   .prow .ps { grid-column: 2 / 4; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .prow.s-waiting .pi, .prow.s-asks .pi, .prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
@@ -454,7 +442,7 @@
   .hrow.s-working .hicon { color: var(--color-text-accent); }
   .hrow .htitle {
     display: flex; align-items: baseline; gap: 8px; min-width: 0;
-    font-family: var(--font-family-heading); font-weight: var(--font-weight-medium);
+    font-family: var(--font-family-heading); font-weight: var(--font-weight-heading);
     font-size: var(--csm-text-body); color: var(--color-text-primary);
     white-space: nowrap;
   }
@@ -491,8 +479,7 @@
     font-family: var(--font-family-heading);
     font-size: var(--csm-text-title);
     line-height: var(--csm-lh-title);
-    font-weight: var(--font-weight-medium);
-    letter-spacing: -0.02em;
+    font-weight: var(--font-weight-heading);
   }
   .empty-state p { margin: 0 0 10px; max-width: 360px; color: var(--color-text-secondary); }
   /* Three small session cards, as surfaces: working, needs you, done. */
