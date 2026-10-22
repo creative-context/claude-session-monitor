@@ -11,7 +11,8 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `public/index.html`: the whole page, styles and script, on the Obsidian theme's tokens. The fonts next to it are under the OFL (`licenses/`).
 - `app/main.swift`: the native app. `app/build.sh` builds it universal and copies the server, the page and the hook into it.
 - `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots.
-- `docs/banner.png`: the README image, taken from the demo.
+- `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome (the command is at the top of the file). Edit the HTML, never the PNG.
+- `docs/screenshot.png`: the app's window on the demo data (`bun test/demo.ts 4747`).
 
 ## Commands
 

@@ -1,0 +1,131 @@
+<!doctype html>
+<!-- README banner. Drawn at the size GitHub shows it (880×440) and captured at 3× with headless Chrome:
+     chrome --headless=new --hide-scrollbars --force-device-scale-factor=3 --window-size=880,440 \
+       --screenshot=docs/banner.png docs/banner.html
+     The cards copy the app's own colors and type, with made-up sessions. -->
+<html lang="en-US">
+<head>
+<meta charset="utf-8">
+<title>Claude Session Monitor</title>
+<style>
+  @font-face { font-family: "Inter Variable"; font-weight: 100 900; src: url("../public/inter-latin-wght-normal.woff2") format("woff2"); }
+  @font-face { font-family: "Space Grotesk Variable"; font-weight: 300 700; src: url("../public/space-grotesk-latin-wght-normal.woff2") format("woff2"); }
+  :root {
+    --bg: #050506;
+    --panel: #0d0e10;
+    --line: #23262b;
+    --ink: #f2f4f6;
+    --ink-2: #a3a9b1;
+    --ink-3: #7c838c;
+    /* The app's state colors */
+    --accent: #2D72D2;
+    --warning: #C87619;
+    --error: #CD4246;
+    --success: #238551;
+    --orange: #FDB876;
+    --red: #FFB2B8;
+    --on-tint: #A3A8B0;
+  }
+  * { box-sizing: border-box; margin: 0; }
+  html, body { width: 880px; height: 440px; overflow: hidden; }
+  body { background: var(--bg); color: var(--ink); font: 14px/1.4 "Inter Variable", Inter, system-ui, sans-serif; position: relative; }
+
+  .intro { position: absolute; left: 44px; top: 0; bottom: 0; width: 300px; display: flex; flex-direction: column; justify-content: center; }
+  .intro h1 { font-size: 44px; line-height: 1.08; font-weight: 600; letter-spacing: -0.02em; }
+  .intro p { margin-top: 20px; font-size: 18px; line-height: 1.5; color: var(--ink-2); }
+  .intro .meta { margin-top: 18px; font-size: 13px; color: var(--ink-3); letter-spacing: 0.01em; }
+
+  .panel { position: absolute; left: 384px; top: 30px; width: 740px; height: 440px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 24px; }
+  .panel h2 { font-size: 18px; font-weight: 600; }
+  .panel .sub { margin-top: 2px; font-size: 13px; color: var(--ink-3); }
+
+  .grid { margin-top: 16px; display: grid; grid-template-columns: repeat(2, 226px); grid-auto-rows: 124px; gap: 8px; }
+  .card {
+    --tint: #FFFFFF08; --meta: #8A8F98;
+    display: flex; flex-direction: column; padding: 11px 12px 10px; border-radius: 8px; background: var(--tint); overflow: hidden;
+  }
+  .card.needs { --tint: color-mix(in srgb, var(--warning) 34%, transparent); --meta: var(--orange); }
+  .card.error { --tint: color-mix(in srgb, var(--error) 34%, transparent); --meta: var(--red); }
+  .card.working { --tint: color-mix(in srgb, var(--accent) 16%, transparent); --meta: var(--on-tint); }
+  .card.agents { --tint: color-mix(in srgb, var(--accent) 10%, transparent); --meta: var(--on-tint); }
+  .card.done { --tint: color-mix(in srgb, var(--success) 14%, transparent); --meta: var(--on-tint); }
+
+  .top { display: flex; align-items: center; gap: 6px; height: 18px; }
+  .tag { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 510; white-space: nowrap; background: #FFFFFF0F; color: var(--meta); }
+  .needs .tag.state { background: var(--warning); color: #0D0E10; }
+  .error .tag.state { background: var(--error); color: #fff; }
+  .working .tag.state, .agents .tag.state { background: var(--accent); color: #fff; }
+  .done .tag.state { background: var(--success); color: #fff; }
+  .time { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--meta); white-space: nowrap; }
+  .title { margin-top: 7px; font: 500 14px/18px "Space Grotesk Variable", sans-serif; letter-spacing: -0.01em; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .detail { margin-top: 3px; font-size: 11px; line-height: 15px; color: var(--meta); }
+  .detail .line { display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; }
+  .detail b { font-weight: 400; color: var(--ink); }
+  .tags { margin-top: auto; display: flex; gap: 5px; }
+  .bar { display: flex; gap: 3px; margin-top: 7px; }
+  .bar span { flex: 1; height: 2px; border-radius: 1px; background: #FFFFFF14; }
+  .bar span.on { background: #6FA6E8; }
+  .bar span.now { background: color-mix(in srgb, #6FA6E8 45%, transparent); }
+  svg { width: 11px; height: 11px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.25px; stroke-linecap: round; stroke-linejoin: round; }
+  svg * { vector-effect: non-scaling-stroke; }
+</style>
+</head>
+<body>
+  <div class="intro">
+    <h1>Claude Session Monitor</h1>
+    <p>A Mac app that shows your Claude Code sessions as they run, and which ones need you.</p>
+    <div class="meta">For Claude Code · a Mac app</div>
+  </div>
+
+  <div class="panel">
+    <h2>Active</h2>
+    <div class="sub">Last 7 Days · 3 need you · 2 working</div>
+    <div class="grid">
+      <div class="card needs">
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.5h.01"/></svg>Needs you</span><span class="time"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>1m ago</span></div>
+        <div class="title">Upgrade the payments SDK</div>
+        <div class="detail">Claude needs your permission to use Bash</div>
+        <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>billing-api</span></div>
+      </div>
+      <div class="card needs">
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.1 2.2c-.6.3-.9.7-.9 1.3"/><path d="M12 15.8h.01"/></svg>Needs you</span><span class="tag"><svg viewBox="0 0 24 24"><path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/></svg>Scheduled</span><span class="time">9m ago</span></div>
+        <div class="title">Release notes for 2.4</div>
+        <div class="detail">Should I publish them to the changelog now?</div>
+        <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>docs</span></div>
+      </div>
+
+      <div class="card error">
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/></svg>Error</span><span class="time">41m ago</span></div>
+        <div class="title">Rebuild the search index</div>
+        <div class="detail">API Error: the server is overloaded. Try again in a moment.</div>
+        <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>search</span></div>
+      </div>
+      <div class="card working">
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><path d="M21 12a9 9 0 1 1-9-9"/></svg>Working</span><span class="time">now</span></div>
+        <div class="title">Fix the flaky checkout test</div>
+        <div class="detail">
+          <div class="line"><svg viewBox="0 0 24 24"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M12.5 15H17"/></svg><b>Run the checkout tests</b></div>
+          <div class="line"><svg viewBox="0 0 24 24"><path d="m4 7 2 2 3.5-3.5"/><path d="m4 15 2 2 3.5-3.5"/><path d="M13 7.5h7"/><path d="M13 15.5h7"/></svg>Step 3 of 5 · Fix and add a test</div>
+        </div>
+        <div class="tags"></div>
+        <div class="bar"><span class="on"></span><span class="on"></span><span class="now"></span><span></span><span></span></div>
+      </div>
+
+      <div class="card agents">
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><path d="M9 13.5v1"/><path d="M15 13.5v1"/></svg>Agents working</span><span class="time">now</span></div>
+        <div class="title">Nightly data audit</div>
+        <div class="detail">
+          <div class="line"><svg viewBox="0 0 24 24"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M6.5 10v3a2 2 0 0 0 2 2H14"/></svg>Workflow <b>nightly-audit</b> · Review</div>
+        </div>
+        <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/></svg>2 agents · 170k tokens</span></div>
+      </div>
+      <div class="card done">
+        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/></svg>Done</span><span class="time">26m ago</span></div>
+        <div class="title">Onboarding email copy</div>
+        <div class="detail">Wrote three subject lines and a short body.</div>
+        <div class="tags"><span class="tag">marketing-site</span></div>
+      </div>
+    </div>
+  </div>
+</body>
+</html>

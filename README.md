@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Claude Session Monitor with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then earlier sessions of the day, with runs of scheduled tasks marked Scheduled" width="100%">
+  <img src="docs/banner.png" alt="Claude Session Monitor: a Mac app that shows your Claude Code sessions as they run, and which ones need you. Beside the title, its Active zone: two sessions that need you, one with an error, one working and one with agents working" width="100%">
 </p>
 
 <h1 align="center">Claude Session Monitor</h1>
@@ -43,6 +43,8 @@ This app puts every session on one screen, colored by what it needs from you. It
 - **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened.
 - **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.
 - **It never slows Claude down.** The hook writes one short line and exits, never with an error, so it can't block or break a session.
+
+![The app's window with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then earlier sessions of the day, with runs of scheduled tasks marked Scheduled](docs/screenshot.png)
 
 **Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code, [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
 
