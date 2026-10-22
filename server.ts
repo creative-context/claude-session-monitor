@@ -12,6 +12,7 @@ import {
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { describeCron, nextRun, parseCron, prevRun } from "./cron.ts";
 
 const PORT = Number(process.env.CSM_PORT ?? 4747);
 const DIR = process.env.CSM_DIR ?? join(homedir(), ".claude-session-monitor");
@@ -94,7 +95,17 @@ type Session = {
   archived?: boolean;
   model?: string;
   appCwd?: string; // the folder the app opened the session in; needed to reopen it
+  task?: string; // the scheduled task this session is a run of
 };
+
+// A scheduled task of the Claude desktop app, from its scheduled-tasks.json. Only its
+// name, schedule, folder and times are read, never what the task does.
+type Task = {
+  id: string; name: string; cron: string; enabled: boolean; cwd?: string; file?: string;
+  created?: number; lastRunAt?: number; lastScheduledFor?: number;
+};
+const tasks = new Map<string, Task>();
+const taskChanged = new Map<string, number>(); // when a task was last resumed or rescheduled
 
 const sessions = new Map<string, Session>();
 let version = 0; // bumps on every change, so the stream only sends when needed
@@ -216,6 +227,7 @@ function apply(e: Ev) {
       agents: new Map(), runs: new Map(),
     };
     sessions.set(e.sid, s);
+    readDesktopSoon(); // a scheduled run shows on its task's card in seconds, not on the next pass
   }
   s.last = Math.max(s.last, e.t);
   if (e.cwd) s.cwd = e.cwd;
@@ -565,10 +577,14 @@ function openDatabase() {
     sid TEXT PRIMARY KEY, title TEXT, prompt TEXT, project TEXT, cwd TEXT, app_cwd TEXT, tp TEXT,
     first_at INTEGER, last_at INTEGER, status TEXT, outcome TEXT, recap TEXT, ask TEXT, error TEXT,
     note TEXT, model TEXT, pid INTEGER, archived INTEGER NOT NULL DEFAULT 0)`);
+  // Added later: databases from before have no task column yet.
+  const cols = (db.query("PRAGMA table_info(sessions)").all() as any[]).map((c) => c.name);
+  if (!cols.includes("task")) db.exec("ALTER TABLE sessions ADD COLUMN task TEXT");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
+  db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
-    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived)
-    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived)
+    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task)
+    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task)
     ON CONFLICT(sid) DO UPDATE SET
       title = coalesce(excluded.title, title), prompt = coalesce(excluded.prompt, prompt),
       project = coalesce(excluded.project, project), cwd = coalesce(excluded.cwd, cwd),
@@ -576,7 +592,7 @@ function openDatabase() {
       first_at = min(first_at, excluded.first_at), last_at = max(last_at, excluded.last_at),
       status = excluded.status, outcome = excluded.outcome, recap = excluded.recap, ask = excluded.ask,
       error = excluded.error, note = excluded.note, model = coalesce(excluded.model, model),
-      pid = excluded.pid, archived = excluded.archived`);
+      pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task)`);
 }
 
 const rowOf = (s: Session) => ({
@@ -586,6 +602,7 @@ const rowOf = (s: Session) => ({
   $first_at: s.first, $last_at: s.last, $status: s.status, $outcome: s.outcome ?? null,
   $recap: s.recap ?? null, $ask: s.ask ?? s.askText ?? null, $error: s.errorText ?? null,
   $note: s.note ?? null, $model: s.model ?? null, $pid: s.pid ?? null, $archived: s.archived ? 1 : 0,
+  $task: s.task ?? null,
 });
 
 // Writes the sessions that changed since the last write.
@@ -615,7 +632,7 @@ function loadRecent() {
       title: r.title ?? undefined, prompt: r.prompt ?? undefined, model: r.model ?? undefined,
       recap: r.recap ?? undefined, askText: r.ask ?? undefined, errorText: r.error ?? undefined,
       note: r.note ?? undefined, outcome: r.outcome ?? undefined, classified: Boolean(r.outcome),
-      archived: false,
+      archived: false, task: r.task ?? undefined,
     });
   }
 }
@@ -647,6 +664,8 @@ function history(q: string, limit: number, offset: number) {
       error: r.error ?? undefined,
       note: r.note ?? undefined,
       archived: Boolean(r.archived),
+      task: r.task ?? undefined,
+      taskName: r.task ? tasks.get(r.task)?.name : undefined,
     })),
   };
 }
@@ -674,11 +693,43 @@ function findTranscript(sid: string): string | undefined {
 // format is not documented, so every field is optional and errors are ignored.
 // The same files fill the history with sessions from before this app existed, and
 // bring this week's sessions to the main view even if they've been quiet since.
+// The desktop app's scheduled tasks. Times may come as numbers or ISO strings.
+const timeOf = (v: unknown) =>
+  typeof v === "number" ? v : typeof v === "string" && !Number.isNaN(Date.parse(v)) ? Date.parse(v) : undefined;
+function readTasks(file: string): Task[] {
+  try {
+    const j = JSON.parse(readFileSync(file, "utf8"));
+    const list: any[] = Array.isArray(j?.scheduledTasks) ? j.scheduledTasks : [];
+    return list
+      .filter((t) => typeof t?.id === "string" && typeof t?.cronExpression === "string")
+      .map((t) => ({
+        id: t.id,
+        name: typeof t.displayName === "string" && t.displayName.trim() ? t.displayName.trim() : t.id,
+        cron: t.cronExpression,
+        enabled: t.enabled !== false,
+        cwd: typeof t.cwd === "string" ? t.cwd : undefined,
+        file: typeof t.filePath === "string" ? t.filePath : undefined,
+        created: timeOf(t.createdAt),
+        lastRunAt: timeOf(t.lastRunAt),
+        lastScheduledFor: timeOf(t.lastScheduledFor),
+      }));
+  } catch {
+    return [];
+  }
+}
+
+let desktopTimer: ReturnType<typeof setTimeout> | undefined;
+function readDesktopSoon() {
+  clearTimeout(desktopTimer);
+  desktopTimer = setTimeout(readDesktopSessions, 1500);
+}
+
 function readDesktopSessions() {
   if (!existsSync(APP_SESSIONS)) return;
   const byCli = new Map<string, {
-    title?: string; archived?: boolean; model?: string; cwd?: string; created?: number; last?: number;
+    title?: string; archived?: boolean; model?: string; cwd?: string; created?: number; last?: number; task?: string;
   }>();
+  const found = new Map<string, Task>();
   try {
     for (const account of readdirSync(APP_SESSIONS)) {
       const accDir = join(APP_SESSIONS, account);
@@ -687,6 +738,10 @@ function readDesktopSessions() {
         const orgDir = join(accDir, org);
         if (!statSync(orgDir).isDirectory()) continue;
         for (const f of readdirSync(orgDir)) {
+          if (f === "scheduled-tasks.json") {
+            for (const t of readTasks(join(orgDir, f))) found.set(t.id, t);
+            continue;
+          }
           if (!f.startsWith("local_") || !f.endsWith(".json")) continue;
           try {
             const j = JSON.parse(readFileSync(join(orgDir, f), "utf8"));
@@ -695,6 +750,7 @@ function readDesktopSessions() {
                 title: j.title, archived: j.isArchived === true, model: j.model, cwd: j.originCwd ?? j.cwd,
                 created: typeof j.createdAt === "number" ? j.createdAt : undefined,
                 last: typeof j.lastActivityAt === "number" ? j.lastActivityAt : undefined,
+                task: typeof j.scheduledTaskId === "string" ? j.scheduledTaskId : undefined,
               });
             }
           } catch {}
@@ -703,6 +759,15 @@ function readDesktopSessions() {
     }
   } catch {
     return;
+  }
+  if (JSON.stringify([...found.values()]) !== JSON.stringify([...tasks.values()])) {
+    for (const [id, t] of found) {
+      const old = tasks.get(id);
+      if (old && (old.cron !== t.cron || (t.enabled && !old.enabled))) taskChanged.set(id, Date.now());
+    }
+    tasks.clear();
+    for (const [id, t] of found) tasks.set(id, t);
+    version++;
   }
   const now = Date.now();
   const fromApp: Session[] = [];
@@ -713,7 +778,7 @@ function readDesktopSessions() {
       // A session from this week that has been quiet since we started watching.
       s = {
         sid, status: "done", since: last, first: d.created ?? last, last, lastMain: last,
-        inFlight: 0, agents: new Map(), runs: new Map(), cwd: d.cwd, tp: findTranscript(sid),
+        inFlight: 0, agents: new Map(), runs: new Map(), cwd: d.cwd, tp: findTranscript(sid), task: d.task,
       };
       sessions.set(sid, s);
       hydrate(s); // its plan and last recap, from the transcript
@@ -724,15 +789,16 @@ function readDesktopSessions() {
       if (last > 0) fromApp.push({
         sid, status: "ended", since: last, first: d.created ?? last, last, lastMain: last,
         inFlight: 0, agents: new Map(), runs: new Map(), cwd: d.cwd, appCwd: d.cwd,
-        title: d.title, model: d.model, archived: d.archived, tp: findTranscript(sid),
+        title: d.title, model: d.model, archived: d.archived, tp: findTranscript(sid), task: d.task,
       });
       continue;
     }
-    if (d.title !== s.title || d.archived !== s.archived || d.model !== s.model || d.cwd !== s.appCwd) {
+    if (d.title !== s.title || d.archived !== s.archived || d.model !== s.model || d.cwd !== s.appCwd || d.task !== s.task) {
       s.title = d.title;
       s.archived = d.archived;
       s.model = d.model;
       s.appCwd = d.cwd;
+      s.task = d.task;
       version++;
     }
   }
@@ -741,14 +807,14 @@ function readDesktopSessions() {
       for (const s of fromApp) {
         const row = rowOf(s);
         // Keep what we already know about it (status, recap); only fill the gaps.
-        db.query(`INSERT INTO sessions (sid, title, project, cwd, app_cwd, tp, first_at, last_at, status, model, archived)
-          VALUES ($sid, $title, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $model, $archived)
+        db.query(`INSERT INTO sessions (sid, title, project, cwd, app_cwd, tp, first_at, last_at, status, model, archived, task)
+          VALUES ($sid, $title, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $model, $archived, $task)
           ON CONFLICT(sid) DO UPDATE SET title = coalesce(excluded.title, title), archived = excluded.archived,
             app_cwd = coalesce(excluded.app_cwd, app_cwd), last_at = max(last_at, excluded.last_at),
-            tp = coalesce(tp, excluded.tp)`).run({
+            tp = coalesce(tp, excluded.tp), task = coalesce(excluded.task, task)`).run({
           $sid: row.$sid, $title: row.$title, $project: row.$project, $cwd: row.$cwd, $app_cwd: row.$app_cwd,
           $tp: row.$tp, $first_at: row.$first_at, $last_at: row.$last_at, $status: row.$status,
-          $model: row.$model, $archived: row.$archived,
+          $model: row.$model, $archived: row.$archived, $task: row.$task,
         });
       }
     })();
@@ -1000,6 +1066,81 @@ function shownStatus(s: Session, agents: Agent[]): Shown {
   return (s.status === "done" || s.status === "idle") && agents.length ? "working" : s.status;
 }
 
+// ---------------------------------------------------------------- scheduled tasks
+
+const MISSED_GRACE_MS = 10 * 60 * 1000; // a run gets this long to start before it counts as missed
+const RUNS_SHOWN = 7;
+
+type RunView = {
+  sid: string; status: Shown; needsYou: boolean; first: number; last: number; since?: number;
+  ask?: string; error?: string; recap?: string; note?: string; tool?: string; detail?: string; wait?: string;
+};
+
+// A task's latest runs, newest first: this week's from memory (live), older ones from
+// the database.
+function taskRuns(t: Task, now: number): RunView[] {
+  const runs = new Map<string, RunView>();
+  if (db) {
+    const rows = db.query(`SELECT sid, status, outcome, first_at, last_at, ask, error, recap, note FROM sessions
+      WHERE task = ? ORDER BY first_at DESC LIMIT ${RUNS_SHOWN}`).all(t.id) as any[];
+    for (const r of rows) {
+      // Saved as busy but no longer in memory: it isn't busy anymore.
+      const raw = r.status === "done" ? r.outcome ?? "done" : r.status;
+      const status: Shown = raw === "working" || raw === "waiting" ? "ended" : raw ?? "ended";
+      runs.set(r.sid, {
+        sid: r.sid, status, needsYou: needsYou(status, r.last_at, now), first: r.first_at ?? r.last_at, last: r.last_at,
+        ask: r.ask ?? undefined, error: r.error ?? undefined, recap: r.recap ?? undefined, note: r.note ?? undefined,
+      });
+    }
+  }
+  for (const s of sessions.values()) {
+    if (s.task !== t.id) continue;
+    const agents = activeAgents(s);
+    const status = shownStatus(s, agents);
+    const last = Math.max(s.last, ...agents.map((a) => a.lastAt));
+    runs.set(s.sid, {
+      sid: s.sid, status, needsYou: needsYou(status, s.last, now), first: s.first, last, since: s.since,
+      ask: s.ask ?? s.askText, error: s.errorText, recap: s.recap, note: s.note,
+      tool: status === "working" ? s.tool : undefined, detail: status === "working" ? s.detail : undefined,
+      wait: status === "waiting" ? s.wait : undefined,
+    });
+  }
+  return [...runs.values()].sort((a, b) => b.first - a.first).slice(0, RUNS_SHOWN);
+}
+
+// One entry per task for the Scheduled view: its schedule in words, its next run, how
+// the last one went, and whether a run that should have happened didn't.
+function taskList(now: number) {
+  return [...tasks.values()].map((t) => {
+    const c = parseCron(t.cron);
+    const runs = taskRuns(t, now);
+    const lastRun = runs[0] ?? null;
+    const prev = c ? prevRun(c, now - MISSED_GRACE_MS) : null;
+    const missed = Boolean(
+      t.enabled && prev != null && prev > Math.max(t.created ?? 0, taskChanged.get(t.id) ?? 0) &&
+      prev > (t.lastScheduledFor ?? 0) + 60_000 &&
+      !(lastRun && lastRun.first >= prev - 60_000), // it ran, the file just hasn't caught up
+    );
+    const running = lastRun?.status === "working" || lastRun?.status === "waiting";
+    const rank = !t.enabled ? 4 : lastRun?.needsYou ? 0 : running ? 1 : missed ? 2 : 3;
+    return {
+      id: t.id,
+      name: t.name,
+      schedule: describeCron(t.cron),
+      cron: t.cron,
+      enabled: t.enabled,
+      project: t.cwd ? basename(t.cwd) : "",
+      cwd: t.cwd ?? "",
+      file: t.file ?? "",
+      next: t.enabled && c ? nextRun(c, now) : null,
+      missed: missed ? prev : null,
+      lastRun,
+      runs: runs.map((r) => ({ sid: r.sid, status: r.status, needsYou: r.needsYou, at: r.first })),
+      rank,
+    };
+  }).sort((a, b) => a.rank - b.rank || (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name));
+}
+
 function snapshot() {
   const now = Date.now();
   const list = [...sessions.values()]
@@ -1037,6 +1178,8 @@ function snapshot() {
         status: shown,
         needsYou: needsYou(shown, s.last, now),
         cwd: s.appCwd ?? s.cwd ?? "", // for Reveal in Finder
+        task: s.task,
+        taskName: s.task ? tasks.get(s.task)?.name : undefined,
         background: shown === "working" && s.status !== "working", // only its agents are working
         since: s.since,
         first: s.first,
@@ -1068,7 +1211,7 @@ function snapshot() {
         plan: total ? { done, total, current: current?.c, index: s.plan!.indexOf(current!) + 1 } : null,
       };
     });
-  return { now, needs: list.filter((x) => x.needsYou).length, sessions: list };
+  return { now, needs: list.filter((x) => x.needsYou).length, sessions: list, tasks: taskList(now) };
 }
 
 // ---------------------------------------------------------------- web server
@@ -1195,6 +1338,15 @@ setInterval(checkTurns, 500);
 setInterval(scanAllAgents, 3000);
 setInterval(checkProcesses, 10_000);
 setInterval(readDesktopSessions, 15_000);
+// A task's next run and a missed run change with the clock, not with an event.
+let taskClock = "";
+setInterval(() => {
+  const sig = JSON.stringify(taskList(Date.now()).map((t) => [t.id, t.next, t.missed]));
+  if (sig !== taskClock) {
+    taskClock = sig;
+    version++;
+  }
+}, 30_000);
 setInterval(forgetOld, 60_000);
 // Lesson from agents-observe: throttle what goes to the page, at most every 250 ms.
 setInterval(() => {

@@ -368,6 +368,30 @@
   .hrow.s-waiting .hstate, .hrow.s-asks .hstate { color: var(--color-text-orange); }
   .hrow.s-error .hstate { color: var(--color-text-red); }
 
+  /* ---------- scheduled ---------- */
+  /* A task's card is calm unless its last run needs you, failed today or is running: then
+     it takes that run's color. Done, paused and missed stay plain, with the tag saying it. */
+  #scheduled .card.done, #scheduled .card.unrun, #scheduled .card.ended, #scheduled .card.paused, #scheduled .card.missed {
+    --tint: var(--color-background-card); --meta: var(--color-text-secondary);
+  }
+  #scheduled .card.paused .title { color: var(--color-text-secondary); }
+  .tag.s-missed { background: var(--color-warning-muted); color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
+  #scheduled .card .tag.s-idle { background: var(--obsidian-veil-selected); }
+  /* The last runs, oldest on the left: one dot each, in the color of how it ended. */
+  .dots { display: inline-flex; align-items: center; gap: 4px; }
+  .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-overlay-pressed); }
+  .dots i.r-done { background: var(--color-success); }
+  .dots i.r-waiting, .dots i.r-asks { background: var(--color-warning); }
+  .dots i.r-error { background: var(--color-error); }
+  .dots i.r-working { background: var(--color-text-accent); }
+  .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
+  /* A run of a scheduled task says so next to its state, where there's room. A narrow
+     card keeps only the icon (the name is in the tooltip). */
+  .card { container-type: inline-size; }
+  .top .time { margin-left: auto; }
+  .top .tag.sched { flex: none; color: var(--meta); }
+  @container (max-width: 330px) { .top .tag.sched > span { display: none; } }
+
   /* ---------- connection ---------- */
   .banner {
     display: flex; align-items: center; gap: 8px;
@@ -495,6 +519,7 @@
     <div class="seg" role="tablist">
       <button type="button" role="tab" data-view="week" aria-selected="true"></button>
       <button type="button" role="tab" data-view="history" aria-selected="false"></button>
+      <button type="button" role="tab" data-view="scheduled" aria-selected="false"></button>
     </div>
     <label class="search"><span class="sr"></span><input id="q" type="search" placeholder="Search all sessions" aria-label="Search all sessions"></label>
   </nav>
@@ -502,6 +527,7 @@
     <div id="banner"></div>
     <section id="week" class="view" aria-label="Last 7 days"></section>
     <section id="history" class="view" aria-label="All sessions" hidden></section>
+    <section id="scheduled" class="view" aria-label="Scheduled tasks" hidden></section>
   </div>
   <div id="announce" class="sr" aria-live="polite"></div>
 </main>
@@ -546,6 +572,9 @@
     layers: svg('<path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>'),
     grid: svg('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
     activity: svg('<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
+    calendarClock: svg('<path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/>'),
+    pause: svg('<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>'),
+    alarm: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5v4"/><path d="M12 16.5h.01"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
     arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
     // A speaker, not a bell: on a Mac a bell reads as notifications, and this is sound.
     speaker: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>'),
@@ -575,6 +604,7 @@
   const $banner = document.getElementById("banner");
   const $week = document.getElementById("week");
   const $history = document.getElementById("history");
+  const $scheduled = document.getElementById("scheduled");
   const $counts = document.getElementById("counts");
   const $link = document.getElementById("link");
   const $sound = document.getElementById("sound");
@@ -582,9 +612,10 @@
   const $announce = document.getElementById("announce");
   document.querySelector('[data-view="week"]').innerHTML = `${ICON.grid}<span>Last 7 Days</span>`;
   document.querySelector('[data-view="history"]').innerHTML = `${ICON.history}<span>All Sessions</span>`;
+  document.querySelector('[data-view="scheduled"]').innerHTML = `${ICON.calendarClock}<span>Scheduled</span>`;
   document.querySelector(".search .sr").outerHTML = ICON.search;
 
-  let state = { now: Date.now(), needs: 0, sessions: [] };
+  let state = { now: Date.now(), needs: 0, sessions: [], tasks: [] };
   let live = new Map(); // sid → session, for what is in the last 7 days
   let ready = false; // the first update has arrived
   let link = "connecting"; // connecting, live or offline
@@ -603,7 +634,11 @@
   const kTokens = (n) => (n >= 999_500 ? `${(n / 1e6).toFixed(1).replace(/\.0$/, "")}M` : n >= 1000 ? `${Math.round(n / 1000)}k` : String(n));
   const dayStart = (back = 0) => { const d = new Date(now()); d.setHours(0, 0, 0, 0); d.setDate(d.getDate() - back); return d.getTime(); };
   const scratch = document.createElement("div");
-  const plain = (html) => { scratch.innerHTML = html; return scratch.textContent.replace(/\s+/g, " ").trim(); };
+  // Text for VoiceOver: two lines of a card read as two sentences, not one run-on word.
+  const plain = (html) => {
+    scratch.innerHTML = html.replace(/<\/div>(?=<div class="line">)/g, ". </div>");
+    return scratch.textContent.replace(/\s+/g, " ").trim();
+  };
 
   function describe(tool) {
     if (TOOLS[tool]) return TOOLS[tool];
@@ -752,9 +787,10 @@
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${el.classList.contains("new") ? " new" : ""}`;
     if (el.className !== cls) el.className = cls;
     const when = ago(s.status === "working" ? s.last : s.since);
+    const sched = s.task ? tag(`${ICON.calendarClock}<span>Scheduled</span>`, "sched", s.taskName ? `A run of ${s.taskName}` : "A scheduled run") : "";
     const inner = `
       <div class="top">
-        ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
+        ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}${sched}
         <span class="time">${ICON.clock}${when}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
@@ -926,7 +962,7 @@
     const what = isLive ? `<span class="hstate">${esc(label(h))}</span>` : `<span class="sr">${esc(label(h))}.</span>`;
     return `<button type="button" class="hrow s-${st}${isLive ? " live" : ""}${isLive && isFresh(h) ? " fresh" : ""}" data-sid="${esc(h.sid)}" title="Open in the Claude app">
       <span class="hicon" title="${esc(label(h))}">${icon}</span>
-      <span class="htitle"><span class="t">${hl(h.title)}</span>${what}</span>
+      <span class="htitle"><span class="t">${hl(h.title)}</span>${h.task ? `<span class="hsched" title="${esc(h.taskName ? `A run of ${h.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : ""}${what}</span>
       ${h.project ? tag(`${ICON.folder}<span>${hl(h.project)}</span>`, "name", h.project) : "<span></span>"}
       <span class="htime">${clock(h.last)}</span>
       ${snip ? `<span class="hsnip">${hl(snip)}</span>` : ""}
@@ -998,16 +1034,176 @@
     renderHistory();
   }
 
+  // ---------------------------------------------------------------- Scheduled
+
+  // When something happens, in words: "today at 7:10 AM", "yesterday at…", "Mon at…".
+  function when(t) {
+    const at = clock(t);
+    if (t >= dayStart(0) && t < dayStart(-1)) return `today at ${at}`;
+    if (t >= dayStart(1) && t < dayStart(0)) return `yesterday at ${at}`;
+    if (t >= dayStart(-1) && t < dayStart(-2)) return `tomorrow at ${at}`;
+    const d = new Date(t);
+    const near = Math.abs(t - now()) < 6 * DAY;
+    return `${d.toLocaleDateString("en-US", near ? { weekday: "short" } : { month: "short", day: "numeric" })} at ${at}`;
+  }
+  // The next run, short, for the corner of the card.
+  function nextLabel(t) {
+    const ms = t - now();
+    if (ms < 45_000) return "now";
+    if (ms < 3_600_000) return `in ${Math.round(ms / 60_000)}m`;
+    const w = when(t);
+    return w[0].toUpperCase() + w.slice(1);
+  }
+
+  // A task card: how its last run went, or that it is paused, missed a run or never ran.
+  function taskLook(t) {
+    const r = t.lastRun;
+    if (!t.enabled) return { cls: "paused", tag: tag(`${ICON.pause}<span>Paused</span>`, "s-idle"), label: "Paused" };
+    if (r && (r.status === "working" || r.needsYou)) {
+      const s = { ...r, background: false };
+      const text = r.status === "working" ? "Running" : label(s);
+      return { cls: r.status, tag: tag(`${statusIcon(s)}<span>${text}</span>`, `s-${r.status}`), label: text, fresh: isFresh(s) };
+    }
+    if (t.missed) return { cls: "missed", tag: tag(`${ICON.alarm}<span>Missed</span>`, "s-missed"), label: "Missed a run" };
+    if (!r) return { cls: "unrun", tag: tag(`${ICON.calendarClock}<span>Scheduled</span>`, "s-idle"), label: "No runs yet" };
+    if (r.status === "asks") return { cls: "asks stale", tag: tag(`${ICON.question.replace(" pulse", "")}<span>Asked you</span>`, "s-asks"), label: "Asked you" };
+    if (r.status === "error") return { cls: "error stale", tag: tag(`${ICON.error.replace(" pulse", "")}<span>Error</span>`, "s-error"), label: "Error" };
+    if (r.status === "ended" && r.note) return { cls: "ended", tag: tag(`${ICON.power}<span>Closed</span>`, "s-ended"), label: "Closed" };
+    return { cls: "done", tag: tag(`${ICON.check}<span>Done</span>`, "s-done"), label: "Done" };
+  }
+
+  function taskDetail(t) {
+    const r = t.lastRun;
+    const line = (html) => `<div class="line">${html}</div>`;
+    const sched = line(`${ICON.calendarClock}<span class="txt">${t.schedule ? esc(t.schedule) : `<code>${esc(t.cron)}</code>`}</span>`);
+    let second;
+    if (t.enabled && r?.status === "working") {
+      second = action(r.tool, r.detail) || `${ICON.bulb}<span class="txt">Started ${when(r.first)}</span>`;
+    } else if (t.enabled && r?.needsYou) {
+      const text = r.status === "waiting" ? r.wait || "Waiting for your answer" : r.status === "asks" ? r.ask || "It asked you something" : r.error || "The run ended with an error";
+      second = `<span class="txt"><b>${esc(text)}</b></span>`;
+    } else if (t.enabled && t.missed) {
+      second = `${ICON.alarm}<span class="txt">Didn't run ${when(t.missed)}</span>`;
+    } else {
+      second = `${ICON.history}<span class="txt">${r ? `Last run ${when(r.first)}` : "No runs yet"}</span>`;
+    }
+    return sched + line(second);
+  }
+
+  function runDots(t) {
+    if (!t.runs.length) return "";
+    const runs = [...t.runs].reverse(); // oldest first, like a timeline
+    const word = runWord;
+    const tip = `Last ${plural(runs.length, "run", "runs")}, oldest first:\n${runs.map((r) => `${when(r.at)}: ${word(r)}`).join("\n")}`;
+    const dots = runs.map((r) => `<i class="r-${r.status === "idle" ? "done" : r.status}"></i>`).join("");
+    return tag(`<span class="dots" aria-hidden="true">${dots}</span>`, "", tip);
+  }
+  const runWord = (r) => (r.status === "working" ? "running" : r.status === "done" || r.status === "idle" ? "done"
+    : r.status === "ended" ? "closed" : r.status === "error" ? "error" : r.status === "waiting" ? "needs you" : "asked you");
+  // "Last 7 runs: 6 done, 1 error", for VoiceOver, which can't see the dots.
+  function runSummary(t) {
+    if (!t.runs.length) return "";
+    const counts = new Map();
+    for (const r of t.runs) counts.set(runWord(r), (counts.get(runWord(r)) || 0) + 1);
+    return `Last ${plural(t.runs.length, "run", "runs")}: ${[...counts].map(([w, n]) => `${n} ${w}`).join(", ")}`;
+  }
+
+  const taskCards = new Map(); // task id → card element, kept between updates
+  function upsertTask(t) {
+    let el = taskCards.get(t.id);
+    if (!el) {
+      el = document.createElement("button");
+      el.type = "button";
+      el.dataset.task = t.id;
+      taskCards.set(t.id, el);
+    }
+    const look = taskLook(t);
+    const cls = `card task ${look.cls}${look.fresh ? " fresh" : ""}`;
+    if (el.className !== cls) el.className = cls;
+    // A click opens the last run; a task that never ran has nothing to open.
+    if (t.lastRun) el.dataset.sid = t.lastRun.sid; else delete el.dataset.sid;
+    const nextText = t.enabled && t.next ? nextLabel(t.next) : "";
+    const inner = `
+      <div class="top">
+        ${look.tag}
+        ${nextText ? `<span class="time" title="Next run ${esc(when(t.next))}">${ICON.clock}${nextText}</span>` : ""}
+      </div>
+      <div class="title">${esc(t.name)}</div>
+      <div class="detail">${taskDetail(t)}</div>
+      <div class="tags">${t.project ? tag(`${ICON.folder}<span>${esc(t.project)}</span>`, "name", t.project) : ""}${runDots(t)}</div>`;
+    if (el._inner !== inner) {
+      el.innerHTML = inner;
+      el._inner = inner;
+      syncIcons(el);
+      el.setAttribute("aria-label", [t.name, look.label, plain(taskDetail(t)), nextText ? `Next run ${when(t.next)}` : "", runSummary(t)].filter(Boolean).join(". "));
+    }
+    el.title = t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
+    return el;
+  }
+
+  const TASK_GROUPS = [
+    { id: "on", label: "Scheduled", hint: "on this Mac", test: (t) => t.enabled },
+    { id: "off", label: "Paused", test: (t) => !t.enabled },
+  ];
+  const taskGroups = new Map();
+
+  function renderScheduled() {
+    if (!ready) {
+      taskCards.clear();
+      taskGroups.clear();
+      $scheduled.innerHTML = link === "offline" ? offlineState() : loadingState();
+      syncIcons($scheduled);
+      return;
+    }
+    const list = state.tasks || [];
+    if (!list.length) {
+      taskCards.clear();
+      taskGroups.clear();
+      $scheduled.innerHTML = `<div class="empty-state"><div class="badge">${ICON.calendarClock}</div>
+        <h3>No scheduled tasks</h3>
+        <p>Ask Claude in the Claude app to run something on a schedule. Each task shows up here with its next run and how the last one went.</p></div>`;
+      return;
+    }
+    $scheduled.querySelector(":scope > .empty-state")?.remove();
+    const keep = new Set();
+    let prev = null;
+    for (const g of TASK_GROUPS) {
+      const items = list.filter(g.test); // the server's order: what needs you, running, missed, next up
+      let sec = taskGroups.get(g.id);
+      if (!items.length) { sec?.remove(); taskGroups.delete(g.id); continue; }
+      if (!sec) {
+        sec = document.createElement("section");
+        sec.className = `group ${g.id === "on" ? "active" : ""}`;
+        sec.setAttribute("aria-label", g.label);
+        sec.innerHTML = `<h2 class="group-head">${g.id === "on" ? ICON.calendarClock : ICON.pause}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2><div class="grid"></div>`;
+        taskGroups.set(g.id, sec);
+      }
+      const want = prev ? prev.nextSibling : $scheduled.firstChild;
+      if (sec !== want) $scheduled.insertBefore(sec, want);
+      prev = sec;
+      sec.querySelector(".count").textContent = items.length;
+      const grid = sec.querySelector(".grid");
+      items.forEach((t, i) => {
+        const el = upsertTask(t);
+        keep.add(t.id);
+        if (grid.children[i] !== el) grid.insertBefore(el, grid.children[i] || null);
+      });
+    }
+    for (const [id, el] of taskCards) if (!keep.has(id)) { el.remove(); taskCards.delete(id); }
+  }
+
   // ---------------------------------------------------------------- views
 
   function setView(v, fromApp) {
-    if (v !== "week" && v !== "history") return;
+    if (v !== "week" && v !== "history" && v !== "scheduled") return;
     view = v;
     $week.hidden = v !== "week";
     $history.hidden = v !== "history";
+    $scheduled.hidden = v !== "scheduled";
     document.querySelectorAll(".seg [data-view]").forEach((b) => b.setAttribute("aria-selected", String(b.dataset.view === v)));
     $content.scrollTop = 0;
     if (v === "history") { renderHistory(); loadHistory(true); }
+    if (v === "scheduled") renderScheduled();
     if (!fromApp) bridge()?.postMessage({ view: v }); // keep the app's toolbar switch in step
   }
 
@@ -1045,6 +1241,12 @@
   document.addEventListener("contextmenu", (e) => {
     if (!embed) return;
     e.preventDefault();
+    const task = e.target.closest("[data-task]");
+    if (task) {
+      const t = state.tasks.find((x) => x.id === task.dataset.task);
+      if (t) bridge()?.postMessage({ menu: { sid: t.lastRun?.sid ?? "", title: t.name, cwd: t.cwd, file: t.file } });
+      return;
+    }
     const item = e.target.closest("[data-sid]");
     if (!item) return;
     const s = sessionFor(item.dataset.sid);
@@ -1056,7 +1258,7 @@
   $content.addEventListener("keydown", (e) => {
     const from = e.target.closest?.(".card, .hrow");
     if (!from || e.metaKey || e.altKey || e.ctrlKey) return;
-    const items = [...(view === "week" ? $week : $history).querySelectorAll(".card, .hrow")];
+    const items = [...(view === "week" ? $week : view === "history" ? $history : $scheduled).querySelectorAll(".card, .hrow")];
     const i = items.indexOf(from);
     let to;
     if (e.key === "Home") to = items[0];
@@ -1114,6 +1316,7 @@
     renderBanner();
     renderWeek();
     if (view === "history") refreshHistory();
+    if (view === "scheduled") renderScheduled();
     // Redraw when the first breathing minute of something that needs you runs out.
     clearTimeout(freshTimer);
     const ends = state.sessions.filter(isFresh).map((s) => (s.since || s.last) + FRESH_MS - now());

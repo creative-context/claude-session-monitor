@@ -1,5 +1,5 @@
 // End-to-end checks of the state machine against the cases that broke other tools.
-// Starts a second server on port 4748 with its own temp folder, writes hook lines,
+// Starts a second server on port 4749 with its own temp folder, writes hook lines,
 // and reads /api/state. Never touches ~/.claude-session-monitor.
 //
 //   bun test/scenarios.ts
@@ -7,6 +7,7 @@
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { describeCron, nextRun, parseCron, prevRun } from "../cron.ts";
 
 const PORT = 4749; // not the demo's 4748, so both can run at once
 const dir = mkdtempSync(join(tmpdir(), "csm-test-"));
@@ -171,11 +172,33 @@ const tp18 = transcript("t18.jsonl", [
 ev(id(18), { ev: "UserPromptSubmit", prompt: "Draft the post", tp: tp18, t: Date.now() - 2 * 86_400_000 });
 ev(id(18), { ev: "Stop", tp: tp18, t: Date.now() - 2 * 86_400_000 + 60_000 });
 
+// 19. A run of a scheduled task that ended asking you something. The tasks and the link
+// come from the app's own files: scheduled-tasks.json and the run's session file.
+ev(id(19), { ev: "UserPromptSubmit", prompt: "Weekday digest" });
+ev(id(19), { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap: "Three items today.", ask: "Should I send it to the team?" } });
+ev(id(19), { ev: "Stop" });
+const appDir = join(dir, "app", "account", "org");
+mkdirSync(appDir, { recursive: true });
+const HOUR = 3_600_000;
+const iso = (ms: number) => new Date(ms).toISOString();
+writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: [
+  { id: "t-digest", displayName: "Weekday digest", cronExpression: "0 7 * * 1-5", enabled: true, cwd: "/tmp/demo",
+    createdAt: Date.now() - 30 * 24 * HOUR, lastScheduledFor: iso(prevRun(parseCron("0 7 * * 1-5")!, Date.now() - 11 * 60_000)!) },
+  { id: "t-paused", displayName: "Paused report", cronExpression: "0 9 * * *", enabled: false, createdAt: Date.now() - 30 * 24 * HOUR },
+  // Ran three hours ago, and not since: its last hourly run is missing.
+  { id: "t-hourly", displayName: "Hourly check", cronExpression: "0 * * * *", enabled: true,
+    createdAt: Date.now() - 2 * 24 * HOUR, lastScheduledFor: iso(Date.now() - 3 * HOUR) },
+] }));
+writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
+  cliSessionId: id(19), scheduledTaskId: "t-digest", title: "Weekday digest", originCwd: "/tmp/demo",
+  createdAt: Date.now() - 60_000, lastActivityAt: Date.now(),
+}));
+
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
     ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir,
-    CSM_APP_SESSIONS: join(dir, "no-app-sessions"), CSM_PROJECTS: join(dir, "no-projects"),
+    CSM_APP_SESSIONS: join(dir, "app"), CSM_PROJECTS: join(dir, "no-projects"),
   },
   stdout: "ignore",
   stderr: "inherit",
@@ -231,6 +254,18 @@ try {
   check("waiting sessions come first", s[0]?.status === "waiting", s.map((x) => x.status));
   check("18 an old question is still a question", find(s, 18)?.status === "asks", find(s, 18));
   check("18 but it no longer needs you", find(s, 18)?.needsYou === false && find(s, 11)?.needsYou === true, [find(s, 18), find(s, 11)?.needsYou]);
+  // Scheduled tasks
+  const task = (tid: string) => snap.tasks?.find((x: any) => x.id === tid);
+  const digest = task("t-digest");
+  const next = digest && new Date(digest.next);
+  check("tasks are read from the app's file", snap.tasks?.length === 3, snap.tasks?.map((x: any) => x.id));
+  check("a task's schedule in words", digest?.schedule === "Weekdays at 7:00 AM", digest?.schedule);
+  check("its next run is the next weekday at 7:00", Boolean(next && digest.next > Date.now() && next.getHours() === 7 && next.getMinutes() === 0 && next.getDay() >= 1 && next.getDay() <= 5), digest?.next);
+  check("19 its last run is linked, asks you, and nothing was missed", digest?.lastRun?.sid === id(19) && digest?.lastRun?.status === "asks" && digest?.missed === null, digest);
+  check("19 the run knows its task", find(s, 19)?.task === "t-digest" && find(s, 19)?.taskName === "Weekday digest", find(s, 19));
+  check("a task whose last run needs you comes first", snap.tasks?.[0]?.id === "t-digest", snap.tasks?.map((x: any) => x.id));
+  check("a paused task has no next run and comes last", task("t-paused")?.enabled === false && task("t-paused")?.next === null && snap.tasks?.at(-1)?.id === "t-paused", task("t-paused"));
+  check("a run that didn't happen counts as missed", typeof task("t-hourly")?.missed === "number" && task("t-hourly")?.lastRun === null, task("t-hourly"));
   check("the needs count matches the cards that need you", snap.needs === s.filter((x) => x.needsYou).length && snap.needs > 0, [snap.needs, s.filter((x) => x.needsYou).length]);
 
   // Answer the question and approve the permission
@@ -272,11 +307,26 @@ try {
   server = start();
   s = await state();
   check("after a restart, the question is still there", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
+  check("19 after a restart, the run still knows its task", (await history("Weekday digest")).sessions.find((x: any) => x.sid === id(19))?.task === "t-digest");
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
 } finally {
   server.kill();
   rmSync(dir, { recursive: true, force: true });
 }
+
+// The schedule reader on its own, from a fixed Thursday noon.
+const thursday = new Date(2026, 9, 22, 12).getTime();
+check("cron in words", describeCron("*/15 * * * *") === "Every 15 minutes" && describeCron("0 9,17 * * *") === "Every day at 9:00 AM and 5:00 PM"
+  && describeCron("0 9 1 * *") === "Monthly on the 1st at 9:00 AM" && describeCron("30 * * * 1-5") === "Every hour at :30 on weekdays",
+  ["*/15 * * * *", "0 9,17 * * *", "0 9 1 * *", "30 * * * 1-5"].map(describeCron));
+check("cron too unusual for words gives null", describeCron("0 */3 1-7 * *") === null && describeCron("0 * 1 * *") === null,
+  [describeCron("0 */3 1-7 * *"), describeCron("0 * 1 * *")]);
+// Vixie cron: a day field starting with * makes both day fields required (Dec 21 is the first Monday on 1, 11, 21 or 31).
+check("cron: */n in the day of the month still needs the weekday too", (() => { const d = new Date(nextRun(parseCron("0 0 */10 * 1")!, thursday)!); return d.getMonth() === 11 && d.getDate() === 21; })());
+check("cron: day of month or day of week, either one", new Date(nextRun(parseCron("0 0 13 * 5")!, thursday)!).getDate() === 23);
+check("cron: 7 is Sunday", new Date(nextRun(parseCron("0 7 * * 7")!, thursday)!).getDay() === 0);
+check("cron: the run before", prevRun(parseCron("0 7 * * 1-5")!, thursday) === new Date(2026, 9, 22, 7).getTime());
+check("cron: a bad expression is null", parseCron("61 * * * *") === null && parseCron("bad") === null && parseCron("* * * *") === null);
 
 console.log(failed ? `\n${failed} failed` : "\nAll passed");
 process.exit(failed ? 1 : 0);

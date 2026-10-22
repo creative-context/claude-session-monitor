@@ -9,6 +9,7 @@
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { parseCron, prevRun } from "../cron.ts";
 
 const args = process.argv.slice(2);
 const PORT = Number(args.find((a) => /^\d+$/.test(a)) ?? 4748);
@@ -40,7 +41,7 @@ ev(s, now - 3 * MIN, { ev: "UserPromptSubmit", prompt: "Upgrade the payments SDK
 ev(s, now - 2 * MIN, { ev: "PreToolUse", tool: "Bash", d: "Install the new SDK version", cwd: project("billing-api") });
 ev(s, now - 1 * MIN, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("billing-api") });
 
-finished("Release notes for 2.4", project("docs"), now - 9 * MIN,
+const releaseRun = finished("Release notes for 2.4", project("docs"), now - 9 * MIN,
   "Drafted the release notes from the merged pull requests, grouped by feature.",
   "Should I publish them to the changelog now?");
 
@@ -86,6 +87,7 @@ for (const [agent, label, tool, file] of [
 }
 ev(s, now - 22 * MIN, { ev: "UserPromptSubmit", prompt: "Nightly data audit", cwd: project("analytics"), tp });
 ev(s, now - 21 * MIN, { ev: "Stop", cwd: project("analytics"), tp });
+const auditRun = s;
 
 finished("Onboarding email copy", project("marketing-site"), now - 26 * MIN,
   "Wrote three subject lines and a short body. The draft is in emails/onboarding.md.");
@@ -115,6 +117,57 @@ finished("Rename environment variables", project("infra"), now - 5 * 24 * H, "Re
 // Older than a week: only in History.
 finished("Set up the staging database", project("infra"), now - 9 * 24 * H, "Staging runs on its own database now, refreshed nightly.");
 
+
+// Scheduled tasks, the way the Claude app keeps them: scheduled-tasks.json, plus one
+// session file per run that names its task.
+const appDir = join(dir, "app", "account", "org");
+mkdirSync(appDir, { recursive: true });
+const taskFile: any[] = [];
+let runFiles = 0;
+const prev = (cron: string, before = now) => prevRun(parseCron(cron)!, before)!;
+function task(id: string, name: string, cron: string, cwd: string, o: { enabled?: boolean; lastFor?: number; created?: number } = {}) {
+  taskFile.push({
+    id, displayName: name, cronExpression: cron, enabled: o.enabled ?? true, cwd,
+    filePath: `/Users/demo/.claude/scheduled-tasks/${id}/SKILL.md`,
+    createdAt: o.created ?? now - 30 * 24 * 60 * MIN,
+    ...(o.lastFor ? { lastScheduledFor: new Date(o.lastFor).toISOString(), lastRunAt: new Date(o.lastFor + MIN).toISOString() } : {}),
+  });
+}
+function runOf(sid: string, taskId: string, title: string, cwd: string, at: number) {
+  writeFileSync(join(appDir, `local_${++runFiles}.json`), JSON.stringify({
+    cliSessionId: sid, scheduledTaskId: taskId, title, originCwd: cwd, createdAt: at, lastActivityAt: at + 5 * MIN,
+  }));
+}
+
+// Its last run asks you something (the release notes card above).
+task("release-notes", "Weekly release notes", "0 16 * * 5", project("docs"), { lastFor: prev("0 16 * * 5") });
+runOf(releaseRun, "release-notes", "Release notes for 2.4", project("docs"), now - 15 * MIN);
+// Running right now (the workflow above).
+task("data-audit", "Nightly data audit", "0 2 * * *", project("analytics"), { lastFor: prev("0 2 * * *") });
+runOf(auditRun, "data-audit", "Nightly data audit", project("analytics"), now - 22 * MIN);
+// Ran fine, three times.
+const inbox = "0 8 * * 1-5";
+let at = prev(inbox);
+task("inbox-summary", "Morning inbox summary", inbox, project("inbox"), { lastFor: at });
+for (let i = 0; i < 3; i++) {
+  const sid = finished("Morning inbox summary", project("inbox"), at + 8 * MIN, "Eleven new threads. Two need a reply today; both are flagged.");
+  runOf(sid, "inbox-summary", "Morning inbox summary", project("inbox"), at);
+  at = prev(inbox, at - MIN);
+}
+// Missed its latest run: the one before it is the last that happened.
+const daily = "0 7 * * *";
+const ranAt = prev(daily, prev(daily, now - 10 * MIN) - MIN);
+task("metrics-email", "Daily metrics email", daily, project("analytics"), { lastFor: ranAt });
+runOf(finished("Daily metrics email", project("analytics"), ranAt + 8 * MIN, "Sent the metrics summary to the team channel."),
+  "metrics-email", "Daily metrics email", project("analytics"), ranAt);
+// New, hasn't run yet.
+task("monthly-report", "Monthly usage report", "0 9 1 * *", project("analytics"), { created: now - 24 * 60 * MIN });
+// Paused.
+const backup = "0 3 * * 0";
+const backupAt = prev(backup);
+task("backup-check", "Sunday backup check", backup, project("infra"), { enabled: false, lastFor: backupAt });
+runOf(finished("Sunday backup check", project("infra"), backupAt + 9 * MIN, "All three backups restored cleanly in the test environment."),
+  "backup-check", "Sunday backup check", project("infra"), backupAt);
 
 if (EDGE) {
   // A usage limit ends the turn with an API error, like a server error does.
@@ -187,15 +240,20 @@ if (EDGE) {
     "Three options are in names.md, with what each one is taken for on npm.",
     "Which one do you like best?");
 
+  // A schedule too unusual to put in words, and a very long name.
+  task("preview-cleanup", "Clean up stale preview deployments across every environment and region", "0 */3 1-7 * *", project("infra"));
+
   // Open, with no turn yet.
   s = id();
   ev(s, now - 18 * MIN, { ev: "SessionStart", cwd: project("notes") });
 }
 
+writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile }));
+
 const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
     ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir,
-    CSM_APP_SESSIONS: join(dir, "none"), CSM_PROJECTS: join(dir, "none"),
+    CSM_APP_SESSIONS: join(dir, "app"), CSM_PROJECTS: join(dir, "none"),
   },
   stdout: "inherit",
   stderr: "inherit",

@@ -246,13 +246,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch id {
         case .view:
-            // Last 7 Days and All Sessions, like the view switch in Mail or Finder.
-            let seg = NSSegmentedControl(labels: ["Last 7 Days", "All Sessions"], trackingMode: .selectOne,
+            // Last 7 Days, All Sessions and Scheduled, like the view switch in Mail or Finder.
+            let seg = NSSegmentedControl(labels: ["Last 7 Days", "All Sessions", "Scheduled"], trackingMode: .selectOne,
                                          target: self, action: #selector(viewChanged(_:)))
-            seg.setImage(NSImage(systemSymbolName: "square.grid.2x2", accessibilityDescription: nil), forSegment: 0)
-            seg.setImage(NSImage(systemSymbolName: "clock.arrow.circlepath", accessibilityDescription: nil), forSegment: 1)
-            seg.setImageScaling(.scaleProportionallyDown, forSegment: 0)
-            seg.setImageScaling(.scaleProportionallyDown, forSegment: 1)
+            for (i, symbol) in ["square.grid.2x2", "clock.arrow.circlepath", "calendar.badge.clock"].enumerated() {
+                seg.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), forSegment: i)
+                seg.setImageScaling(.scaleProportionallyDown, forSegment: i)
+            }
             seg.selectedSegment = 0
             viewSwitch = seg
             let item = NSToolbarItem(itemIdentifier: id)
@@ -367,25 +367,38 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             NSAccessibility.post(element: window as Any, notification: .announcementRequested, userInfo: [
                 .announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
         }
-        if let v = body["view"] as? String { viewSwitch?.selectedSegment = v == "history" ? 1 : 0 }
+        if let v = body["view"] as? String, let i = views.firstIndex(of: v) { viewSwitch?.selectedSegment = i }
         if let info = body["menu"] as? [String: Any] { showSessionMenu(info) }
     }
 
     // MARK: session menu
 
+    // A session card: open it, copy its title, show its project. A scheduled task's card
+    // also shows the task's own file; its "open" is the task's last run, if it ran.
     func showSessionMenu(_ info: [String: Any]) {
-        guard let sid = info["sid"] as? String else { return }
+        let sid = info["sid"] as? String ?? ""
         let title = info["title"] as? String ?? ""
         let cwd = info["cwd"] as? String ?? ""
-        let open = item("Open in Claude", #selector(openSession(_:)), "")
+        let file = info["file"] as? String ?? ""
+        let isTask = info["file"] != nil
+        let exists = { (path: String) in !path.isEmpty && FileManager.default.fileExists(atPath: path) }
+        let open = item(isTask ? "Open Last Run in Claude" : "Open in Claude", #selector(openSession(_:)), "")
         open.representedObject = sid
-        let copy = item("Copy Title", #selector(copyTitle(_:)), "")
+        if sid.isEmpty { open.action = nil } // never ran: dimmed
+        let copy = item(isTask ? "Copy Name" : "Copy Title", #selector(copyTitle(_:)), "")
         copy.representedObject = title
         let reveal = item("Reveal Project in Finder", #selector(revealProject(_:)), "")
         reveal.representedObject = cwd
-        if cwd.isEmpty || !FileManager.default.fileExists(atPath: cwd) { reveal.action = nil } // dimmed
+        if !exists(cwd) { reveal.action = nil }
+        var items: [NSMenuItem] = [open, .separator(), copy, reveal]
+        if isTask {
+            let task = item("Reveal Task in Finder", #selector(revealProject(_:)), "")
+            task.representedObject = file
+            if !exists(file) { task.action = nil }
+            items.append(task)
+        }
         let menu = NSMenu()
-        menu.items = [open, .separator(), copy, reveal]
+        menu.items = items
         menu.popUp(positioning: nil, at: web.convert(window.mouseLocationOutsideOfEventStream, from: nil), in: web)
     }
 
@@ -411,8 +424,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
     // MARK: views and search
 
+    // The page's names for the three views, in the switch's order.
+    let views = ["week", "history", "scheduled"]
+
     @objc func viewChanged(_ sender: NSSegmentedControl) {
-        callPage("csm.setView", sender.selectedSegment == 1 ? "history" : "week")
+        callPage("csm.setView", views[max(0, min(views.count - 1, sender.selectedSegment))])
     }
 
     @objc func searchChanged(_ sender: NSSearchField) {
@@ -436,6 +452,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     @objc func showHistory() {
         viewSwitch?.selectedSegment = 1
         callPage("csm.setView", "history")
+    }
+
+    @objc func showScheduled() {
+        viewSwitch?.selectedSegment = 2
+        callPage("csm.setView", "scheduled")
     }
 
     @objc func focusSearch() {
@@ -581,6 +602,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         viewMenu.items = [
             item("Last 7 Days", #selector(showWeek), "1"),
             item("All Sessions", #selector(showHistory), "2"),
+            item("Scheduled", #selector(showScheduled), "3"),
             .separator(),
             item("Actual Size", #selector(actualSize), "0"),
             item("Zoom In", #selector(zoomIn), "="),

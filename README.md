@@ -4,16 +4,17 @@ A Mac app that shows every Claude Code session you have going: what each one is 
 
 > This is an independent project. It isn't made, endorsed or supported by Anthropic. Claude and Claude Code are trademarks of Anthropic.
 
-![Claude Session Monitor with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then earlier sessions of the day](docs/screenshot.png)
+![Claude Session Monitor with demo data: an Active zone with two sessions that need you, one with an error, two working and one done, then earlier sessions of the day, with runs of scheduled tasks marked Scheduled](docs/screenshot.png)
 
 ## What it shows
 
 - **Last 7 Days.** On top, **Active**: what needs you, what's working, and anything touched in the last two hours, most urgent first. Then the rest of today, yesterday and earlier. After 7 days a session leaves this view on its own.
 - **All Sessions.** Every session ever, grouped by day and searchable by title, first prompt, project or last recap. The ones still going keep their color and update as they change. On first run it fills in from the sessions the Claude app already has.
+- **Scheduled.** The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. Its runs show up in the other views too, marked Scheduled.
 - **What needs you.** A session that's blocked on a permission or a question, one whose turn ended asking you something, or one that stopped on an error. Questions and errors count for a day. The same count shows in the window, on the Dock icon and in the menu bar, and an optional sound tells you when it goes up.
 - **What's running.** The tool a session is using and on what, the step of its plan, and its subagents and workflows with their phase and tokens.
 
-Click a card or a row to open that session in the Claude app. In the app, right-click to copy its title or show its project in Finder. Arrow keys move between cards.
+Click a card or a row to open that session in the Claude app, or a task's last run. In the app, right-click to copy its title or show its project or task file in Finder. ⌘1, ⌘2 and ⌘3 switch views, and arrow keys move between cards.
 
 ## Requirements
 
@@ -52,21 +53,22 @@ Everything stays on your Mac. The server listens on `127.0.0.1` only and answers
 What it keeps, in `~/.claude-session-monitor`:
 
 - `events.jsonl`: one line per Claude Code event. Each line has the session ID, its folder, the tool's name and a short detail (a file name, or a command or its description, up to 160 characters), the first 200 characters of each prompt, and the text of a session's last question or recap, up to 300 characters. The file rotates at 8 MB.
-- `sessions.db`: one row per session with its title, folder, first prompt, status, last recap or question, and times.
+- `sessions.db`: one row per session with its title, folder, first prompt, status, last recap or question, its scheduled task if it's a run of one, and times.
 
 It never stores whole conversations.
 
 What it reads and never writes:
 
 - The end of each session's transcript in `~/.claude/projects`, to tell how a turn ended and to find its subagents and workflows.
-- The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles and the archived flag.
+- The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag and which scheduled task a session is a run of.
+- The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times. It never reads what a task does.
 
 What it changes: the hook entries in `~/.claude/settings.json`, and nothing else.
 
 ## How it works
 
 1. **Hook** (`hooks/session-hook.sh`). Claude Code runs it on every event of every session, and it appends one short line to `events.jsonl`. No network, no output, and it always exits 0, so it never slows down or breaks a session. It takes about 12 ms.
-2. **Server** (`server.ts`, Bun). It reads that file, keeps a small state per session, saves it to `sessions.db`, and streams it to the page.
+2. **Server** (`server.ts`, Bun). It reads that file, keeps a small state per session, saves it to `sessions.db`, and streams it to the page. `cron.ts` reads the scheduled tasks' schedules, to say them in words and to work out the next run and a missed one.
 3. **Page** (`public/index.html`). The cards, the zones, History and the empty states. It uses the Obsidian theme tokens from [astryx-theme-obsidian](https://github.com/creative-context/astryx-theme-obsidian) and its fonts, Inter and Space Grotesk, served locally under the SIL Open Font License (see `licenses/`).
 4. **App** (`app/main.swift`). A standard macOS window with a transparent title bar, the usual menus and a Settings window, a toolbar for the view switch, search and sound, a Dock icon and a menu bar item. It shows the page and runs the server. If the server stops answering, the toolbar and the page say so, and the app starts it again.
 
@@ -110,6 +112,7 @@ Neither one reads your sessions or the Claude app's files.
 | A `PostToolUse` that arrives after `Stop` doesn't flip the session back to working | Vibe Notch #98 |
 | Subagent events don't change the session's own status or trigger alerts | Vibe Notch #36 and #18 |
 | Workflow agents never send `SubagentStart`, so agents are tracked by ID from their hooks and files, not with a counter | Found here |
+| A run of a scheduled task is a normal session. Its file in the Claude app names its task (`scheduledTaskId`), and the task's schedule is a cron expression in local time | Found here |
 | A comment line keeps a stream open, but the page can't see it. A ping event every 10 seconds lets the page notice a server that died without closing the connection | Found here |
 | "Needs you" lasts until the next real activity | agents-observe |
 | Only hook events that every Claude Code version in use knows are registered. Older versions lack `StopFailure` and `PermissionDenied` | agents-observe #7 |
