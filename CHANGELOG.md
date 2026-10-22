@@ -10,6 +10,10 @@
 - Fixed: a subagent's permission request kept the session on Needs you after the agent got its answer, because only the main agent's activity ended the wait. Now that agent moving on ends it too.
 - A run of a scheduled task shows a calendar clock by its time instead of a Scheduled tag.
 - The Working, Done and Error tags are a step darker, so their white text reaches 5.8:1. Idle and Closed titles are easier to read.
+- In a short window (under 600 px tall) the cards are lower: one line of title and both lines of detail, so more of the week shows under them.
+- Every day's list is as wide as the cards above it, so the edges line up.
+- When the header runs out of room, the counts keep only their number, then drop the less important ones, and are never cut.
+- The step in progress on the plan bar breathes while the session works.
 - The page uses Apple's system fonts, SF Pro (titles in Semibold) and SF Mono, like the rest of the Mac, instead of Inter and Space Grotesk. It ships no font files now. The colors stay the Obsidian theme's.
 - The window moves again when you drag its top row, as with any title bar, except over the counts. A double click there does what System Settings says (zoom by default).
 

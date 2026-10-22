@@ -132,7 +132,12 @@
   /* ---------- header ---------- */
   header { display: flex; align-items: center; gap: 8px; height: 24px; flex: none; container-type: inline-size; }
   /* In a narrow window the less important counts give way first. */
-  @container (max-width: 760px) { #counts .low { display: none; } }
+  /* When the header runs out of room, the counts drop their words and keep the number,
+     then the less important ones go. They are never squeezed or cut (fitCounts). */
+  #counts .tag { flex: none; }
+  #counts.tight .tag .word { display: none; }
+  #counts.tighter .tag.low { display: none; }
+  #counts.tightest .tag:not(.s-waiting) { display: none; } /* last, only what needs you */
   header .name {
     flex: none;
     font-family: var(--font-family-heading);
@@ -196,8 +201,9 @@
   #week { container: week / inline-size; }
   .wsplit { display: flex; flex-direction: column; gap: 28px; }
   .wmain:empty, .wside:empty { display: none; }
+  .wside .hlist { max-width: none; } /* as wide as the cards above, so the edges line up */
   @container week (min-width: 1100px) {
-    .wside .hlist.long { display: block; columns: 2; column-gap: 8px; max-width: none; }
+    .wside .hlist.long { display: block; columns: 2; column-gap: 8px; }
     .wside .hlist.long .hrow { width: 100%; margin-bottom: 4px; break-inside: avoid; }
   }
   .group-head {
@@ -304,6 +310,13 @@
   .detail .line svg.i { width: 13px; height: 13px; }
   .detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   .detail b { color: var(--color-text-primary); font-weight: 400; }
+  /* A short window (yours is about 430 px tall at 125%) gets lower cards: the title
+     keeps one line, and both lines of detail stay, since they carry the plan step and
+     what the agents do. */
+  @media (max-height: 600px) {
+    :root { --csm-card-h: 148px; }
+    .card .title { -webkit-line-clamp: 1; }
+  }
   .detail .sub { color: var(--color-text-secondary); }
   /* Secondary text on a colored card. Plain gray drops below 4.5:1 on the strong tints
      (3.8:1 on orange, 4.3:1 on red), so those use their own light color (orange 6.1 to
@@ -329,6 +342,8 @@
   .bar .segs span { flex: 1; height: 2px; border-radius: 1px; background: var(--color-overlay-pressed); }
   .bar .segs span.on { background: var(--color-text-accent); }
   .bar .segs span.now { background: color-mix(in srgb, var(--color-text-accent) 45%, transparent); }
+  /* The step in progress breathes while the session works, in step with its spinner. */
+  .card.working .bar .segs span.now { background: var(--color-text-accent); animation: step 2.4s ease-in-out infinite; }
   .bar .n { font-size: 10px; line-height: 12px; color: var(--meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* Paused or closed sessions step down in brightness, not opacity. */
@@ -525,6 +540,7 @@
   /* Calm and in step. No bounce (nothing here comes from a flick), one easing curve,
      colors that fade between states, icons that breathe or turn together. */
   @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+  @keyframes step { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
   @keyframes spin { to { transform: rotate(360deg); } }
   @keyframes enter { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
   .tag svg.spin { animation: spin 2.4s linear infinite; }
@@ -1336,7 +1352,7 @@
   }
 
   // The app drives these from its toolbar.
-  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => reportChrome() };
+  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); } };
 
   // In the app the header row sits in the title bar, and the app drags the window by it.
   // It needs to know where the things you can click are, so it leaves those alone.
@@ -1414,24 +1430,37 @@
 
   // ---------------------------------------------------------------- header
 
+  // Full counts if they fit; numbers only if not; then without the less important ones.
+  function fitCounts() {
+    $counts.classList.remove("tight", "tighter", "tightest");
+    const over = () => $counts.scrollWidth > $counts.clientWidth + 1;
+    for (const step of ["tight", "tighter", "tightest"]) {
+      if (!over()) return;
+      $counts.classList.add(step);
+    }
+  }
+  addEventListener("resize", () => requestAnimationFrame(fitCounts));
+
   function renderHeader() {
     const list = state.sessions;
     const needs = state.needs ?? list.filter(needsYou).length;
     const working = list.filter((s) => s.status === "working").length;
     const agents = list.reduce((k, s) => k + (s.agentCount || 0), 0);
     // Each count is a button: hover or focus shows what's behind it.
-    const count = (kind, inner, cls) =>
-      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">${inner}${ICON.chev}</span>`;
+    // The number and its words are apart, so a tight header can keep just the number.
+    const count = (kind, icon, n, words, cls) =>
+      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-label="${n} ${words}" title="${n} ${words}">${icon}<span>${n}<span class="word"> ${words}</span></span>${ICON.chev}</span>`;
     const counts = [
-      needs ? count("needs", `${ICON.alert.replace(" pulse", "")}<span>${needs} ${needs === 1 ? "needs" : "need"} you</span>`, "s-waiting") : "",
-      working ? count("working", `${ICON.spinner}<span>${working} working</span>`, "s-working") : "",
-      agents ? count("agents", `${ICON.agents}<span>${plural(agents, "agent", "agents")}</span>`, "low") : "",
-      list.length ? count("week", `${ICON.calendar}<span>${list.length} in 7 days</span>`, "low") : "",
+      needs ? count("needs", ICON.alert.replace(" pulse", ""), needs, needs === 1 ? "needs you" : "need you", "s-waiting") : "",
+      working ? count("working", ICON.spinner, working, "working", "s-working") : "",
+      agents ? count("agents", ICON.agents, agents, agents === 1 ? "agent" : "agents", "low") : "",
+      list.length ? count("week", ICON.calendar, list.length, "in 7 days", "low") : "",
     ].join("");
     if ($counts._html !== counts) {
       $counts.innerHTML = counts;
       $counts._html = counts;
       syncIcons($counts);
+      fitCounts();
       requestAnimationFrame(reportChrome);
       // The counts were redrawn: keep an open card on its count, or close it if that count is gone.
       if (popKind) {
@@ -1673,7 +1702,7 @@
   // drawn: each starts at the same point of a shared 2.4 s clock.
   function syncIcons(root) {
     const offset = `-${Math.round(performance.now() % 2400)}ms`;
-    root.querySelectorAll("svg.spin, svg.pulse, svg.bot").forEach((d) => { d.style.animationDelay = offset; });
+    root.querySelectorAll("svg.spin, svg.pulse, svg.bot, .bar .now").forEach((d) => { d.style.animationDelay = offset; });
   }
 
   // ---------------------------------------------------------------- sound
