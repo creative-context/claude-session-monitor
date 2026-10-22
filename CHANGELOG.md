@@ -1,7 +1,8 @@
 # Changelog
 
-## Unreleased
+## 0.3.0
 
+- **Check for Updates…** in the app menu and the menu bar item. The app also looks on its own 10 seconds after it opens and once a day, and when a newer version is out it sends a notification (once per version), shows a notice in the window with Download and Later, and adds Update to the menu bar item. Settings › Updates turns the daily check off. It is the app's only network request, to GitHub's public releases API.
 - Each count in the header shows what's behind it on hover or focus: the sessions that need you and what they ask, what each working session is doing, every agent with its session and tokens, and the last 7 days by state. The arrow keys move through the rows, and Escape closes it.
 - A click on a count, or on one of its rows, jumps to those cards in Last 7 Days and rings them for a moment.
 - Last 7 Days shows only Active as cards. Under it, the rest of the week comes as rows, and a day with more than six splits into two columns in a wide window.

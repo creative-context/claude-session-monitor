@@ -28,6 +28,7 @@ sh app/build.sh --release  # build and zip for a release
 
 - **The hook never blocks or breaks a session.** No network, nothing on stdout, always exit 0, and only hook events that every Claude Code version in use knows.
 - **Privacy is a contract.** Read and store only what the README's Privacy section lists, and update that section with any new read. Never read or store a scheduled task's text, its permissions or a whole conversation.
+- **One network request, and only one:** the app's update check in `app/main.swift`, to GitHub's releases API. It only ever opens this repository's release pages. To test it, serve a fake reply such as `{"tag_name": "v9.9.9", "html_url": "…/releases/tag/v9.9.9"}` and point the app at it with `defaults write com.creativecontext.ClaudeSessionMonitor updateFeedURL http://127.0.0.1:4760/latest` (delete the key afterwards).
 - **Tests and the demo never touch the user's data.** They point `CSM_DIR`, `CSM_APP_SESSIONS` and `CSM_PROJECTS` at temp folders.
 - **The app runs its own copy of the server.** After changing `server.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
 - **One rule for "needs you",** computed in `server.ts` and shared by the window, the Dock badge and the menu bar.

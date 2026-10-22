@@ -18,7 +18,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 # Universal: one build for Apple silicon and one for Intel, joined with lipo.
 for arch in arm64 x86_64; do
   swiftc -O -swift-version 5 -target "$arch-apple-macos14.0" \
-    -framework AppKit -framework WebKit -framework ServiceManagement \
+    -framework AppKit -framework WebKit -framework ServiceManagement -framework UserNotifications \
     app/main.swift -o "build/ClaudeSessionMonitor-$arch"
 done
 lipo -create build/ClaudeSessionMonitor-arm64 build/ClaudeSessionMonitor-x86_64 \

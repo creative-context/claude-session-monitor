@@ -10,6 +10,7 @@
 
 import AppKit
 import ServiceManagement
+import UserNotifications
 import WebKit
 
 let port = 4747
@@ -54,9 +55,26 @@ final class PageView: WKWebView {
     }
 }
 
+// A release on GitHub: its tag ("v0.4.0") and its page.
+struct Release: Sendable {
+    let version: String
+    let page: String
+}
+
+enum UpdateError: Error, Sendable {
+    case network(String), status(Int), unreadable
+    var text: String {
+        switch self {
+        case .network(let m): return m
+        case .status(let c): return "GitHub answered with status \(c). Try again later."
+        case .unreadable: return "GitHub's answer couldn't be read. Try again later."
+        }
+    }
+}
+
 @MainActor
 final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSToolbarDelegate,
-    WKNavigationDelegate, WKScriptMessageHandler {
+    WKNavigationDelegate, WKScriptMessageHandler, UNUserNotificationCenterDelegate {
 
     let defaults = UserDefaults.standard
     var window: NSWindow!
@@ -75,6 +93,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var settingsSize: NSPopUpButton?
     var settingsHookState: NSTextField?
     var settingsHookButton: NSButton?
+    var settingsUpdates: NSButton?
+    var statusUpdateItem: NSMenuItem!
+    var availableUpdate: Release?
     var sizeMenus: [NSMenu] = []
     var server: Process?
     var serverStartedAt = Date.distantPast
@@ -97,6 +118,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
         keepHookCurrent()
+        // Updates: a quiet look at GitHub soon after launch, then once a day.
+        defaults.register(defaults: ["checkUpdates": true])
+        UNUserNotificationCenter.current().delegate = self
+        DispatchQueue.main.asyncAfter(deadline: .now() + 10) { self.checkQuietly() }
+        Timer.scheduledTimer(withTimeInterval: 24 * 60 * 60, repeats: true) { _ in
+            Task { @MainActor in self.checkQuietly() }
+        }
         // After the window is up: say what's missing, or offer to connect Claude Code.
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
             if !self.checkRequirements() { self.offerHook() }
@@ -414,6 +442,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         }
         if let v = body["view"] as? String, let i = views.firstIndex(of: v) { viewSwitch?.selectedSegment = i }
         if let info = body["menu"] as? [String: Any] { showSessionMenu(info) }
+        if body["update"] != nil { downloadUpdate() }
         if let holes = body["holes"] as? [[Double]] {
             web.holes = holes.compactMap { $0.count == 4 ? CGRect(x: $0[0], y: $0[1], width: $0[2], height: $0[3]) : nil }
         }
@@ -591,6 +620,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         Task { @MainActor in
             self.pageLoaded = true
             self.syncPageChrome()
+            if let r = self.availableUpdate { self.noteUpdate(r) } // a reloaded page shows it again
         }
     }
 
@@ -630,6 +660,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let appMenu = NSMenu()
         appMenu.items = [
             item("About \(appName)", #selector(NSApplication.orderFrontStandardAboutPanel(_:)), ""),
+            item("Check for Updates…", #selector(checkForUpdates), ""),
             .separator(),
             item("Settings…", #selector(showSettings), ","),
             .separator(),
@@ -717,12 +748,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let menu = NSMenu()
         statusSoundItem = item("Alert Sound", #selector(toggleSound), "")
         loginItem = item("Open at Login", #selector(toggleLogin), "")
+        statusUpdateItem = item("Update Available…", #selector(downloadUpdate), "")
+        statusUpdateItem.isHidden = true // shown when a newer version is out
         menu.items = [
             item("Show Window", #selector(showWindowAction), ""),
+            statusUpdateItem,
             .separator(),
             statusSoundItem, loginItem,
             .separator(),
             item("Settings…", #selector(showSettings), ""),
+            item("Check for Updates…", #selector(checkForUpdates), ""),
             item("Open in Browser", #selector(openBrowser), ""),
             .separator(),
             item("Quit \(appName)", #selector(NSApplication.terminate(_:)), "q"),
@@ -806,11 +841,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         hookButton.bezelStyle = .rounded
         let hookRow = NSStackView(views: [hookButton, hookState])
         hookRow.spacing = 8
+        let updates = NSButton(checkboxWithTitle: "Check for updates automatically", target: self, action: #selector(toggleUpdates))
         let grid = NSGridView(views: [
             [label("Alerts:"), sound],
             [label("Startup:"), login],
             [label("Text size:"), size],
             [label("Claude Code:"), hookRow],
+            [label("Updates:"), updates],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.rowAlignment = .firstBaseline
@@ -839,6 +876,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         settingsSize = size
         settingsHookState = hookState
         settingsHookButton = hookButton
+        settingsUpdates = updates
     }
 
     func refreshSettings() {
@@ -852,7 +890,153 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let on = hookInstalled
         settingsHookState?.stringValue = on ? "Connected: the hook is in Claude Code's settings" : "Not connected: no sessions show up"
         settingsHookButton?.title = on ? "Remove Hook" : "Install Hook"
+        settingsUpdates?.state = defaults.bool(forKey: "checkUpdates") ? .on : .off
         settingsWindow?.setContentSize(settingsWindow?.contentView?.fittingSize ?? .zero)
+    }
+
+    // MARK: updates
+
+    // Asks GitHub for the newest release. It sends nothing about you or your sessions:
+    // a plain request for a public page, which you can turn off in Settings.
+    var releasesFeed: URL {
+        if let s = defaults.string(forKey: "updateFeedURL"), let u = URL(string: s) { return u } // for testing
+        return URL(string: "https://api.github.com/repos/creative-context/claude-session-monitor/releases/latest")!
+    }
+    let releasesHome = "https://github.com/creative-context/claude-session-monitor/releases"
+    var currentVersion: String { Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "0" }
+
+    // "v1.2.3-beta.2" → [1, 2, 3]: a pre-release or build suffix is not part of the number.
+    nonisolated static func versionParts(_ v: String) -> [Int] {
+        let core = v.trimmingCharacters(in: CharacterSet(charactersIn: "vV ")).split(whereSeparator: { $0 == "-" || $0 == "+" }).first ?? ""
+        return core.split(separator: ".").map { Int($0.prefix { $0.isNumber }) ?? 0 }
+    }
+
+    // "v0.4.0" is newer than "0.3.0"; "0.3" equals "0.3.0".
+    nonisolated static func isNewer(_ a: String, than b: String) -> Bool {
+        let x = versionParts(a), y = versionParts(b)
+        for i in 0..<max(x.count, y.count) {
+            let p = i < x.count ? x[i] : 0, q = i < y.count ? y[i] : 0
+            if p != q { return p > q }
+        }
+        return false
+    }
+
+    func fetchLatestRelease(_ done: @escaping @MainActor (Result<Release, UpdateError>) -> Void) {
+        var req = URLRequest(url: releasesFeed)
+        req.timeoutInterval = 15
+        req.setValue("application/vnd.github+json", forHTTPHeaderField: "Accept")
+        req.setValue("ClaudeSessionMonitor/\(currentVersion)", forHTTPHeaderField: "User-Agent")
+        let home = releasesHome
+        URLSession.shared.dataTask(with: req) { data, response, error in
+            let result: Result<Release, UpdateError>
+            if let error {
+                result = .failure(.network(error.localizedDescription))
+            } else if let http = response as? HTTPURLResponse, http.statusCode != 200 {
+                result = .failure(.status(http.statusCode))
+            } else if let data, let j = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let tag = j["tag_name"] as? String {
+                // Only ever open this project's own releases, whatever the reply says.
+                let html = j["html_url"] as? String ?? ""
+                let page = html.hasPrefix(home + "/") ? html : home + "/latest"
+                result = .success(Release(version: tag, page: page))
+            } else {
+                result = .failure(.unreadable)
+            }
+            Task { @MainActor in done(result) }
+        }.resume()
+    }
+
+    // The menu item: always answers, up to date or not.
+    @objc func checkForUpdates() {
+        fetchLatestRelease { result in
+            switch result {
+            case .success(let r) where Self.isNewer(r.version, than: self.currentVersion):
+                self.noteUpdate(r)
+                self.offerUpdate(r)
+            case .success(let r):
+                let latest = Self.versionParts(r.version).map(String.init).joined(separator: ".")
+                let alert = NSAlert()
+                alert.messageText = "You're up to date"
+                alert.informativeText = Self.isNewer(self.currentVersion, than: r.version)
+                    ? "You have \(self.currentVersion), newer than the latest release, \(latest)."
+                    : "\(appName) \(self.currentVersion) is the newest version."
+                alert.runModal()
+            case .failure(let e):
+                self.failed("Couldn't check for updates", e.text)
+            }
+        }
+    }
+
+    // At launch and once a day: silent unless there is something new.
+    func checkQuietly() {
+        guard defaults.bool(forKey: "checkUpdates") else { return }
+        fetchLatestRelease { result in
+            guard case .success(let r) = result, Self.isNewer(r.version, than: self.currentVersion) else { return }
+            self.noteUpdate(r)
+            if self.defaults.string(forKey: "notifiedVersion") != r.version {
+                self.defaults.set(r.version, forKey: "notifiedVersion")
+                self.notifyUpdate(r)
+            }
+        }
+    }
+
+    // Shows a newer version in the menu bar item's menu and as a banner in the window.
+    func noteUpdate(_ r: Release) {
+        availableUpdate = r
+        let v = Self.versionParts(r.version).map(String.init).joined(separator: ".")
+        statusUpdateItem?.title = "Update to \(v)…"
+        statusUpdateItem?.isHidden = false
+        callPage("csm.updateAvailable", v)
+    }
+
+    func offerUpdate(_ r: Release) {
+        let v = Self.versionParts(r.version).map(String.init).joined(separator: ".")
+        let alert = NSAlert()
+        alert.messageText = "\(appName) \(v) is available"
+        alert.informativeText = "You have \(currentVersion). Download the new version from GitHub, quit this one, and put the new one in Applications in its place."
+        alert.addButton(withTitle: "Download")
+        alert.addButton(withTitle: "Later")
+        if alert.runModal() == .alertFirstButtonReturn { downloadUpdate() }
+    }
+
+    @objc func downloadUpdate() {
+        if let url = URL(string: availableUpdate?.page ?? releasesHome + "/latest") { NSWorkspace.shared.open(url) }
+    }
+
+    // A macOS notification, once per new version. If notifications are off for the app,
+    // the banner in the window still says it.
+    func notifyUpdate(_ r: Release) {
+        let v = Self.versionParts(r.version).map(String.init).joined(separator: ".")
+        let page = r.page
+        UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound]) { granted, _ in
+            guard granted else { return }
+            let content = UNMutableNotificationContent()
+            content.title = "\(appName) \(v) is available"
+            content.body = "Click to download it from GitHub."
+            content.userInfo = ["page": page]
+            UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "update-\(v)", content: content, trigger: nil))
+        }
+    }
+
+    @objc func toggleUpdates() {
+        defaults.set(!defaults.bool(forKey: "checkUpdates"), forKey: "checkUpdates")
+        refreshSettings()
+        if defaults.bool(forKey: "checkUpdates") { checkQuietly() }
+    }
+
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
+                                            withCompletionHandler completionHandler: @escaping () -> Void) {
+        let page = response.notification.request.content.userInfo["page"] as? String
+        Task { @MainActor in
+            if let page, page.hasPrefix(self.releasesHome), let url = URL(string: page) { NSWorkspace.shared.open(url) }
+            completionHandler()
+        }
+    }
+
+    // Show it even while the app is in front.
+    nonisolated func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification,
+                                            withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        completionHandler([.banner, .sound])
     }
 
     // MARK: requirements and the hook

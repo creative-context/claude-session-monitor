@@ -460,6 +460,11 @@
   }
   .banner svg.i { width: 14px; height: 14px; }
   .banner b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+  /* A newer version: the accent, not the alarm red. */
+  .banner.update { background: var(--color-accent-muted); color: var(--color-text-accent); }
+  .banner .btn { margin-left: auto; height: 24px; }
+  .banner .x { all: unset; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--color-text-secondary); }
+  .banner .x:hover { background: var(--obsidian-veil-selected); color: var(--color-text-primary); }
   .hrow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
   .hrow .hicon { grid-row: 1 / 3; align-self: start; padding-top: 2px; color: var(--color-text-secondary); }
   .hrow .hicon svg.i { width: 16px; height: 16px; }
@@ -636,6 +641,7 @@
     pause: svg('<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>'),
     alarm: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5v4"/><path d="M12 16.5h.01"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
     chev: svg('<path d="m6 9 6 6 6-6"/>', "chev"),
+    close: svg('<path d="M6 6l12 12"/><path d="M18 6 6 18"/>'),
     arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
     // A speaker, not a bell: on a Mac a bell reads as notifications, and this is sound.
     speaker: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>'),
@@ -1678,12 +1684,32 @@
     if (st) goToCards((s) => label(s) === st.dataset.state);
   });
 
+  // The app says when a newer version is out. "Later" hides it until the next version.
+  let update = null;
+  let dismissed = "";
+  try { dismissed = localStorage.getItem("csm-update-dismissed") || ""; } catch {}
+  window.csm.updateAvailable = (v) => { update = v; renderBanner(); };
+
   function renderBanner() {
-    const html = ready && link === "offline"
+    const offline = ready && link === "offline"
       ? `<div class="banner" role="status">${ICON.unplug}<span><b>Can't reach the monitor.</b> Showing what it last sent while it tries again.</span></div>`
       : "";
+    const newer = update && update !== dismissed
+      ? `<div class="banner update" role="status">${ICON.arrowDown}<span><b>Version ${esc(update)} is available.</b> Download it, quit this one, and put the new one in Applications in its place.</span>
+          <button class="btn" type="button" data-update>Download</button>
+          <button class="x" type="button" data-later aria-label="Later" title="Later">${ICON.close}</button></div>`
+      : "";
+    const html = offline + newer;
     if ($banner.innerHTML !== html) $banner.innerHTML = html;
   }
+  $banner.addEventListener("click", (e) => {
+    if (e.target.closest("[data-update]")) bridge()?.postMessage({ update: true });
+    if (e.target.closest("[data-later]")) {
+      dismissed = update;
+      try { localStorage.setItem("csm-update-dismissed", update); } catch {}
+      renderBanner();
+    }
+  });
 
   let freshTimer;
   function render() {

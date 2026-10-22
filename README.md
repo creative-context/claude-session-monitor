@@ -10,11 +10,11 @@
 </p>
 
 <p align="center">
-  <b>Version 0.2</b> · For the Claude desktop app and the <code>claude</code> CLI · Built with Swift and <a href="https://bun.sh">Bun</a>
+  <b>Version 0.3</b> · For the Claude desktop app and the <code>claude</code> CLI · Built with Swift and <a href="https://bun.sh">Bun</a>
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.2.0-2D72D2?labelColor=1A1D21" alt="Version 0.2.0">
+  <img src="https://img.shields.io/badge/version-0.3.0-2D72D2?labelColor=1A1D21" alt="Version 0.3.0">
   <img src="https://img.shields.io/badge/license-MIT-238551?labelColor=1A1D21" alt="MIT license">
   <img src="https://img.shields.io/badge/macOS-14%2B-8A8F98?labelColor=1A1D21" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/data-stays_on_your_Mac-6FA6E8?labelColor=1A1D21" alt="Data stays on your Mac">
@@ -33,7 +33,7 @@
 
 With a few Claude Code sessions going at once, the one that needs you is easy to miss. It sits in another window, waiting on a permission or a question, while you watch the one that's working.
 
-This app puts every session on one screen, colored by what it needs from you. It works with the Claude desktop app and with `claude` in a terminal, and nothing leaves your Mac.
+This app puts every session on one screen, colored by what it needs from you. It works with the Claude desktop app and with `claude` in a terminal, and your sessions never leave your Mac.
 
 **What it does differently:**
 
@@ -56,7 +56,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 
 ### Download the app
 
-1. Download `Claude-Session-Monitor-0.2.0.zip` from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
+1. Download `Claude-Session-Monitor-0.3.0.zip` from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
 2. Open it. The app isn't notarized, so the first time macOS says it can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
 
    ```bash
@@ -65,6 +65,8 @@ This app puts every session on one screen, colored by what it needs from you. It
 3. The app asks to connect Claude Code. **Install Hook** adds the hook to `~/.claude/settings.json`. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
 
 Sessions show up as soon as they do something. Open at Login is off until you turn it on in Settings.
+
+The app tells you when a newer version is out, with a notification and a notice in the window, and **Check for Updates…** in its menu looks right away. To update, download the new version and put it in Applications in place of the old one.
 
 ### Build from source
 
@@ -120,7 +122,7 @@ A card that starts needing you breathes for its first minute, then holds still. 
 
 ## Privacy
 
-Everything stays on your Mac. The server listens on `127.0.0.1` only and answers only requests addressed to its own host name.
+Your sessions stay on your Mac. The server listens on `127.0.0.1` only and answers only requests addressed to its own host name.
 
 **What it keeps,** in `~/.claude-session-monitor`:
 
@@ -137,6 +139,8 @@ It never stores whole conversations.
 - The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times. It never reads what a task does.
 
 **What it changes:** the hook entries in `~/.claude/settings.json`, and nothing else.
+
+**What it sends:** once a day, and when you choose Check for Updates…, a request to GitHub's public API for the newest release of this app. It carries nothing about you or your sessions. GitHub sees your IP address, as with any web page. Turn the daily check off in Settings › Updates.
 
 ## How it works
 
