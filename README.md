@@ -48,7 +48,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 
 **Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code, [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
 
-**Status:** 0.x, used daily on one Mac. It reads files Claude Code and the Claude app keep but don't document, so a future version of either can take some detail away.
+**Status:** 0.x. It reads files Claude Code and the Claude app keep but don't document, so a future version of either can take some detail away.
 
 > This is an independent project. It isn't made, endorsed or supported by Anthropic. Claude and Claude Code are trademarks of Anthropic.
 
