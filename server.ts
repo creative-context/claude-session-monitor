@@ -77,6 +77,8 @@ type Session = {
   detail?: string;
   wait?: string; // what it needs from you
   waitKind?: "permission" | "question" | "plan" | "input";
+  waitAgent?: string; // the subagent whose permission request it waits on, if it's one
+  waitPrev?: Status; // what it was doing before it started waiting
   prompt?: string;
   recap?: string;
   ask?: string;
@@ -124,13 +126,30 @@ function setStatus(s: Session, status: Status, t: number) {
   if (status !== "waiting") {
     s.wait = undefined;
     s.waitKind = undefined;
+    s.waitAgent = undefined;
+    s.waitPrev = undefined;
   }
 }
 
-function setWaiting(s: Session, kind: Session["waitKind"], text: string, t: number) {
+function setWaiting(s: Session, kind: Session["waitKind"], text: string, t: number, agent?: string) {
+  if (s.status !== "waiting") s.waitPrev = s.status;
   setStatus(s, "waiting", t);
   s.waitKind = kind;
   s.wait = text;
+  s.waitAgent = agent;
+}
+
+// A subagent's permission request blocks the session until that agent moves on: its
+// tool runs (or fails), or it starts another. The main agent may stay silent the whole
+// time (a workflow runs without it), so only the agent itself can end the wait. The
+// session then goes back to what it was doing.
+function resumeAfterAgent(s: Session, e: Ev) {
+  if (s.status !== "waiting" || !s.waitAgent || s.waitAgent !== e.agent) return;
+  const moved = e.ev === "PostToolUse" || e.ev === "PostToolUseFailure" || (e.ev === "PreToolUse" && e.t > s.since);
+  if (!moved) return;
+  const prev = s.waitPrev && s.waitPrev !== "waiting" ? s.waitPrev : "working";
+  setStatus(s, prev, e.t);
+  if (prev === "done") s.classified = false; // read again how its turn ended
 }
 
 function applyPlan(plan: Step[] | undefined, x: any): Step[] | undefined {
@@ -243,8 +262,10 @@ function apply(e: Ev) {
   // because it blocks the whole session.
   // Subagent events are still tracked, per agent, so the card can show them.
   const fromSubagent = Boolean(e.agent);
-  if (fromSubagent) touchAgent(s, e);
-  else s.lastMain = Math.max(s.lastMain, e.t);
+  if (fromSubagent) {
+    touchAgent(s, e);
+    resumeAfterAgent(s, e);
+  } else s.lastMain = Math.max(s.lastMain, e.t);
 
   switch (e.ev) {
     case "SessionStart":
@@ -302,13 +323,17 @@ function apply(e: Ev) {
       break;
 
     case "PermissionRequest":
-      setWaiting(s, "permission", e.tool ? `Wants permission to use ${e.tool}` : "Wants permission", e.t);
+      setWaiting(s, "permission", e.tool ? `Wants permission to use ${e.tool}` : "Wants permission", e.t, e.agent);
       break;
 
     case "Notification":
       // Lesson from agents-observe: a notification puts the session in "waiting"
       // until the next real activity clears it.
-      if (e.nt === "permission_prompt") setWaiting(s, "permission", e.msg ?? "Wants permission", e.t);
+      if (e.nt === "permission_prompt") {
+        // The prompt a subagent's request raises: keep it tied to that agent.
+        const same = s.status === "waiting" && s.waitAgent && e.t - s.since < 30_000 ? s.waitAgent : undefined;
+        setWaiting(s, "permission", e.msg ?? "Wants permission", e.t, same);
+      }
       else if (e.nt === "elicitation_dialog") setWaiting(s, "input", e.msg ?? "Needs input from you", e.t);
       // idle_prompt only repeats that the turn ended; nothing to change.
       break;

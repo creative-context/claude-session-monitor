@@ -7,6 +7,7 @@
 - Last 7 Days shows only Active as cards. Under it, the rest of the week comes as rows, and a day with more than six splits into two columns in a wide window.
 - The counts in the header show a small chevron, so they read as controls. The plan bar says how many steps are done, such as "2/5 done".
 - A workflow with no name reads "A workflow", not "Workflow Workflow".
+- Fixed: a subagent's permission request kept the session on Needs you after the agent got its answer, because only the main agent's activity ended the wait. Now that agent moving on ends it too.
 - A run of a scheduled task shows a calendar clock by its time instead of a Scheduled tag.
 - The Working, Done and Error tags are a step darker, so their white text reaches 5.8:1. Idle and Closed titles are easier to read.
 - The page uses Apple's system fonts, SF Pro (titles in Semibold) and SF Mono, like the rest of the Mac, instead of Inter and Space Grotesk. It ships no font files now. The colors stay the Obsidian theme's.
