@@ -287,7 +287,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let closeFrame = close.convert(close.bounds, to: content)
         let center = fullScreen ? 24 * z : content.bounds.height - closeFrame.midY
         let lightsEnd = fullScreen ? 0 : zoomButton.convert(zoomButton.bounds, to: content).maxX
-        let top = max(4, center / z - 12) // the header row is 24 px tall
+        // The header row is 24 px tall, centered on the window buttons. Measured on screen,
+        // the page's row rendered one device pixel below the native controls, so it goes
+        // up by exactly one (half a point on a Retina screen).
+        let onePixel = 1 / (window.screen?.backingScaleFactor ?? 1)
+        let top = max(4, (center - onePixel) / z - 12)
         let slot = max(0, (lightsEnd + 12) / z - 16) // the header starts 16 px in
         // The toolbar items sit on the right; the header stops short of the first one.
         var firstItemX = content.bounds.width - 150
