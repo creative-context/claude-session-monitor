@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.2
 
 - The page's header row lines up with the window buttons and the toolbar to the pixel. It sat one device pixel lower.
 
