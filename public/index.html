@@ -249,7 +249,7 @@
     border-radius: var(--radius-container);
     overflow: hidden;
     position: relative;
-    transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard);
+    transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow 700ms var(--ease-standard);
   }
   /* What needs you (blocked, or a question) and errors get the strongest tint; work in
      progress a quieter blue; done a faint green, and only in Active, so green keeps its
@@ -271,6 +271,8 @@
     transform: scale(0.985);
   }
   .card:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+  /* The cards a header count stands for, marked for a moment after you click it. */
+  .card.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
 
   /* On a colored card the status tag is solid. */
   .card .tag.s-working { background: var(--color-accent); color: var(--color-on-accent); }
@@ -392,6 +394,46 @@
   .top .tag.sched { flex: none; color: var(--meta); }
   @container (max-width: 330px) { .top .tag.sched > span { display: none; } }
 
+  /* ---------- count details ---------- */
+  /* Each count in the header opens a card with what's behind it, on hover or focus. */
+  #counts .tag[data-pop]:hover, #counts .tag[data-pop][aria-expanded="true"] { background-image: linear-gradient(#FFFFFF0F, #FFFFFF0F); }
+  #counts .tag[data-pop]:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+  .pop {
+    position: fixed; z-index: 20; width: 340px; max-height: min(60vh, 420px); overflow: auto;
+    padding: 6px; border-radius: 10px;
+    background: #16171A; /* a solid, raised surface: lifted by light and a soft shadow, not by a line */
+    box-shadow: 0 12px 32px #00000080, inset 0 0 0 1px #FFFFFF0A;
+    opacity: 0; visibility: hidden; transform: translateY(-4px);
+    transition: opacity 120ms var(--ease-standard), transform 120ms var(--ease-standard), visibility 0s linear 120ms;
+  }
+  .pop.open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+  .pop-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
+  .pop-head svg.i { width: 12px; height: 12px; }
+  .prow {
+    all: unset; box-sizing: border-box; width: 100%;
+    display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 1px; align-items: center;
+    padding: 6px 8px; border-radius: 6px;
+  }
+  .prow[data-sid]:hover, .prow[data-state]:hover, .prow:focus-visible { background: var(--obsidian-veil-selected); }
+  .prow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: -2px; }
+  .prow .pi { grid-row: 1 / 3; align-self: start; padding-top: 2px; display: inline-flex; color: var(--color-text-secondary); }
+  .prow .pi svg.i { width: 14px; height: 14px; }
+  .prow .pt { font-family: var(--font-family-heading); font-weight: var(--font-weight-medium); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow .pm { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
+  .prow .ps { grid-column: 2 / 4; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .prow.s-waiting .pi, .prow.s-asks .pi, .prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
+  .prow.s-error .pi, .prow.s-error .ps { color: var(--color-text-red); }
+  .prow.s-working .pi { color: var(--color-text-accent); }
+  .prow.s-done .pi { color: var(--color-text-green); }
+  .prow.count { grid-template-columns: 14px minmax(0, 1fr) auto; }
+  .prow.count .pt { font-family: var(--font-family-body); font-weight: 400; }
+  .prow.count .pm { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+  .pop-dot { width: 8px; height: 8px; border-radius: 50%; margin: 3px; background: var(--color-overlay-pressed); }
+  .pop-more, .pop-note { padding: 6px 8px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
+  .pop-foot { margin-top: 2px; padding-top: 2px; }
+  .pop-foot .prow { grid-template-columns: 14px 1fr; color: var(--color-text-accent); font-size: var(--csm-text-body); }
+  .pop-foot .prow:hover { background: var(--obsidian-veil-selected); }
+
   /* ---------- connection ---------- */
   .banner {
     display: flex; align-items: center; gap: 8px;
@@ -499,6 +541,7 @@
   /* Reduce Motion: nothing moves, turns or breathes, but colors still cross-fade, as
      macOS itself does. */
   @media (prefers-reduced-motion: reduce) {
+    .pop { transform: none !important; }
     *, *::before, *::after { animation: none !important; }
     .card { transition: --tint 450ms var(--ease-standard); }
     .card:active { transform: none; }
@@ -515,6 +558,7 @@
     <span id="link" class="link off" title="Connection to the local server"><i></i><span>Connecting…</span></span>
     <button id="sound" class="icon-btn" type="button" aria-pressed="false"></button>
   </header>
+  <div id="pop" class="pop" role="group" aria-label="Details"></div>
   <nav class="nav" aria-label="Views">
     <div class="seg" role="tablist">
       <button type="button" role="tab" data-view="week" aria-selected="true"></button>
@@ -784,7 +828,9 @@
       el.addEventListener("animationend", (e) => { if (e.animationName === "enter") el.classList.remove("new"); });
       cards.set(s.sid, el);
     }
-    const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${el.classList.contains("new") ? " new" : ""}`;
+    // "new" and "found" are short-lived marks that a live update must not wipe.
+    const keep = ["new", "found"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
+    const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
     const when = ago(s.status === "working" ? s.last : s.since);
     const sched = s.task ? tag(`${ICON.calendarClock}<span>Scheduled</span>`, "sched", s.taskName ? `A run of ${s.taskName}` : "A scheduled run") : "";
@@ -1232,7 +1278,7 @@
     if (go) return setView(go.dataset.go);
     if (e.target.closest("[data-more]")) return loadHistory(false);
     const item = e.target.closest("[data-sid]");
-    if (item) fetch(`/api/open/${encodeURIComponent(item.dataset.sid)}`, { method: "POST", headers: { "x-csm": "1" } });
+    if (item) openSession(item.dataset.sid);
   });
 
   // In the app, a right click opens the app's own menu for that session, and anywhere
@@ -1290,18 +1336,232 @@
     const needs = state.needs ?? list.filter(needsYou).length;
     const working = list.filter((s) => s.status === "working").length;
     const agents = list.reduce((k, s) => k + (s.agentCount || 0), 0);
+    // Each count is a button: hover or focus shows what's behind it.
+    const count = (kind, inner, cls) =>
+      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false">${inner}</span>`;
     const counts = [
-      needs ? tag(`${ICON.alert.replace(" pulse", "")}<span>${needs} ${needs === 1 ? "needs" : "need"} you</span>`, "s-waiting") : "",
-      working ? tag(`${ICON.spinner}<span>${working} working</span>`, "s-working") : "",
-      agents ? tag(`${ICON.agents}<span>${plural(agents, "agent", "agents")}</span>`, "low") : "",
-      list.length ? tag(`${ICON.calendar}<span>${list.length} in 7 days</span>`, "low") : "",
+      needs ? count("needs", `${ICON.alert.replace(" pulse", "")}<span>${needs} ${needs === 1 ? "needs" : "need"} you</span>`, "s-waiting") : "",
+      working ? count("working", `${ICON.spinner}<span>${working} working</span>`, "s-working") : "",
+      agents ? count("agents", `${ICON.agents}<span>${plural(agents, "agent", "agents")}</span>`, "low") : "",
+      list.length ? count("week", `${ICON.calendar}<span>${list.length} in 7 days</span>`, "low") : "",
     ].join("");
     if ($counts._html !== counts) {
       $counts.innerHTML = counts;
       $counts._html = counts;
       syncIcons($counts);
+      // The counts were redrawn: keep an open card on its count, or close it if that count is gone.
+      if (popKind) {
+        const anchor = $counts.querySelector(`[data-pop="${popKind}"]`);
+        if (anchor) { popAnchor = anchor; anchor.setAttribute("aria-expanded", "true"); placePop(); } else hidePop();
+      }
     }
+    if (popKind) fillPop();
   }
+
+  // ---------------------------------------------------------------- count details
+
+  const $pop = document.getElementById("pop");
+  let popKind = null; // which count's card is open
+  let popAnchor = null;
+  let popShowTimer;
+  let popHideTimer;
+  const POP_DELAY = 250; // a pause before the first card, so passing over the header opens nothing
+  const POP_GRACE = 150; // time to move from a count into its card
+  const POP_MAX = 8;
+
+  const openSession = (sid) => fetch(`/api/open/${encodeURIComponent(sid)}`, { method: "POST", headers: { "x-csm": "1" } });
+  const still = (icon) => icon.replace(/ (spin|pulse|bot)"/, '"');
+
+  function popRow(s, text, meta) {
+    return `<button type="button" class="prow s-${s.status}" data-sid="${esc(s.sid)}" title="Show its card">
+      <span class="pi">${still(statusIcon(s))}</span><span class="pt">${esc(s.title)}</span><span class="pm">${esc(meta)}</span>
+      <span class="ps">${esc(text)}</span></button>`;
+  }
+  const popHead = (icon, text) => `<div class="pop-head">${still(icon)}<span>${esc(text)}</span></div>`;
+  const popMore = (n) => (n > 0 ? `<div class="pop-more">and ${n} more</div>` : "");
+
+  function doing(s) {
+    if (s.background) {
+      const wf = s.workflows?.[0];
+      return wf ? `Workflow ${wf.name}${wf.phase ? ` · ${wf.phase}` : ""}` : `${plural(s.agentCount, "agent", "agents")} in the background`;
+    }
+    return s.tool ? act(s.tool, s.detail) : "Thinking…";
+  }
+  // "Reading orders.sql", or a command's own description as it is ("Run the checkout tests").
+  function act(tool, detail) {
+    const target = base(detail);
+    if (!target) return describe(tool)[0];
+    return /\s/.test(target) ? target : `${describe(tool)[0]} ${target}`;
+  }
+
+  function popHtml(kind) {
+    const list = state.sessions;
+    if (kind === "needs") {
+      const items = list.filter(needsYou);
+      const what = (s) => (s.status === "waiting" ? s.wait || "Waiting for your answer" : s.status === "asks" ? s.ask || "It asked you something" : s.error || "The turn ended with an error");
+      return popHead(ICON.alert, items.length === 1 ? "1 session needs you" : `${items.length} sessions need you`) +
+        items.slice(0, POP_MAX).map((s) => popRow(s, what(s), ago(s.since))).join("") + popMore(items.length - POP_MAX);
+    }
+    if (kind === "working") {
+      const items = list.filter((s) => s.status === "working");
+      return popHead(ICON.spinner, `${items.length} working`) +
+        items.slice(0, POP_MAX).map((s) => popRow(s, doing(s), s.plan?.current && !s.background ? `Step ${s.plan.index} of ${s.plan.total}` : ago(s.last))).join("") +
+        popMore(items.length - POP_MAX);
+    }
+    if (kind === "agents") {
+      const total = list.reduce((k, s) => k + (s.agentCount || 0), 0);
+      const pairs = list.flatMap((s) => (s.agents || []).map((a) => ({ s, a })));
+      const rows = pairs.slice(0, POP_MAX).map(({ s, a }) => {
+        const doing = a.tool ? act(a.tool, a.detail) : "Thinking…";
+        return `<button type="button" class="prow s-working" data-sid="${esc(s.sid)}" title="Show the card of ${esc(s.title)}">
+          <span class="pi">${still(ICON.bot)}</span><span class="pt">${esc(a.label || "Agent")}</span><span class="pm">${a.tokens ? `${kTokens(a.tokens)} tokens` : ""}</span>
+          <span class="ps">${esc(s.title)} · ${esc(doing)}</span></button>`;
+      }).join("");
+      return popHead(ICON.agents, plural(total, "agent", "agents")) + rows + popMore(total - Math.min(pairs.length, POP_MAX));
+    }
+    // In the last 7 days: how many in each state, most urgent first.
+    const order = ["Needs you", "Error", "Asked you", "Working", "Agents working", "Done", "Idle", "Closed"];
+    const color = { "Needs you": "var(--color-warning)", Error: "var(--color-error)", "Asked you": "var(--color-warning-muted)",
+      Working: "var(--color-accent)", "Agents working": "var(--color-text-accent)", Done: "var(--color-success)" };
+    const by = new Map();
+    for (const s of list) by.set(label(s), (by.get(label(s)) || 0) + 1);
+    const rows = order.filter((l) => by.get(l)).map((l) => `<button type="button" class="prow count" data-state="${l}" title="Show these cards">
+        <span class="pi"><i class="pop-dot" style="${color[l] ? `background:${color[l]}` : ""}"></i></span><span class="pt">${l}</span><span class="pm">${by.get(l)}</span></button>`).join("");
+    const runs = list.filter((s) => s.task).length;
+    return popHead(ICON.calendar, `${plural(list.length, "session", "sessions")} in the last 7 days`) + rows +
+      (runs ? `<div class="pop-note">${runs === 1 ? "1 is a run" : `${runs} are runs`} of a scheduled task.</div>` : "") +
+      `<div class="pop-foot"><button type="button" class="prow" data-go="history"><span class="pi">${ICON.history}</span><span class="pt">Show All Sessions</span></button></div>`;
+  }
+
+  function fillPop() {
+    const html = popHtml(popKind);
+    if ($pop._html !== html) { $pop.innerHTML = html; $pop._html = html; }
+  }
+
+  // Under its count, kept inside the window.
+  function placePop() {
+    if (!popAnchor) return;
+    const r = popAnchor.getBoundingClientRect();
+    const w = $pop.offsetWidth;
+    $pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
+    $pop.style.top = `${r.bottom + 6}px`;
+  }
+
+  function showPop(anchor) {
+    clearTimeout(popShowTimer);
+    clearTimeout(popHideTimer);
+    if (popAnchor && popAnchor !== anchor) popAnchor.setAttribute("aria-expanded", "false");
+    popKind = anchor.dataset.pop;
+    popAnchor = anchor;
+    anchor.setAttribute("aria-expanded", "true");
+    fillPop();
+    placePop();
+    $pop.classList.add("open");
+  }
+
+  function hidePop() {
+    clearTimeout(popShowTimer);
+    clearTimeout(popHideTimer);
+    popAnchor?.setAttribute("aria-expanded", "false");
+    popKind = null;
+    popAnchor = null;
+    $pop.classList.remove("open");
+  }
+
+  const toCountOrPop = (el) => el && ($pop.contains(el) || el.closest?.("#counts [data-pop]"));
+  function leavePop(e) {
+    if (toCountOrPop(e.relatedTarget)) return;
+    clearTimeout(popShowTimer);
+    clearTimeout(popHideTimer);
+    popHideTimer = setTimeout(hidePop, POP_GRACE);
+  }
+  $counts.addEventListener("pointerover", (e) => {
+    const t = e.target.closest("[data-pop]");
+    if (!t) return;
+    clearTimeout(popHideTimer);
+    if (popAnchor === t) return;
+    clearTimeout(popShowTimer);
+    popShowTimer = setTimeout(() => showPop(t), popKind ? 0 : POP_DELAY); // from one count to the next, at once
+  });
+  $counts.addEventListener("pointerout", (e) => { if (e.target.closest("[data-pop]")) leavePop(e); });
+  $pop.addEventListener("pointerenter", () => clearTimeout(popHideTimer));
+  $pop.addEventListener("pointerleave", leavePop);
+  let popQuietFocus = false; // focus coming back after Escape doesn't reopen the card
+  $counts.addEventListener("focusin", (e) => {
+    const t = e.target.closest("[data-pop]");
+    if (t && !popQuietFocus) showPop(t);
+    popQuietFocus = false;
+  });
+  // A click goes to those cards: back to Last 7 Days if needed, up (or down) to the
+  // first of them, and a ring on each for a moment. The details stay on hover.
+  const FOR_COUNT = {
+    needs: (s) => needsYou(s),
+    working: (s) => s.status === "working",
+    agents: (s) => (s.agentCount || 0) > 0,
+    week: () => true,
+  };
+  let foundTimer;
+  function goToCards(match, ring = true) {
+    hidePop();
+    if (view !== "week") setView("week");
+    const sids = new Set(state.sessions.filter(match).map((s) => s.sid));
+    const els = [...$week.querySelectorAll(".card")].filter((el) => sids.has(el.dataset.sid));
+    if (!els.length) return;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    els[0].scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
+    els[0].focus({ preventScroll: true });
+    clearTimeout(foundTimer);
+    $week.querySelectorAll(".card.found").forEach((el) => el.classList.remove("found"));
+    if (!ring) return;
+    els.forEach((el) => el.classList.add("found"));
+    foundTimer = setTimeout(() => els.forEach((el) => el.classList.remove("found")), 1600);
+  }
+  function goToCount(kind) {
+    if (kind !== "week") return goToCards(FOR_COUNT[kind] || (() => false));
+    hidePop();
+    if (view !== "week") setView("week");
+    $content.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
+  }
+  $counts.addEventListener("click", (e) => { const t = e.target.closest("[data-pop]"); if (t) goToCount(t.dataset.pop); });
+  document.addEventListener("pointerdown", (e) => { if (popKind && !toCountOrPop(e.target)) hidePop(); });
+  $counts.addEventListener("keydown", (e) => {
+    const t = e.target.closest("[data-pop]");
+    if (!t) return;
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault();
+      goToCount(t.dataset.pop); // the same as a click
+    } else if (e.key === "ArrowDown") {
+      // Down arrow steps into the card's rows; up and down move between them.
+      e.preventDefault();
+      if (popAnchor !== t) showPop(t);
+      $pop.querySelector(".prow[data-sid], .prow[data-state], .prow[data-go]")?.focus();
+    }
+  });
+  $pop.addEventListener("keydown", (e) => {
+    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+    e.preventDefault();
+    const rows = [...$pop.querySelectorAll(".prow[data-sid], .prow[data-state], .prow[data-go]")];
+    const i = rows.indexOf(document.activeElement);
+    if (e.key === "ArrowUp" && i <= 0) return popAnchor?.focus();
+    rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
+  });
+  document.addEventListener("focusin", (e) => { if (popKind && !toCountOrPop(e.target)) hidePop(); });
+  document.addEventListener("keydown", (e) => {
+    if (e.key !== "Escape" || !popKind) return;
+    const back = popAnchor;
+    hidePop();
+    if (back && document.activeElement !== back) { popQuietFocus = true; back.focus({ preventScroll: true }); }
+  });
+  addEventListener("resize", () => { if (popKind) placePop(); });
+  $pop.addEventListener("click", (e) => {
+    const go = e.target.closest("[data-go]");
+    if (go) { hidePop(); return setView(go.dataset.go); }
+    // A row goes to its card (or a state to its cards); the card itself opens the session.
+    const item = e.target.closest("[data-sid]");
+    if (item) return goToCards((s) => s.sid === item.dataset.sid);
+    const st = e.target.closest("[data-state]");
+    if (st) goToCards((s) => label(s) === st.dataset.state);
+  });
 
   function renderBanner() {
     const html = ready && link === "offline"

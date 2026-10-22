@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- Each count in the header shows what's behind it on hover or focus: the sessions that need you and what they ask, what each working session is doing, every agent with its session and tokens, and the last 7 days by state. The arrow keys move through the rows, and Escape closes it.
+- A click on a count, or on one of its rows, jumps to those cards in Last 7 Days and rings them for a moment.
+
 ## 0.2.0
 
 - **Scheduled** (⌘3): one card per scheduled task of the Claude app, with its schedule in words, its next run, how its last run went and a dot for each of its last seven runs. A task says Missed when a run that should have happened didn't, and Paused when it's off. A schedule too unusual for words shows as its cron expression.
