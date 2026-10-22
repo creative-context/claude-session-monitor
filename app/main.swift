@@ -46,6 +46,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var settingsSound: NSButton?
     var settingsLogin: NSButton?
     var settingsSize: NSPopUpButton?
+    var settingsHookState: NSTextField?
+    var settingsHookButton: NSButton?
     var sizeMenus: [NSMenu] = []
     var server: Process?
     var serverStartedAt = Date.distantPast
@@ -67,6 +69,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         loadWhenReady()
         window.makeKeyAndOrderFront(nil)
         NSApp.activate()
+        keepHookCurrent()
+        // After the window is up: say what's missing, or offer to connect Claude Code.
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) {
+            if !self.checkRequirements() { self.offerHook() }
+        }
     }
 
     func applicationWillTerminate(_ notification: Notification) {
@@ -84,8 +91,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
     // MARK: server
 
-    var projectPath: String {
-        Bundle.main.object(forInfoDictionaryKey: "CSMProjectPath") as? String ?? ""
+    // The server, the page and the hook travel inside the app (build.sh copies them).
+    var serverDir: URL? {
+        guard let dir = Bundle.main.resourceURL?.appendingPathComponent("server"),
+              FileManager.default.fileExists(atPath: dir.appendingPathComponent("server.ts").path) else { return nil }
+        return dir
     }
 
     var bunPath: String? {
@@ -94,17 +104,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             .first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    // Starts `bun server.ts` from the project folder. If another copy already holds
-    // the port, this one exits right away and the window uses the running one.
+    // The hook needs jq; recent macOS ships it.
+    var jqPath: String? {
+        ["/usr/bin/jq", "/opt/homebrew/bin/jq", "/usr/local/bin/jq"].first { FileManager.default.isExecutableFile(atPath: $0) }
+    }
+
+    // Starts `bun server.ts` from the app's own copy. If another copy already holds the
+    // port, this one exits right away and the window uses the running one.
     func startServer() {
-        guard let bun = bunPath, !projectPath.isEmpty else {
-            NSLog("\(appName): bun or project folder not found")
+        guard let bun = bunPath, let dir = serverDir else {
+            NSLog("\(appName): bun or the server files not found")
             return
         }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: bun)
         p.arguments = ["server.ts"]
-        p.currentDirectoryURL = URL(fileURLWithPath: projectPath)
+        p.currentDirectoryURL = dir
         let logDir = "\(NSHomeDirectory())/.claude-session-monitor"
         try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
         let log = "\(logDir)/server.log"
@@ -752,10 +767,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let sound = NSButton(checkboxWithTitle: "Play a sound when a session needs you", target: self, action: #selector(toggleSound))
         let login = NSButton(checkboxWithTitle: "Open at login", target: self, action: #selector(toggleLogin))
         let size = NSPopUpButton(frame: .zero, pullsDown: false)
+        let hookState = NSTextField(labelWithString: "")
+        hookState.textColor = .secondaryLabelColor
+        let hookButton = NSButton(title: "", target: self, action: #selector(toggleHook))
+        hookButton.bezelStyle = .rounded
+        let hookRow = NSStackView(views: [hookButton, hookState])
+        hookRow.spacing = 8
         let grid = NSGridView(views: [
             [label("Alerts:"), sound],
             [label("Startup:"), login],
             [label("Text size:"), size],
+            [label("Claude Code:"), hookRow],
         ])
         grid.column(at: 0).xPlacement = .trailing
         grid.rowAlignment = .firstBaseline
@@ -782,6 +804,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         settingsSound = sound
         settingsLogin = login
         settingsSize = size
+        settingsHookState = hookState
+        settingsHookButton = hookButton
     }
 
     func refreshSettings() {
@@ -792,6 +816,112 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         if let on = menu.items.first(where: { $0.state == .on }) { size.select(on) }
         settingsSound?.state = soundOn ? .on : .off
         refreshLoginItem()
+        let on = hookInstalled
+        settingsHookState?.stringValue = on ? "Connected: the hook is in Claude Code's settings" : "Not connected: no sessions show up"
+        settingsHookButton?.title = on ? "Remove Hook" : "Install Hook"
+        settingsWindow?.setContentSize(settingsWindow?.contentView?.fittingSize ?? .zero)
+    }
+
+    // MARK: requirements and the hook
+
+    // Says what is missing before anything else, since nothing works without it.
+    // Returns true when it showed something.
+    func checkRequirements() -> Bool {
+        var missing: [String] = []
+        if bunPath == nil { missing.append("Bun runs the app's local server. Install it from bun.sh.") }
+        if jqPath == nil { missing.append("jq is what the Claude Code hook uses. Install it with: brew install jq") }
+        if serverDir == nil { missing.append("The server files are missing from the app. Download it again.") }
+        guard !missing.isEmpty else { return false }
+        let alert = NSAlert()
+        alert.messageText = "\(appName) needs a bit more"
+        alert.informativeText = missing.joined(separator: "\n\n") + "\n\nThen open the app again."
+        alert.addButton(withTitle: "OK")
+        if bunPath == nil { alert.addButton(withTitle: "Open bun.sh") }
+        if alert.runModal() == .alertSecondButtonReturn { NSWorkspace.shared.open(URL(string: "https://bun.sh")!) }
+        return true
+    }
+
+    var claudeSettings: URL { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude/settings.json") }
+    // A copy of the hook outside the app, so moving or updating the app never breaks it.
+    var hookDir: URL { URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude-session-monitor/hooks") }
+    var hookFile: URL { hookDir.appendingPathComponent("session-hook.sh") }
+
+    var settingsText: String { (try? String(contentsOf: claudeSettings, encoding: .utf8)) ?? "" }
+    var hookInstalled: Bool { settingsText.contains("session-hook.sh") }
+
+    func copyHook() throws {
+        guard let source = serverDir?.appendingPathComponent("hooks") else { throw CocoaError(.fileNoSuchFile) }
+        let fm = FileManager.default
+        try fm.createDirectory(at: hookDir, withIntermediateDirectories: true)
+        for name in ["session-hook.sh", "event.jq"] {
+            let from = source.appendingPathComponent(name)
+            let to = hookDir.appendingPathComponent(name)
+            if fm.contentsEqual(atPath: from.path, andPath: to.path) { continue }
+            try? fm.removeItem(at: to)
+            try fm.copyItem(at: from, to: to)
+        }
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookFile.path)
+    }
+
+    // When Claude Code uses the app's copy of the hook, a newer app brings a newer hook.
+    func keepHookCurrent() {
+        if settingsText.contains(hookFile.path) { try? copyHook() }
+    }
+
+    // Runs the bundled installer, which backs up settings.json and touches only its own entries.
+    func runInstaller(_ args: [String]) -> Bool {
+        guard let bun = bunPath, let dir = serverDir else { return false }
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: bun)
+        p.arguments = ["install-hooks.ts"] + args
+        p.currentDirectoryURL = dir
+        do {
+            try p.run()
+            p.waitUntilExit()
+            return p.terminationStatus == 0
+        } catch {
+            return false
+        }
+    }
+
+    // First launch without the hook: ask once. Settings can install it any time.
+    func offerHook() {
+        guard !hookInstalled, bunPath != nil, !defaults.bool(forKey: "hookOffered") else { return }
+        defaults.set(true, forKey: "hookOffered")
+        let alert = NSAlert()
+        alert.messageText = "Connect Claude Code?"
+        alert.informativeText = "To see your sessions, the app adds a small hook to Claude Code's settings (~/.claude/settings.json). It saves a copy of the file first and changes nothing else. You can remove it in Settings."
+        alert.addButton(withTitle: "Install Hook")
+        alert.addButton(withTitle: "Not Now")
+        if alert.runModal() == .alertFirstButtonReturn { installHook() }
+    }
+
+    @objc func toggleHook() {
+        if hookInstalled { removeHook() } else { installHook() }
+    }
+
+    func installHook() {
+        var ok = false
+        do {
+            try copyHook()
+            ok = runInstaller(["--hook", hookFile.path])
+        } catch {}
+        refreshSettings()
+        if !ok { failed("Couldn't install the hook", "Claude Code's settings were left as they were.") }
+    }
+
+    func removeHook() {
+        let ok = runInstaller(["--uninstall"])
+        refreshSettings()
+        if !ok { failed("Couldn't remove the hook", "Claude Code's settings were left as they were.") }
+    }
+
+    func failed(_ title: String, _ text: String) {
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = title
+        alert.informativeText = text
+        alert.runModal()
     }
 }
 

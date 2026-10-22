@@ -1,13 +1,14 @@
 #!/bin/sh
-# Builds "Claude Session Monitor.app" into build/ and, with --install, copies it to
-# ~/Applications. Needs only the Xcode command line tools (swiftc), no Xcode.
+# Builds "Claude Session Monitor.app" into build/. The app carries its own copy of the
+# server, the page and the hook, so it runs from anywhere. Needs only the Xcode command
+# line tools (swiftc), no Xcode.
 #
 #   sh app/build.sh            build
-#   sh app/build.sh --install  build and install
+#   sh app/build.sh --install  build, copy to ~/Applications and open it
+#   sh app/build.sh --release  build and zip it for a GitHub release
 
 set -e
 cd "$(dirname "$0")/.."
-ROOT="$(pwd)"
 NAME="Claude Session Monitor"
 APP="build/$NAME.app"
 
@@ -23,7 +24,16 @@ done
 lipo -create build/ClaudeSessionMonitor-arm64 build/ClaudeSessionMonitor-x86_64 \
   -output "$APP/Contents/MacOS/ClaudeSessionMonitor"
 
-sed "s|__PROJECT_PATH__|$ROOT|" app/Info.plist > "$APP/Contents/Info.plist"
+cp app/Info.plist "$APP/Contents/Info.plist"
+
+# The server, the page and the hook, inside the app.
+SERVER="$APP/Contents/Resources/server"
+mkdir -p "$SERVER"
+cp server.ts cron.ts install-hooks.ts "$SERVER/"
+cp -R public hooks "$SERVER/"
+chmod 755 "$SERVER/hooks/session-hook.sh"
+# The fonts' license travels with the fonts, and the app's with the app.
+cp -R licenses LICENSE "$APP/Contents/Resources/"
 
 # Icon: draw once at 1024 px, then let sips and iconutil make the sizes.
 if [ ! -f build/AppIcon.icns ] || [ app/make-icon.swift -nt build/AppIcon.icns ]; then
@@ -41,6 +51,14 @@ cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 # Ad-hoc signature: enough for this Mac, and for macOS to accept it as a login item.
 codesign --force --sign - "$APP" >/dev/null
 echo "Built $APP"
+
+if [ "$1" = "--release" ]; then
+  VERSION=$(/usr/libexec/PlistBuddy -c "Print CFBundleShortVersionString" app/Info.plist)
+  ZIP="build/Claude-Session-Monitor-$VERSION.zip"
+  rm -f "$ZIP"
+  ditto -c -k --keepParent "$APP" "$ZIP"
+  echo "Zipped $ZIP"
+fi
 
 if [ "$1" = "--install" ]; then
   DEST="$HOME/Applications/$NAME.app"

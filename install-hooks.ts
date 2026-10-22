@@ -1,7 +1,9 @@
 // Adds (or removes, with --uninstall) the Claude Session Monitor hook in ~/.claude/settings.json.
 //
-//   bun install-hooks.ts             install, or refresh if already there
-//   bun install-hooks.ts --uninstall remove only this app's entries
+//   bun install-hooks.ts               install, or refresh if already there
+//   bun install-hooks.ts --hook <path> register that copy of the hook instead (the app
+//                                      uses ~/.claude-session-monitor/hooks/session-hook.sh)
+//   bun install-hooks.ts --uninstall   remove only this app's entries
 //
 // It saves a dated copy of settings.json first, touches nothing but its own
 // entries, and writes the new file atomically so Claude never reads half a file.
@@ -11,7 +13,8 @@ import { homedir } from "node:os";
 import { join, resolve } from "node:path";
 
 const SETTINGS = join(homedir(), ".claude", "settings.json");
-const HOOK = resolve(import.meta.dir, "hooks", "session-hook.sh");
+const flag = process.argv.indexOf("--hook");
+const HOOK = flag > 0 && process.argv[flag + 1] ? resolve(process.argv[flag + 1]) : resolve(import.meta.dir, "hooks", "session-hook.sh");
 const MARK = "session-hook.sh";
 
 // Only long-standing events, so older Claude Code versions still load them (the CLI
@@ -46,7 +49,8 @@ for (const event of Object.keys(hooks)) {
 }
 
 if (!uninstall) {
-  const command = { type: "command", command: HOOK, timeout: 5 };
+  // Claude Code runs the command through a shell, so a path with spaces is quoted.
+  const command = { type: "command", command: /\s/.test(HOOK) ? `"${HOOK}"` : HOOK, timeout: 5 };
   for (const event of TOOL_EVENTS) (hooks[event] ??= []).push({ matcher: "*", hooks: [command] });
   for (const event of OTHER_EVENTS) (hooks[event] ??= []).push({ hooks: [command] });
 }
