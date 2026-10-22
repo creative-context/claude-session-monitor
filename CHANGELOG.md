@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.3
 
 - All Sessions splits a long day into two columns in a wide window, as Last 7 Days does.
 
