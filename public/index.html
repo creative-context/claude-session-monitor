@@ -769,7 +769,37 @@
   // The server calls a workflow it can't name "Workflow"; that name says nothing.
   const wfNamed = (wf) => Boolean(wf?.name) && wf.name !== "Workflow";
   const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s);
-  const label = (s) => (s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
+  const label = (s) => (s.kind === "task" ? "Can't run" : s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
+
+  // A scheduled task the Claude app tried to start and couldn't. It needs you like an error
+  // does, so it also gets a card in Active, next to what else needs you.
+  function blockedWhy(b) {
+    if (b.reason === "per_task_limit") {
+      if (!b.run) return "a run of it is still open";
+      const from = `the run from ${when(b.run.at)}`;
+      return b.run.status === "working" ? `${from} is still going`
+        : b.run.status === "waiting" || b.run.status === "asks" ? `${from} is waiting for you` : `${from} is still open`;
+    }
+    return b.reason ? `the Claude app skipped it (${b.reason.replace(/_/g, " ")})` : "the Claude app skipped it";
+  }
+  const blockedText = (b) => `Didn't run ${when(b.since)}: ${blockedWhy(b)}`;
+  const blockedHint = (b) => (b.reason === "per_task_limit" && b.run ? "It runs once that one is closed." : "The Claude app keeps trying every minute.");
+  function blockedCards(st = state) {
+    return (st.tasks || []).filter((t) => t.blocked).map((t) => ({
+      sid: `task:${t.id}`, kind: "task", task: t.id, taskName: t.name, title: t.name,
+      project: t.project, cwd: t.cwd, file: t.file, status: "error", needsYou: true,
+      since: t.blocked.since, first: t.blocked.since, last: t.blocked.since,
+      error: blockedText(t.blocked), blocked: t.blocked, open: t.blocked.run?.sid,
+      agents: [], agentCount: 0, workflows: [], plan: null, reminder: null, made: [],
+    }));
+  }
+  // The sessions with the blocked tasks among what needs you, after the sessions waiting on you.
+  function withBlocked(list, st = state) {
+    const extra = blockedCards(st);
+    if (!extra.length) return list;
+    const at = list.findIndex((s) => !needsYou(s) || s.status === "error");
+    return at < 0 ? [...list, ...extra] : [...list.slice(0, at), ...extra, ...list.slice(at)];
+  }
   const statusIcon = (s) => (s.background ? ICON.bot : STATUS_ICON[s.status] || ICON.check);
   const busiest = (s) => [...(s.agents || [])].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0))[0];
   const agentLine = (a) => {
@@ -785,6 +815,10 @@
       ? `${ICON.listChecks}<span class="txt"><span class="sub">Step ${s.plan.index} of ${s.plan.total} ·</span> ${esc(s.plan.current)}</span>` : "";
     const agent = busiest(s);
 
+    if (s.kind === "task") {
+      const why = blockedWhy(s.blocked);
+      return wrap(`<b>${esc(`Didn't run ${when(s.blocked.since)}.`)}</b> ${esc(why[0].toUpperCase() + why.slice(1))}.`);
+    }
     if (s.status === "waiting") return wrap(esc(s.wait || "Waiting for your answer"));
     if (s.status === "asks") return wrap(`<b>${esc(s.ask || "It asked you something")}</b>`);
     if (s.status === "error") return wrap(esc(s.error || "The turn ended with an error"));
@@ -902,13 +936,14 @@
     const keep = ["new", "found"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
-    const when = ago(s.status === "working" ? s.last : s.since);
+    const agoText = ago(s.status === "working" ? s.last : s.since);
     // A run of a scheduled task shows a calendar clock by its time instead of the plain clock.
-    const timeTip = s.task ? ` title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}"` : "";
+    const timeTip = s.kind === "task" ? ` title="${esc(`Can't start since ${when(s.since)}`)}"`
+      : s.task ? ` title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}"` : "";
     const inner = `
       <div class="top">
         ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
-        <span class="time"${timeTip}>${s.task ? ICON.calendarClock : ICON.clock}${when}</span>
+        <span class="time"${timeTip}>${s.task ? ICON.calendarClock : ICON.clock}${agoText}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
@@ -919,9 +954,10 @@
       el._inner = inner;
       syncIcons(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.task ? "Scheduled run" : "", plain(detail(s)), s.project ? `in ${s.project}` : "", when, ...schedWords(s)].filter(Boolean).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", agoText, ...schedWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
-    el.title = (s.agents || []).length
+    el.title = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
+      : (s.agents || []).length
       ? `Open in the Claude app\n\n${s.agents.map((a) => `${a.label || "Agent"}: ${describe(a.tool || "Agent")[0]}`).join("\n")}`
       : "Open in the Claude app";
     return el;
@@ -1009,7 +1045,7 @@
       syncIcons($week);
       return;
     }
-    const list = state.sessions;
+    const list = withBlocked(state.sessions);
     if (!list.length) {
       cards.clear();
       groups.clear();
@@ -1242,6 +1278,7 @@
   function taskLook(t) {
     const r = t.lastRun;
     if (!t.enabled && !t.ran) return { cls: "paused", tag: tag(`${ICON.pause}<span>Paused</span>`, "s-idle"), label: "Paused" };
+    if (t.blocked) return { cls: "error", tag: tag(`${ICON.error}<span>Can't run</span>`, "s-error"), label: "Can't run", fresh: now() - t.blocked.since < FRESH_MS };
     if (r && (r.status === "working" || r.needsYou)) {
       const s = { ...r, background: false };
       const text = r.status === "working" ? "Running" : label(s);
@@ -1261,7 +1298,11 @@
     const line = (html) => `<div class="line">${html}</div>`;
     const sched = line(`${ICON.calendarClock}<span class="txt">${t.schedule ? esc(t.schedule) : `<code>${esc(t.cron)}</code>`}</span>`);
     let second;
-    if (t.enabled && r?.status === "working") {
+    if (t.enabled && t.blocked) {
+      // Two lines, so why it can't run is never cut off.
+      const why = blockedWhy(t.blocked);
+      return sched + `<div class="wrap"><b>${esc(`Didn't run ${when(t.blocked.since)}.`)}</b> ${esc(why[0].toUpperCase() + why.slice(1))}.</div>`;
+    } else if (t.enabled && r?.status === "working") {
       second = action(r.tool, r.detail) || `${ICON.bulb}<span class="txt">Started ${when(r.first)}</span>`;
     } else if (t.enabled && r?.needsYou) {
       const text = r.status === "waiting" ? r.wait || "Waiting for your answer" : r.status === "asks" ? r.ask || "It asked you something" : r.error || "The run ended with an error";
@@ -1304,8 +1345,10 @@
     const look = taskLook(t);
     const cls = `card task ${look.cls}${look.fresh ? " fresh" : ""}${el.classList.contains("found") ? " found" : ""}`;
     if (el.className !== cls) el.className = cls;
-    // A click opens the last run; a task that never ran has nothing to open.
-    if (t.lastRun) el.dataset.sid = t.lastRun.sid; else delete el.dataset.sid;
+    // A click opens the last run (the one holding it up, if it's blocked); a task that
+    // never ran has nothing to open.
+    const opens = t.blocked?.run?.sid ?? t.lastRun?.sid;
+    if (opens) el.dataset.sid = opens; else delete el.dataset.sid;
     const nextText = t.enabled && t.next ? nextLabel(t.next) : "";
     const inner = `
       <div class="top">
@@ -1321,7 +1364,7 @@
       syncIcons(el);
       el.setAttribute("aria-label", [t.name, look.label, plain(taskDetail(t)), nextText ? `Next run ${when(t.next)}` : "", runSummary(t)].filter(Boolean).join(". "));
     }
-    el.title = t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
+    el.title = t.blocked?.run ? "Open the run that's still open in the Claude app" : t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
     return el;
   }
 
@@ -1431,7 +1474,11 @@
     if (made) return showTask(made.dataset.showTask);
     if (e.target.closest("[data-more]")) return loadHistory(false);
     const item = e.target.closest("[data-sid]");
-    if (item) openSession(item.dataset.sid);
+    if (!item) return;
+    // A blocked task opens the run that holds it up, so you can close it.
+    const b = item.dataset.sid.startsWith("task:") ? blockedCards().find((x) => x.sid === item.dataset.sid) : null;
+    if (b) return b.open ? openSession(b.open) : showTask(b.task);
+    openSession(item.dataset.sid);
   });
 
   // In the app, a right click opens the app's own menu for that session, and anywhere
@@ -1448,6 +1495,8 @@
     }
     const item = e.target.closest("[data-sid]");
     if (!item) return;
+    const b = item.dataset.sid.startsWith("task:") ? blockedCards().find((x) => x.sid === item.dataset.sid) : null;
+    if (b) return bridge()?.postMessage({ menu: { sid: b.open ?? "", title: b.title, cwd: b.cwd, file: b.file } });
     const s = sessionFor(item.dataset.sid);
     bridge()?.postMessage({ menu: { sid: item.dataset.sid, title: s?.title ?? "", cwd: s?.cwd ?? "" } });
   });
@@ -1564,9 +1613,9 @@
   function popHtml(kind) {
     const list = state.sessions;
     if (kind === "needs") {
-      const items = list.filter(needsYou);
+      const items = withBlocked(list).filter(needsYou);
       const what = (s) => (s.status === "waiting" ? s.wait || "Waiting for your answer" : s.status === "asks" ? s.ask || "It asked you something" : s.error || "The turn ended with an error");
-      return popHead(ICON.alert, items.length === 1 ? "1 session needs you" : `${items.length} sessions need you`) +
+      return popHead(ICON.alert, items.length === 1 ? "1 needs you" : `${items.length} need you`) +
         items.slice(0, POP_MAX).map((s) => popRow(s, what(s), ago(s.since))).join("") + popMore(items.length - POP_MAX);
     }
     if (kind === "working") {
@@ -1673,7 +1722,7 @@
   function goToCards(match, ring = true) {
     hidePop();
     if (view !== "week") setView("week");
-    const sids = new Set(state.sessions.filter(match).map((s) => s.sid));
+    const sids = new Set(withBlocked(state.sessions).filter(match).map((s) => s.sid));
     const els = [...$week.querySelectorAll(".card, .hrow")].filter((el) => sids.has(el.dataset.sid));
     if (!els.length) return;
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1832,13 +1881,14 @@
 
   // What is worth a sound and a spoken note: a session starts waiting on you, or ends
   // its turn with a question or an error.
-  const alertKey = (s) =>
+  // A blocked task's text says "today" or "yesterday", so its key is when it started instead.
+  const alertKey = (s) => s.kind === "task" ? `e:task:${s.blocked.since}` :
     s.status === "waiting" ? `w:${s.wait}` : s.status === "asks" ? `a:${s.ask}` : s.status === "error" ? `e:${s.error}` : s.status;
 
   function receive(next) {
     const first = !ready;
     const changed = [];
-    for (const s of next.sessions) {
+    for (const s of [...next.sessions, ...blockedCards(next)]) {
       const key = alertKey(s);
       if (!first && seen.get(s.sid) !== key && /^[wae]:/.test(key)) changed.push(s);
     }
@@ -1848,7 +1898,7 @@
     skew = next.now - Date.now();
     render();
     seen.clear();
-    for (const s of next.sessions) seen.set(s.sid, alertKey(s));
+    for (const s of [...next.sessions, ...blockedCards(next)]) seen.set(s.sid, alertKey(s));
     if (!seen.size) seen.set("", "");
     const needs = next.needs ?? next.sessions.filter(needsYou).length;
     document.title = needs ? `(${needs}) Claude Session Monitor` : "Claude Session Monitor";

@@ -37,7 +37,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 
 **What it does differently:**
 
-- **What needs you comes first.** A session blocked on a permission or a question, one whose turn ended asking you something, and one that stopped on an error get the strongest colors and the top of the screen. The same count shows in the window, on the Dock icon and in the menu bar.
+- **What needs you comes first.** A session blocked on a permission or a question, one whose turn ended asking you something, and one that stopped on an error get the strongest colors and the top of the screen, and so does a scheduled task the Claude app can't start. The same count shows in the window, on the Dock icon and in the menu bar.
 - **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one") and an API error each count as needing you. Courtesy closings don't: "anything else?", or an open offer like "if you want another change, let me know".
 - **It sees the work behind a session.** The tool it's using and on what, the step of its plan, and its subagents and workflows with their phase and tokens.
 - **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened. A session that set itself a reminder or set up a task says so on its card.
@@ -100,7 +100,7 @@ To work on this repository itself, an agent reads [`AGENTS.md`](AGENTS.md), whic
 
 - **Last 7 Days** (⌘1). **Active** comes as cards: what needs you, what's working, anything touched in the last two hours and anything set to pick up again on its own, most urgent first. Under it, the rest of today, yesterday and earlier come as rows, and a long day splits into two columns in a wide window. After 7 days a session leaves this view on its own.
 - **All Sessions** (⌘2). Every session ever, grouped by day and searchable by title, first prompt, project or last recap. The ones still going keep their color and update as they change. A long day splits into two columns in a wide window, as in Last 7 Days. On first run it fills in from the sessions the Claude app already has.
-- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. A one-time task moves to Ran once after it runs. Its runs show up in the other views too, with a calendar clock by their time.
+- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. One the Claude app tried to start and couldn't says Can't run, in red, with why, usually that its last run is still open. It shows in Active too and counts as needing you, and a click opens the run that holds it up. A one-time task moves to Ran once after it runs. Its runs show up in the other views too, with a calendar clock by their time.
 
 A session that set itself a reminder, with `/loop`, a cron job or a wakeup, shows when it picks up again by an alarm clock, until its time comes or the session closes. One that set up a scheduled task shows the task's name; click it to see the task in Scheduled.
 
@@ -138,7 +138,7 @@ It never stores whole conversations.
 
 - The end of each session's transcript in `~/.claude/projects`, to tell how a turn ended and to find its subagents and workflows.
 - The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag and which scheduled task a session is a run of.
-- The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times. It never reads what a task does.
+- The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times, and when the app skipped a run and why. It never reads what a task does.
 
 **What it changes:** the hook entries in `~/.claude/settings.json`, and nothing else.
 

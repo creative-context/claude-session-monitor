@@ -113,6 +113,7 @@ const REMINDER_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 type Task = {
   id: string; name: string; cron?: string; at?: number; enabled: boolean; cwd?: string; file?: string; // cron, or at for a one-time task
   created?: number; lastRunAt?: number; lastScheduledFor?: number;
+  skips?: { at: number; reason: string }[]; // tries to start a run the app gave up on, since its last run
 };
 const tasks = new Map<string, Task>();
 const taskChanged = new Map<string, number>(); // when a task was last resumed or rescheduled
@@ -858,6 +859,15 @@ function readTasks(file: string): Task[] {
   try {
     const j = JSON.parse(readFileSync(file, "utf8"));
     const list: any[] = Array.isArray(j?.scheduledTasks) ? j.scheduledTasks : [];
+    // When the app can't start a run it tries again each minute and notes the time and
+    // why: recordedSkips, by task.
+    const skipsOf = (id: string, after = 0) => {
+      const raw = j?.recordedSkips?.[id];
+      return (Array.isArray(raw) ? raw : [])
+        .map((k: any) => ({ at: timeOf(k?.at), reason: typeof k?.reason === "string" ? k.reason.slice(0, 40) : "" }))
+        .filter((k): k is { at: number; reason: string } => k.at != null && k.at > after)
+        .sort((a, b) => a.at - b.at);
+    };
     return list
       // Repeating tasks have a cron expression; one-time tasks a moment to fire at.
       .filter((t) => typeof t?.id === "string" && (typeof t?.cronExpression === "string" || timeOf(t?.fireAt) != null))
@@ -872,6 +882,7 @@ function readTasks(file: string): Task[] {
         created: timeOf(t.createdAt),
         lastRunAt: timeOf(t.lastRunAt),
         lastScheduledFor: timeOf(t.lastScheduledFor),
+        skips: skipsOf(t.id, timeOf(t.lastRunAt) ?? 0),
       }));
   } catch {
     return [];
@@ -1229,6 +1240,7 @@ function shownStatus(s: Session, agents: Agent[]): Shown {
 // ---------------------------------------------------------------- scheduled tasks
 
 const MISSED_GRACE_MS = 10 * 60 * 1000; // a run gets this long to start before it counts as missed
+const BLOCK_STALE_MS = 3 * 60 * 1000; // no skip for this long: the app stopped trying (it's closed, say)
 const RUNS_SHOWN = 7;
 
 type RunView = {
@@ -1285,13 +1297,24 @@ function taskList(now: number) {
     // A one-time task that has run is done, not paused or missed. The app turns it off
     // then; if it doesn't, its last run time still tells.
     const ran = t.at != null && ((t.lastRunAt ?? 0) >= t.at - 60_000 || (!t.enabled && lastRun != null));
+    // The app tried and gave up, so it isn't missed, it's blocked: since the first skip
+    // after its last run, for as long as the app keeps trying (each minute while it's
+    // open). per_task_limit means a run of it is still open; that's the newest one before.
+    const skips = !ran ? t.skips ?? [] : [];
+    const trying = skips.length > 0 && now - skips.at(-1)!.at < BLOCK_STALE_MS;
+    const started = skips.length > 0 && lastRun != null && lastRun.first >= skips[0].at - 60_000;
+    const open = skips.length ? runs.find((r) => r.first < skips[0].at && r.status !== "ended") : undefined;
+    const blocked = t.enabled && trying && !started ? {
+      since: skips[0].at, last: skips.at(-1)!.at, tries: skips.length, reason: skips.at(-1)!.reason,
+      run: open ? { sid: open.sid, status: open.status, at: open.first } : null,
+    } : null;
     const missed = Boolean(
-      t.enabled && !ran && prev != null && prev > Math.max(t.created ?? 0, taskChanged.get(t.id) ?? 0) &&
+      t.enabled && !ran && !blocked && prev != null && prev > Math.max(t.created ?? 0, taskChanged.get(t.id) ?? 0) &&
       prev > (t.lastScheduledFor ?? 0) + 60_000 &&
       !(lastRun && lastRun.first >= prev - 60_000), // it ran, the file just hasn't caught up
     );
     const running = lastRun?.status === "working" || lastRun?.status === "waiting";
-    const rank = ran ? 5 : !t.enabled ? 4 : lastRun?.needsYou ? 0 : running ? 1 : missed ? 2 : 3;
+    const rank = ran ? 5 : !t.enabled ? 4 : blocked || lastRun?.needsYou ? 0 : running ? 1 : missed ? 2 : 3;
     return {
       id: t.id,
       name: t.name,
@@ -1305,6 +1328,7 @@ function taskList(now: number) {
       file: t.file ?? "",
       next: nextOf(t, now),
       missed: missed ? prev : null,
+      blocked,
       lastRun,
       runs: runs.map((r) => ({ sid: r.sid, status: r.status, needsYou: r.needsYou, at: r.first })),
       rank,
@@ -1384,7 +1408,9 @@ function snapshot() {
         made: madeTasks(s.made, now),
       };
     });
-  return { now, needs: list.filter((x) => x.needsYou).length, sessions: list, tasks: taskList(now) };
+  // A scheduled task the app can't start needs you too, like a session that stopped on an error.
+  const taskViews = taskList(now);
+  return { now, needs: list.filter((x) => x.needsYou).length + taskViews.filter((t) => t.blocked).length, sessions: list, tasks: taskViews };
 }
 
 // ---------------------------------------------------------------- web server
@@ -1511,10 +1537,10 @@ setInterval(checkTurns, 500);
 setInterval(scanAllAgents, 3000);
 setInterval(checkProcesses, 10_000);
 setInterval(readDesktopSessions, 15_000);
-// A task's next run and a missed run change with the clock, not with an event.
+// A task's next run, a missed run and a blocked one change with the clock, not with an event.
 let taskClock = "";
 setInterval(() => {
-  const sig = JSON.stringify(taskList(Date.now()).map((t) => [t.id, t.next, t.missed]));
+  const sig = JSON.stringify(taskList(Date.now()).map((t) => [t.id, t.next, t.missed, t.blocked?.since, t.blocked?.run?.sid]));
   if (sig !== taskClock) {
     taskClock = sig;
     version++;

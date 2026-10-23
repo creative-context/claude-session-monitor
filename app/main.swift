@@ -795,7 +795,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
                         .foregroundColor: NSColor(srgbRed: 0.98, green: 0.55, blue: 0, alpha: 1),
                         .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)])
                     : NSAttributedString(string: "")
-                let needs = waiting == 1 ? "1 session needs you" : "\(waiting) sessions need you"
+                let needs = waiting == 1 ? "1 needs you" : "\(waiting) need you" // sessions, and tasks that can't run
                 button.toolTip = ok ? "\(appName)\n\(needs) · \(working) working" : "\(appName): server offline"
             }
         }.resume()

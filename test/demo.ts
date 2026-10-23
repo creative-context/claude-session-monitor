@@ -171,6 +171,16 @@ task("monthly-report", "Monthly usage report", "0 9 1 * *", project("analytics")
 s = finished("Set up the monthly usage report", project("analytics"), now - 4 * 60 * MIN + 2 * MIN,
   "The report runs on the 1st of each month at 9 AM and posts to the team channel.");
 ev(s, now - 4 * 60 * MIN, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "monthly-report" }, cwd: project("analytics") });
+// Can't run: yesterday's run is still open, so the app skips today's every minute.
+const vendor = "0 9 * * *";
+const vendorDue = prev(vendor);
+const vendorRan = prev(vendor, vendorDue - MIN);
+task("vendor-digest", "Vendor invoice digest", vendor, project("finance"), { lastFor: vendorRan });
+runOf(finished("Vendor invoice digest", project("finance"), vendorRan + 9 * MIN, "Four invoices are waiting for approval."),
+  "vendor-digest", "Vendor invoice digest", project("finance"), vendorRan + 6 * MIN);
+const skips: Record<string, { at: number; reason: string }[]> = { "vendor-digest": [] };
+// Into the next few hours too, so it stays blocked while the demo runs.
+for (let at = vendorDue + 53_000; at < now + 6 * 60 * MIN; at += MIN) skips["vendor-digest"].push({ at, reason: "per_task_limit" });
 // Paused.
 const backup = "0 3 * * 0";
 const backupAt = prev(backup);
@@ -271,7 +281,7 @@ if (EDGE) {
     enabled: false, cwd: project("docs"), createdAt: now - 3 * 24 * 60 * MIN, lastRunAt: new Date(now - 30 * 60 * MIN + MIN).toISOString() });
 }
 
-writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile }));
+writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile, recordedSkips: skips }));
 
 const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
