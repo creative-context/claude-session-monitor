@@ -336,6 +336,9 @@
   .tags { margin-top: auto; display: flex; gap: 4px; overflow: hidden; }
   .tags .tag { flex: 0 1 auto; }
   .tags .tag.name { flex: 0 100 auto; min-width: 40px; }
+  /* A reminder's time and a "+1" never shrink; a long task name gives way first. */
+  .tags .tag.sched { flex: none; }
+  .tags .tag.made { flex: 0 100000 auto; min-width: 64px; }
 
   /* The plan's progress, one segment per step: done, the one it's on, still to do. The
      row is taller than the 2 px line so its tooltip is easy to hover. */
@@ -406,6 +409,8 @@
   .dots i.r-error { background: var(--color-error); }
   .dots i.r-working { background: var(--color-text-accent); }
   .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
+  /* A scheduled task a session set up: its tag on the card opens it in Scheduled. */
+  .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
   .top .time { margin-left: auto; }
 
   /* ---------- count details ---------- */
@@ -642,6 +647,9 @@
     calendarClock: svg('<path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/>'),
     pause: svg('<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>'),
     alarm: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5v4"/><path d="M12 16.5h.01"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
+    // An alarm clock with hands: a session set to pick up again on its own.
+    wake: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
+    calendarPlus: svg('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M12 12.5v5"/><path d="M9.5 15h5"/>'),
     chev: svg('<path d="m6 9 6 6 6-6"/>', "chev"),
     close: svg('<path d="M6 6l12 12"/><path d="M18 6 6 18"/>'),
     arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
@@ -818,7 +826,39 @@
       ].filter((x) => x !== undefined).join("\n").trim();
       out.push(tag(`${wf ? ICON.flow : ICON.agents}<span>${esc(bits.join(" · "))}</span>`, "", tip));
     }
+    if (s.reminder) out.push(tag(`${ICON.wake}<span>${esc(shortWhen(s.reminder.at))}${s.reminder.more ? ` +${s.reminder.more}` : ""}</span>`, "sched", wakeTip(s.reminder)));
+    const made = s.made || [];
+    if (made.length) {
+      out.push(`<span class="tag made" data-show-task="${esc(made[0].id)}" title="${esc(madeTip(made))}">${ICON.calendarPlus}<span>${esc(made[0].name)}</span></span>`);
+      if (made.length > 1) out.push(tag(`<span>+${made.length - 1}</span>`, "sched", madeTip(made)));
+    }
     return `<div class="tags">${out.join("")}</div>`;
+  }
+
+  // "12:00 PM" today, "Tomorrow 8:17 AM", "Mon 9:00 AM": short, for a tag.
+  function shortWhen(t) {
+    const w = when(t);
+    return w.startsWith("today at ") ? w.slice(9) : w[0].toUpperCase() + w.slice(1).replace(" at ", " ");
+  }
+  function wakeTip(r) {
+    const more = r.more ? `\n${plural(r.more, "more reminder", "more reminders")} after that.` : "";
+    if (!r.every) return `Set to pick up again on its own ${when(r.at)}.${more}`;
+    return `Set to run again ${r.every[0].toLowerCase() + r.every.slice(1)} while it's open, next ${when(r.at)}.${r.until ? ` It stops ${when(r.until)}.` : ""}${more}`;
+  }
+  function madeTip(made) {
+    return made.map((t) => `It set up the scheduled task ${t.name}: ${t.next ? `next run ${when(t.next)}` : t.enabled ? "no runs coming up" : "now off"}.`).join("\n")
+      + "\nClick to see it in Scheduled.";
+  }
+  // The same, in words, for VoiceOver and the rows' icons.
+  const schedWords = (s) => [
+    s.reminder ? `Picks up again on its own ${when(s.reminder.at)}` : "",
+    (s.made || []).length ? `Set up the scheduled ${(s.made || []).length === 1 ? "task" : "tasks"} ${(s.made || []).map((t) => t.name).join(", ")}, shown in Scheduled (Command-3)` : "",
+  ].filter(Boolean);
+  function schedIcons(s) {
+    const out = [];
+    if (s.reminder) out.push(`<span class="hsched" title="${esc(wakeTip(s.reminder))}">${ICON.wake}</span>`);
+    if ((s.made || []).length) out.push(`<span class="hsched" title="${esc(madeTip(s.made).replace(/\nClick.*$/, ""))}">${ICON.calendarPlus}</span>`);
+    return out.join("");
   }
 
   function bar(s) {
@@ -833,12 +873,13 @@
 
   // ---------------------------------------------------------------- Last 7 Days
 
-  // Active comes first: what needs you, what is working, and anything touched in the last
-  // two hours, in order of urgency. Then the rest of today, yesterday and earlier.
+  // Active comes first: what needs you, what is working, anything touched in the last two
+  // hours, and anything set to pick up again on its own, in order of urgency. Then the rest
+  // of today, yesterday and earlier.
   const ACTIVE_MS = 2 * 60 * 60 * 1000;
   const SECTIONS = [
     { id: "active", label: "Active", hint: "last 2 hours", icon: ICON.activity,
-      test: (s) => needsYou(s) || s.status === "working" || now() - s.last < ACTIVE_MS },
+      test: (s) => needsYou(s) || s.status === "working" || now() - s.last < ACTIVE_MS || Boolean(s.reminder) },
     { id: "today", label: "Earlier today", icon: ICON.sun, test: (s) => s.last >= dayStart(0) },
     { id: "yesterday", label: "Yesterday", icon: ICON.calendar, test: (s) => s.last >= dayStart(1) },
     { id: "earlier", label: "Earlier", icon: ICON.layers, test: () => true },
@@ -878,7 +919,7 @@
       el._inner = inner;
       syncIcons(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.task ? "Scheduled run" : "", plain(detail(s)), s.project ? `in ${s.project}` : "", when].filter(Boolean).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.task ? "Scheduled run" : "", plain(detail(s)), s.project ? `in ${s.project}` : "", when, ...schedWords(s)].filter(Boolean).join(". "));
     }
     el.title = (s.agents || []).length
       ? `Open in the Claude app\n\n${s.agents.map((a) => `${a.label || "Agent"}: ${describe(a.tool || "Agent")[0]}`).join("\n")}`
@@ -917,10 +958,10 @@
     const snip = st === "asks" ? s.ask : st === "error" ? s.error : s.note || s.recap || "";
     const time = earlier ? `${new Date(s.last).toLocaleDateString("en-US", { weekday: "short" })} ${clock(s.last)}` : clock(s.last);
     const sched = s.task ? `<span class="hsched" title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : "";
-    const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time].filter(Boolean).join(". ");
+    const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time, ...schedWords(s)].filter(Boolean).join(". ");
     return `<button type="button" class="hrow s-${st}${isStale(s) ? " stale" : ""}" data-sid="${esc(s.sid)}" title="Open in the Claude app" aria-label="${esc(aria)}">
       <span class="hicon" title="${esc(label(s))}">${still(statusIcon(s))}</span>
-      <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}</span>
+      <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}${schedIcons(s)}</span>
       ${s.project ? tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project) : "<span></span>"}
       <span class="htime">${time}</span>
       ${snip ? `<span class="hsnip">${esc(snip)}</span>` : ""}
@@ -1104,7 +1145,7 @@
     const what = isLive ? `<span class="hstate">${esc(label(h))}</span>` : `<span class="sr">${esc(label(h))}.</span>`;
     return `<button type="button" class="hrow s-${st}${isLive ? " live" : ""}${isLive && isFresh(h) ? " fresh" : ""}" data-sid="${esc(h.sid)}" title="Open in the Claude app">
       <span class="hicon" title="${esc(label(h))}">${icon}</span>
-      <span class="htitle"><span class="t">${hl(h.title)}</span>${h.task ? `<span class="hsched" title="${esc(h.taskName ? `A run of ${h.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : ""}${what}</span>
+      <span class="htitle"><span class="t">${hl(h.title)}</span>${h.task ? `<span class="hsched" title="${esc(h.taskName ? `A run of ${h.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : ""}${schedIcons(h)}${what}</span>
       ${h.project ? tag(`${ICON.folder}<span>${hl(h.project)}</span>`, "name", h.project) : "<span></span>"}
       <span class="htime">${clock(h.last)}</span>
       ${snip ? `<span class="hsnip">${hl(snip)}</span>` : ""}
@@ -1200,13 +1241,14 @@
   // A task card: how its last run went, or that it is paused, missed a run or never ran.
   function taskLook(t) {
     const r = t.lastRun;
-    if (!t.enabled) return { cls: "paused", tag: tag(`${ICON.pause}<span>Paused</span>`, "s-idle"), label: "Paused" };
+    if (!t.enabled && !t.ran) return { cls: "paused", tag: tag(`${ICON.pause}<span>Paused</span>`, "s-idle"), label: "Paused" };
     if (r && (r.status === "working" || r.needsYou)) {
       const s = { ...r, background: false };
       const text = r.status === "working" ? "Running" : label(s);
       return { cls: r.status, tag: tag(`${statusIcon(s)}<span>${text}</span>`, `s-${r.status}`), label: text, fresh: isFresh(s) };
     }
     if (t.missed) return { cls: "missed", tag: tag(`${ICON.alarm}<span>Missed</span>`, "s-missed"), label: "Missed a run" };
+    if (!r && t.ran) return { cls: "done", tag: tag(`${ICON.check}<span>Done</span>`, "s-done"), label: "Done" }; // ran before we saw it
     if (!r) return { cls: "unrun", tag: tag(`${ICON.calendarClock}<span>Scheduled</span>`, "s-idle"), label: "No runs yet" };
     if (r.status === "asks") return { cls: "asks stale", tag: tag(`${ICON.question.replace(" pulse", "")}<span>Asked you</span>`, "s-asks"), label: "Asked you" };
     if (r.status === "error") return { cls: "error stale", tag: tag(`${ICON.error.replace(" pulse", "")}<span>Error</span>`, "s-error"), label: "Error" };
@@ -1227,7 +1269,7 @@
     } else if (t.enabled && t.missed) {
       second = `${ICON.alarm}<span class="txt">Didn't run ${when(t.missed)}</span>`;
     } else {
-      second = `${ICON.history}<span class="txt">${r ? `Last run ${when(r.first)}` : "No runs yet"}</span>`;
+      second = `${ICON.history}<span class="txt">${r ? `Last run ${when(r.first)}` : t.ran ? `Ran ${when(t.once)}` : "No runs yet"}</span>`;
     }
     return sched + line(second);
   }
@@ -1260,7 +1302,7 @@
       taskCards.set(t.id, el);
     }
     const look = taskLook(t);
-    const cls = `card task ${look.cls}${look.fresh ? " fresh" : ""}`;
+    const cls = `card task ${look.cls}${look.fresh ? " fresh" : ""}${el.classList.contains("found") ? " found" : ""}`;
     if (el.className !== cls) el.className = cls;
     // A click opens the last run; a task that never ran has nothing to open.
     if (t.lastRun) el.dataset.sid = t.lastRun.sid; else delete el.dataset.sid;
@@ -1284,8 +1326,9 @@
   }
 
   const TASK_GROUPS = [
-    { id: "on", label: "Scheduled", hint: "on this Mac", test: (t) => t.enabled },
-    { id: "off", label: "Paused", test: (t) => !t.enabled },
+    { id: "on", label: "Scheduled", hint: "on this Mac", icon: ICON.calendarClock, test: (t) => t.enabled && !t.ran },
+    { id: "off", label: "Paused", icon: ICON.pause, test: (t) => !t.enabled && !t.ran },
+    { id: "ran", label: "Ran once", icon: ICON.check, test: (t) => t.ran }, // one-time tasks, done
   ];
   const taskGroups = new Map();
 
@@ -1317,7 +1360,7 @@
         sec = document.createElement("section");
         sec.className = `group ${g.id === "on" ? "active" : ""}`;
         sec.setAttribute("aria-label", g.label);
-        sec.innerHTML = `<h2 class="group-head">${g.id === "on" ? ICON.calendarClock : ICON.pause}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2><div class="grid"></div>`;
+        sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2><div class="grid"></div>`;
         taskGroups.set(g.id, sec);
       }
       const want = prev ? prev.nextSibling : $scheduled.firstChild;
@@ -1384,6 +1427,8 @@
   $content.addEventListener("click", (e) => {
     const go = e.target.closest("[data-go]");
     if (go) return setView(go.dataset.go);
+    const made = e.target.closest("[data-show-task]");
+    if (made) return showTask(made.dataset.showTask);
     if (e.target.closest("[data-more]")) return loadHistory(false);
     const item = e.target.closest("[data-sid]");
     if (item) openSession(item.dataset.sid);
@@ -1639,6 +1684,19 @@
     if (!ring) return;
     els.forEach((el) => el.classList.add("found"));
     foundTimer = setTimeout(() => els.forEach((el) => el.classList.remove("found")), 1600);
+  }
+  // A scheduled task a session set up: switch to Scheduled and ring its card.
+  function showTask(id) {
+    hidePop();
+    setView("scheduled");
+    const el = taskCards.get(id);
+    if (!el?.isConnected) return;
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ block: "nearest", behavior: still ? "auto" : "smooth" });
+    el.focus({ preventScroll: true });
+    clearTimeout(foundTimer);
+    el.classList.add("found");
+    foundTimer = setTimeout(() => el.classList.remove("found"), 1600);
   }
   function goToCount(kind) {
     if (kind !== "week") return goToCards(FOR_COUNT[kind] || (() => false));

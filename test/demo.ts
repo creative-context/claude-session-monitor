@@ -92,6 +92,12 @@ const auditRun = s;
 finished("Onboarding email copy", project("marketing-site"), now - 26 * MIN,
   "Wrote three subject lines and a short body. The draft is in emails/onboarding.md.");
 
+// Done, and set to look again on its own later: it stays in Active until then.
+s = finished("Check the staging deploy", project("web-app"), now - 35 * MIN,
+  "The deploy is rolling out to staging. I'll look at the error rate again in an hour.");
+ev(s, now - 35 * MIN - 2000, { ev: "PostToolUse", tool: "CronCreate", cwd: project("web-app"),
+  x: { id: "a1b2c3d4", at: now + 55 * MIN, cron: "0 12 * * *", rec: false } });
+
 s = id();
 const tpErr = join(dir, `${s}.jsonl`);
 writeFileSync(tpErr, [
@@ -160,8 +166,11 @@ const ranAt = prev(daily, prev(daily, now - 10 * MIN) - MIN);
 task("metrics-email", "Daily metrics email", daily, project("analytics"), { lastFor: ranAt });
 runOf(finished("Daily metrics email", project("analytics"), ranAt + 8 * MIN, "Sent the metrics summary to the team channel."),
   "metrics-email", "Daily metrics email", project("analytics"), ranAt);
-// New, hasn't run yet.
-task("monthly-report", "Monthly usage report", "0 9 1 * *", project("analytics"), { created: now - 24 * 60 * MIN });
+// New, hasn't run yet, set up by a session earlier today.
+task("monthly-report", "Monthly usage report", "0 9 1 * *", project("analytics"), { created: now - 4 * 60 * MIN });
+s = finished("Set up the monthly usage report", project("analytics"), now - 4 * 60 * MIN + 2 * MIN,
+  "The report runs on the 1st of each month at 9 AM and posts to the team channel.");
+ev(s, now - 4 * 60 * MIN, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "monthly-report" }, cwd: project("analytics") });
 // Paused.
 const backup = "0 3 * * 0";
 const backupAt = prev(backup);
@@ -246,6 +255,20 @@ if (EDGE) {
   // Open, with no turn yet.
   s = id();
   ev(s, now - 18 * MIN, { ev: "SessionStart", cwd: project("notes") });
+
+  // A loop that wakes every 10 minutes, a cron job after it, and two tasks it set up,
+  // one of them one-time; plus a one-time task that already ran.
+  s = finished("Babysit the nightly migration", project("infra"), now - 8 * MIN,
+    "Rows are copying at the expected rate. I'll keep checking every ten minutes.");
+  ev(s, now - 8 * MIN - 3000, { ev: "PostToolUse", tool: "ScheduleWakeup", x: { at: now + 2 * MIN, delay: 600 }, cwd: project("infra") });
+  ev(s, now - 8 * MIN - 2000, { ev: "PostToolUse", tool: "CronCreate", x: { id: "e5f6a7b8", at: now + 52 * MIN, cron: "*/10 * * * *", rec: true }, cwd: project("infra") });
+  ev(s, now - 8 * MIN - 1000, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "migration-report" }, cwd: project("infra") });
+  ev(s, now - 8 * MIN - 500, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "migration-cleanup" }, cwd: project("infra") });
+  task("migration-report", "Migration status report with a much longer name than usual", "30 7 * * *", project("infra"), { created: now - 8 * MIN - 1000 });
+  taskFile.push({ id: "migration-cleanup", displayName: "Drop the old tables", fireAt: new Date(now + 26 * 60 * MIN).toISOString(),
+    enabled: true, cwd: project("infra"), createdAt: now - 8 * MIN - 500 });
+  taskFile.push({ id: "send-recap", displayName: "Send the launch recap", fireAt: new Date(now - 30 * 60 * MIN).toISOString(),
+    enabled: false, cwd: project("docs"), createdAt: now - 3 * 24 * 60 * MIN, lastRunAt: new Date(now - 30 * 60 * MIN + MIN).toISOString() });
 }
 
 writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile }));

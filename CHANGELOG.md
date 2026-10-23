@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased
+
+- A session that set itself a reminder (`/loop`, a cron job, a wakeup) shows when it picks up again, and stays in Active until then. The reminder goes when it fires, is deleted or the session closes.
+- A session that set up a scheduled task shows the task's name. A click on it opens the task in Scheduled.
+- Scheduled shows one-time tasks too, and moves them to Ran once after they run.
+- The hook keeps a scheduled task's title, not its description, when a session creates or changes one.
+
 ## 0.3.4
 
 - A turn that ends on an open offer for more ("if you want another change, let me know", "let me know how it looks") or a short "anything else?" no longer counts as needing you, in English or Spanish. An offer of one specific thing still does, and so does "I need to know…".

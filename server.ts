@@ -98,12 +98,20 @@ type Session = {
   model?: string;
   appCwd?: string; // the folder the app opened the session in; needed to reopen it
   task?: string; // the scheduled task this session is a run of
+  reminders?: Reminder[]; // what it set to wake itself up: a /loop wakeup or a cron job
+  made?: { id: string; t: number }[]; // scheduled tasks of the Claude app it set up, as asked
 };
+
+// A reminder a session set for itself (ScheduleWakeup, CronCreate). Only when and how
+// often, never what it will do. They live in the session's process, so they go when it
+// closes, and a repeating one stops after 7 days, as Claude Code does.
+type Reminder = { id: string; at: number; cron?: string; rec?: boolean; until?: number };
+const REMINDER_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 // A scheduled task of the Claude desktop app, from its scheduled-tasks.json. Only its
 // name, schedule, folder and times are read, never what the task does.
 type Task = {
-  id: string; name: string; cron: string; enabled: boolean; cwd?: string; file?: string;
+  id: string; name: string; cron?: string; at?: number; enabled: boolean; cwd?: string; file?: string; // cron, or at for a one-time task
   created?: number; lastRunAt?: number; lastScheduledFor?: number;
 };
 const tasks = new Map<string, Task>();
@@ -236,6 +244,86 @@ function touchAgent(s: Session, e: Ev) {
   if (e.ev === "SubagentStop") a.finished = true;
 }
 
+// A reminder the session set, changed or dropped, or a scheduled task it set up.
+function noteSchedule(s: Session, e: Ev) {
+  const x = e.x;
+  if (e.tool === "ScheduleWakeup") {
+    // One wakeup at a time: each new one replaces the last, and stop ends the loop.
+    const rest = (s.reminders ?? []).filter((r) => r.id !== "wake");
+    const delay = Math.min(3600, Math.max(60, Number(x.delay) || 0)) * 1000;
+    const given = timeOf(x.at);
+    const at = given != null && given > e.t - 60_000 ? given : x.delay ? e.t + delay : undefined;
+    s.reminders = x.stop || !at ? rest : [...rest, { id: "wake", at }];
+  } else if (e.tool === "CronCreate" && typeof x.cron === "string") {
+    const c = parseCron(x.cron);
+    const given = timeOf(x.at);
+    const at = given != null && given > e.t - 60_000 ? given : c ? nextRun(c, e.t) : null;
+    if (at == null) return;
+    const rec = x.rec !== false;
+    const id = typeof x.id === "string" ? x.id : `cron ${x.cron}`;
+    s.reminders = [...(s.reminders ?? []).filter((r) => r.id !== id),
+      { id, at, cron: x.cron, rec, until: rec ? e.t + REMINDER_DAYS_MS : undefined }];
+  } else if (e.tool === "CronDelete" && typeof x.id === "string") {
+    s.reminders = s.reminders?.filter((r) => r.id !== x.id);
+  } else if (e.tool === "mcp__scheduled-tasks__create_scheduled_task" && typeof x.task === "string") {
+    s.made = [...(s.made ?? []).filter((m) => m.id !== x.task), { id: x.task, t: e.t }];
+  } else return;
+  version++;
+}
+
+// When each reminder fires next, soonest first: a one-off one until its time, a
+// repeating one until its 7 days are up, and none once the session has closed.
+function pendingReminders(s: Session, now: number): (Reminder & { next: number })[] {
+  if (s.status === "ended" || !s.reminders?.length) return [];
+  const out: (Reminder & { next: number })[] = [];
+  for (const r of s.reminders) {
+    let next: number | null = r.at;
+    if (r.rec && r.cron) {
+      if (next <= now) {
+        const c = parseCron(r.cron);
+        next = c ? nextRun(c, now) : null;
+      }
+      if (next == null || (r.until != null && next > r.until)) continue;
+    } else if (next <= now) continue;
+    out.push({ ...r, next });
+  }
+  return out.sort((a, b) => a.next - b.next);
+}
+
+// The next run of a scheduled task, if it has one.
+function nextOf(t: Task, now: number): number | null {
+  if (!t.enabled) return null;
+  if (t.at != null) return t.at > now ? t.at : null;
+  const c = t.cron ? parseCron(t.cron) : null;
+  return c ? nextRun(c, now) : null;
+}
+
+// The scheduled tasks a session set up, as the Claude app lists them now; one it later
+// deleted is gone. The app can change the ID it was asked for ("check-inbox-2"), so a
+// task with an ID that starts the same, created right then, counts too.
+function madeTasks(made: Session["made"], now: number) {
+  const out: { id: string; name: string; enabled: boolean; next: number | null }[] = [];
+  for (const m of made ?? []) {
+    const want = m.id.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "");
+    const t = tasks.get(m.id) ?? [...tasks.values()].find((t) =>
+      t.id.startsWith(want) && t.created != null && Math.abs(t.created - m.t) < 5 * 60_000);
+    if (t && !out.some((o) => o.id === t.id)) out.push({ id: t.id, name: t.name, enabled: t.enabled, next: nextOf(t, now) });
+  }
+  return out;
+}
+
+function reminderView(s: Session, now: number) {
+  const pend = pendingReminders(s, now);
+  const r = pend[0];
+  if (!r) return null;
+  return {
+    at: r.next,
+    every: r.rec && r.cron ? describeCron(r.cron) ?? r.cron : undefined,
+    until: r.rec ? r.until : undefined,
+    more: pend.length - 1,
+  };
+}
+
 function apply(e: Ev) {
   if (!e || typeof e.sid !== "string" || typeof e.ev !== "string" || typeof e.t !== "number") return;
 
@@ -275,6 +363,7 @@ function apply(e: Ev) {
     case "SessionEnd":
       setStatus(s, "ended", e.t);
       s.inFlight = 0;
+      s.reminders = undefined; // they lived in its process
       break;
 
     case "UserPromptSubmit":
@@ -314,6 +403,7 @@ function apply(e: Ev) {
 
     case "PostToolUse":
     case "PostToolUseFailure":
+      if (e.ev === "PostToolUse" && e.x) noteSchedule(s, e);
       if (fromSubagent) break;
       if (e.tool?.startsWith("mcp__ccd_turn__")) break;
       s.inFlight = Math.max(0, s.inFlight - 1);
@@ -458,6 +548,16 @@ function checkProcesses() {
     if (!alive) {
       if (s.status === "working" || s.status === "waiting") s.note = "Closed in the middle of a turn";
       setStatus(s, "ended", now);
+      s.reminders = undefined; // they lived in its process
+      version++;
+    }
+  }
+  // Drop reminders that have fired or run out, so the cards update on their own.
+  for (const s of sessions.values()) {
+    if (!s.reminders?.length) continue;
+    const keep = new Set(pendingReminders(s, now).map((r) => r.id));
+    if (keep.size !== s.reminders.length) {
+      s.reminders = s.reminders.filter((r) => keep.has(r.id));
       version++;
     }
   }
@@ -631,11 +731,12 @@ function openDatabase() {
   // Added later: databases from before have no task column yet.
   const cols = (db.query("PRAGMA table_info(sessions)").all() as any[]).map((c) => c.name);
   if (!cols.includes("task")) db.exec("ALTER TABLE sessions ADD COLUMN task TEXT");
+  if (!cols.includes("sched")) db.exec("ALTER TABLE sessions ADD COLUMN sched TEXT"); // its reminders and the tasks it set up
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
-    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task)
-    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task)
+    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched)
+    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched)
     ON CONFLICT(sid) DO UPDATE SET
       title = coalesce(excluded.title, title), prompt = coalesce(excluded.prompt, prompt),
       project = coalesce(excluded.project, project), cwd = coalesce(excluded.cwd, cwd),
@@ -643,7 +744,7 @@ function openDatabase() {
       first_at = min(first_at, excluded.first_at), last_at = max(last_at, excluded.last_at),
       status = excluded.status, outcome = excluded.outcome, recap = excluded.recap, ask = excluded.ask,
       error = excluded.error, note = excluded.note, model = coalesce(excluded.model, model),
-      pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task)`);
+      pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task), sched = excluded.sched`);
 }
 
 const rowOf = (s: Session) => ({
@@ -654,7 +755,11 @@ const rowOf = (s: Session) => ({
   $recap: s.recap ?? null, $ask: s.ask ?? s.askText ?? null, $error: s.errorText ?? null,
   $note: s.note ?? null, $model: s.model ?? null, $pid: s.pid ?? null, $archived: s.archived ? 1 : 0,
   $task: s.task ?? null,
+  $sched: s.reminders?.length || s.made?.length ? JSON.stringify({ r: s.reminders ?? [], m: s.made ?? [] }) : null,
 });
+const schedOf = (v: unknown): { r?: Reminder[]; m?: Session["made"] } => {
+  try { return typeof v === "string" ? JSON.parse(v) : {}; } catch { return {}; }
+};
 
 // Writes the sessions that changed since the last write.
 const written = new Map<string, string>();
@@ -684,6 +789,7 @@ function loadRecent() {
       recap: r.recap ?? undefined, askText: r.ask ?? undefined, errorText: r.error ?? undefined,
       note: r.note ?? undefined, outcome: r.outcome ?? undefined, classified: Boolean(r.outcome),
       archived: false, task: r.task ?? undefined,
+      reminders: schedOf(r.sched).r, made: schedOf(r.sched).m,
     });
   }
 }
@@ -717,6 +823,7 @@ function history(q: string, limit: number, offset: number) {
       archived: Boolean(r.archived),
       task: r.task ?? undefined,
       taskName: r.task ? tasks.get(r.task)?.name : undefined,
+      made: madeTasks(schedOf(r.sched).m, Date.now()),
     })),
   };
 }
@@ -752,11 +859,13 @@ function readTasks(file: string): Task[] {
     const j = JSON.parse(readFileSync(file, "utf8"));
     const list: any[] = Array.isArray(j?.scheduledTasks) ? j.scheduledTasks : [];
     return list
-      .filter((t) => typeof t?.id === "string" && typeof t?.cronExpression === "string")
+      // Repeating tasks have a cron expression; one-time tasks a moment to fire at.
+      .filter((t) => typeof t?.id === "string" && (typeof t?.cronExpression === "string" || timeOf(t?.fireAt) != null))
       .map((t) => ({
         id: t.id,
         name: typeof t.displayName === "string" && t.displayName.trim() ? t.displayName.trim() : t.id,
-        cron: t.cronExpression,
+        cron: typeof t.cronExpression === "string" ? t.cronExpression : undefined,
+        at: typeof t.cronExpression === "string" ? undefined : timeOf(t.fireAt),
         enabled: t.enabled !== false,
         cwd: typeof t.cwd === "string" ? t.cwd : undefined,
         file: typeof t.filePath === "string" ? t.filePath : undefined,
@@ -814,7 +923,7 @@ function readDesktopSessions() {
   if (JSON.stringify([...found.values()]) !== JSON.stringify([...tasks.values()])) {
     for (const [id, t] of found) {
       const old = tasks.get(id);
-      if (old && (old.cron !== t.cron || (t.enabled && !old.enabled))) taskChanged.set(id, Date.now());
+      if (old && (old.cron !== t.cron || old.at !== t.at || (t.enabled && !old.enabled))) taskChanged.set(id, Date.now());
     }
     tasks.clear();
     for (const [id, t] of found) tasks.set(id, t);
@@ -1161,29 +1270,40 @@ function taskRuns(t: Task, now: number): RunView[] {
 
 // One entry per task for the Scheduled view: its schedule in words, its next run, how
 // the last one went, and whether a run that should have happened didn't.
+// "Once, Oct 23 at 12:00 PM", in local time like the cron schedules.
+function onceWords(at: number) {
+  const d = new Date(at);
+  return `Once, ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
+}
+
 function taskList(now: number) {
   return [...tasks.values()].map((t) => {
-    const c = parseCron(t.cron);
+    const c = t.cron ? parseCron(t.cron) : null;
     const runs = taskRuns(t, now);
     const lastRun = runs[0] ?? null;
-    const prev = c ? prevRun(c, now - MISSED_GRACE_MS) : null;
+    const prev = t.at != null ? (t.at <= now - MISSED_GRACE_MS ? t.at : null) : c ? prevRun(c, now - MISSED_GRACE_MS) : null;
+    // A one-time task that has run is done, not paused or missed. The app turns it off
+    // then; if it doesn't, its last run time still tells.
+    const ran = t.at != null && ((t.lastRunAt ?? 0) >= t.at - 60_000 || (!t.enabled && lastRun != null));
     const missed = Boolean(
-      t.enabled && prev != null && prev > Math.max(t.created ?? 0, taskChanged.get(t.id) ?? 0) &&
+      t.enabled && !ran && prev != null && prev > Math.max(t.created ?? 0, taskChanged.get(t.id) ?? 0) &&
       prev > (t.lastScheduledFor ?? 0) + 60_000 &&
       !(lastRun && lastRun.first >= prev - 60_000), // it ran, the file just hasn't caught up
     );
     const running = lastRun?.status === "working" || lastRun?.status === "waiting";
-    const rank = !t.enabled ? 4 : lastRun?.needsYou ? 0 : running ? 1 : missed ? 2 : 3;
+    const rank = ran ? 5 : !t.enabled ? 4 : lastRun?.needsYou ? 0 : running ? 1 : missed ? 2 : 3;
     return {
       id: t.id,
       name: t.name,
-      schedule: describeCron(t.cron),
-      cron: t.cron,
+      schedule: t.cron ? describeCron(t.cron) : onceWords(t.at!),
+      cron: t.cron ?? "",
+      once: t.at ?? null,
+      ran,
       enabled: t.enabled,
       project: t.cwd ? basename(t.cwd) : "",
       cwd: t.cwd ?? "",
       file: t.file ?? "",
-      next: t.enabled && c ? nextRun(c, now) : null,
+      next: nextOf(t, now),
       missed: missed ? prev : null,
       lastRun,
       runs: runs.map((r) => ({ sid: r.sid, status: r.status, needsYou: r.needsYou, at: r.first })),
@@ -1260,6 +1380,8 @@ function snapshot() {
         agentCount: agents.length,
         workflows,
         plan: total ? { done, total, current: current?.c, index: s.plan!.indexOf(current!) + 1 } : null,
+        reminder: reminderView(s, now),
+        made: madeTasks(s.made, now),
       };
     });
   return { now, needs: list.filter((x) => x.needsYou).length, sessions: list, tasks: taskList(now) };

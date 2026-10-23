@@ -40,7 +40,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 - **What needs you comes first.** A session blocked on a permission or a question, one whose turn ended asking you something, and one that stopped on an error get the strongest colors and the top of the screen. The same count shows in the window, on the Dock icon and in the menu bar.
 - **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one") and an API error each count as needing you. Courtesy closings don't: "anything else?", or an open offer like "if you want another change, let me know".
 - **It sees the work behind a session.** The tool it's using and on what, the step of its plan, and its subagents and workflows with their phase and tokens.
-- **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened.
+- **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened. A session that set itself a reminder or set up a task says so on its card.
 - **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.
 - **It never slows Claude down.** The hook writes one short line and exits, never with an error, so it can't block or break a session.
 
@@ -98,9 +98,11 @@ To work on this repository itself, an agent reads [`AGENTS.md`](AGENTS.md), whic
 
 ## What it shows
 
-- **Last 7 Days** (⌘1). **Active** comes as cards: what needs you, what's working, and anything touched in the last two hours, most urgent first. Under it, the rest of today, yesterday and earlier come as rows, and a long day splits into two columns in a wide window. After 7 days a session leaves this view on its own.
+- **Last 7 Days** (⌘1). **Active** comes as cards: what needs you, what's working, anything touched in the last two hours and anything set to pick up again on its own, most urgent first. Under it, the rest of today, yesterday and earlier come as rows, and a long day splits into two columns in a wide window. After 7 days a session leaves this view on its own.
 - **All Sessions** (⌘2). Every session ever, grouped by day and searchable by title, first prompt, project or last recap. The ones still going keep their color and update as they change. A long day splits into two columns in a wide window, as in Last 7 Days. On first run it fills in from the sessions the Claude app already has.
-- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. Its runs show up in the other views too, with a calendar clock by their time.
+- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. A one-time task moves to Ran once after it runs. Its runs show up in the other views too, with a calendar clock by their time.
+
+A session that set itself a reminder, with `/loop`, a cron job or a wakeup, shows when it picks up again by an alarm clock, until its time comes or the session closes. One that set up a scheduled task shows the task's name; click it to see the task in Scheduled.
 
 Hover a count in the header (needs you, working, agents, last 7 days) to see what's behind it, and click the count or one of its rows to jump to those cards. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
 
@@ -126,8 +128,8 @@ Your sessions stay on your Mac. The server listens on `127.0.0.1` only and answe
 
 **What it keeps,** in `~/.claude-session-monitor`:
 
-- `events.jsonl`: one line per Claude Code event. Each line has the session ID, its folder, the tool's name and a short detail (a file name, or a command or its description, up to 160 characters), the first 200 characters of each prompt, and the text of a session's last question or recap, up to 300 characters. The file rotates at 8 MB.
-- `sessions.db`: one row per session with its title, folder, first prompt, status, last recap or question, its scheduled task if it's a run of one, and times.
+- `events.jsonl`: one line per Claude Code event. Each line has the session ID, its folder, the tool's name and a short detail (a file name, or a command or its description, up to 160 characters), the first 200 characters of each prompt, and the text of a session's last question or recap, up to 300 characters. For a reminder a session sets itself, it has when it fires, how often and its ID, never what it will do. For a scheduled task a session sets up, it has the task's title and ID, never its description or instructions. The file rotates at 8 MB.
+- `sessions.db`: one row per session with its title, folder, first prompt, status, last recap or question, its scheduled task if it's a run of one, its pending reminders and the tasks it set up, and times.
 - `hooks/`: the app's copy of the hook, when the app installed it.
 
 It never stores whole conversations.

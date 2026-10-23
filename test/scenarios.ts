@@ -188,6 +188,13 @@ writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTa
   // Ran three hours ago, and not since: its last hourly run is missing.
   { id: "t-hourly", displayName: "Hourly check", cronExpression: "0 * * * *", enabled: true,
     createdAt: Date.now() - 2 * 24 * HOUR, lastScheduledFor: iso(Date.now() - 3 * HOUR) },
+  // One-time tasks: one still to come, set up by session 33 under a changed ID, and one
+  // that already ran and turned itself off.
+  { id: "noon-check-2", displayName: "Noon check", fireAt: iso(Date.now() + 3 * HOUR), enabled: true, createdAt: Date.now() - 50_000 },
+  { id: "t-once-ran", displayName: "Send the recap", fireAt: iso(Date.now() - 5 * HOUR), enabled: false,
+    createdAt: Date.now() - 24 * HOUR, lastRunAt: iso(Date.now() - 5 * HOUR + 60_000) },
+  { id: "t-once-on", displayName: "Left on after it ran", fireAt: iso(Date.now() - 6 * HOUR), enabled: true,
+    createdAt: Date.now() - 24 * HOUR, lastRunAt: iso(Date.now() - 6 * HOUR + 30_000) },
 ] }));
 writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
   cliSessionId: id(19), scheduledTaskId: "t-digest", title: "Weekday digest", originCwd: "/tmp/demo",
@@ -228,6 +235,39 @@ closing(24, "El banner ya está arriba. ¿Algo más?");
 closing(25, "Dejé el borrador listo. Si quieres que lo suba, dime.");
 closing(26, "Done. Let me know if you want me to make any other changes.");
 closing(27, "The draft is ready. Let me know if you want me to push it.");
+
+// 28–33. Reminders a session sets for itself, and scheduled tasks it sets up.
+const later = Date.now() + 2 * HOUR;
+// 28. A wakeup: the session shows when it picks up again.
+ev(id(28), { ev: "UserPromptSubmit", prompt: "Watch the deploy" });
+ev(id(28), { ev: "PostToolUse", tool: "ScheduleWakeup", x: { at: later, delay: 1800 } });
+ev(id(28), { ev: "Stop" });
+// 29. A repeating cron job: how often, the next run, and when it stops.
+ev(id(29), { ev: "UserPromptSubmit", prompt: "Check the queue" });
+ev(id(29), { ev: "PostToolUse", tool: "CronCreate", x: { id: "c29", at: Date.now() + 5 * 60_000, cron: "*/5 * * * *", rec: true } });
+ev(id(29), { ev: "Stop" });
+// 30. A reminder it deleted again is gone.
+ev(id(30), { ev: "UserPromptSubmit", prompt: "Remind me at noon" });
+ev(id(30), { ev: "PostToolUse", tool: "CronCreate", x: { id: "c30", at: later, cron: "0 12 * * *", rec: false } });
+ev(id(30), { ev: "PostToolUse", tool: "CronDelete", x: { id: "c30" } });
+ev(id(30), { ev: "Stop" });
+// 31. One that already fired is gone, and so is a wakeup loop it stopped.
+ev(id(31), { ev: "UserPromptSubmit", prompt: "Ping me", t: Date.now() - 2 * HOUR });
+ev(id(31), { ev: "PostToolUse", tool: "CronCreate", x: { id: "c31", at: Date.now() - HOUR, cron: "0 9 * * *", rec: false }, t: Date.now() - 2 * HOUR + 1 });
+ev(id(31), { ev: "PostToolUse", tool: "ScheduleWakeup", x: { at: later, delay: 600 } });
+ev(id(31), { ev: "PostToolUse", tool: "ScheduleWakeup", x: { delay: 600, stop: true } });
+ev(id(31), { ev: "Stop" });
+// 32. A session that closes takes its reminders with it.
+ev(id(32), { ev: "UserPromptSubmit", prompt: "Every hour, check the build" });
+ev(id(32), { ev: "PostToolUse", tool: "CronCreate", x: { id: "c32", at: later, cron: "7 * * * *", rec: true } });
+ev(id(32), { ev: "SessionEnd" });
+// 33. Scheduled tasks it set up: one under the ID it asked for, one the app renamed, and
+// one it asked for that was never made.
+ev(id(33), { ev: "UserPromptSubmit", prompt: "Schedule the digest and a noon check" });
+ev(id(33), { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "t-digest" } });
+ev(id(33), { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "noon-check" } });
+ev(id(33), { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "never-made" } });
+ev(id(33), { ev: "Stop" });
 
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
@@ -293,13 +333,19 @@ try {
   const task = (tid: string) => snap.tasks?.find((x: any) => x.id === tid);
   const digest = task("t-digest");
   const next = digest && new Date(digest.next);
-  check("tasks are read from the app's file", snap.tasks?.length === 3, snap.tasks?.map((x: any) => x.id));
+  check("tasks are read from the app's file, one-time ones too", snap.tasks?.length === 6, snap.tasks?.map((x: any) => x.id));
   check("a task's schedule in words", digest?.schedule === "Weekdays at 7:00 AM", digest?.schedule);
   check("its next run is the next weekday at 7:00", Boolean(next && digest.next > Date.now() && next.getHours() === 7 && next.getMinutes() === 0 && next.getDay() >= 1 && next.getDay() <= 5), digest?.next);
   check("19 its last run is linked, asks you, and nothing was missed", digest?.lastRun?.sid === id(19) && digest?.lastRun?.status === "asks" && digest?.missed === null, digest);
   check("19 the run knows its task", find(s, 19)?.task === "t-digest" && find(s, 19)?.taskName === "Weekday digest", find(s, 19));
   check("a task whose last run needs you comes first", snap.tasks?.[0]?.id === "t-digest", snap.tasks?.map((x: any) => x.id));
-  check("a paused task has no next run and comes last", task("t-paused")?.enabled === false && task("t-paused")?.next === null && snap.tasks?.at(-1)?.id === "t-paused", task("t-paused"));
+  check("a paused task has no next run and comes after the ones that run", task("t-paused")?.enabled === false && task("t-paused")?.next === null && snap.tasks?.at(-3)?.id === "t-paused", snap.tasks?.map((x: any) => x.id));
+  const on = task("t-once-on");
+  check("a one-time task that ran is done even if the app left it on", on?.ran === true && on?.next === null && on?.missed === null, on);
+  const noon = task("noon-check-2");
+  check("a one-time task runs once, at its time", noon?.once != null && noon?.next === noon?.once && /^Once, /.test(noon?.schedule ?? "") && !noon?.ran && noon?.missed === null, noon);
+  const ran = task("t-once-ran");
+  check("a one-time task that ran is done, not paused or missed, and comes last", ran?.ran === true && ran?.next === null && ran?.missed === null && snap.tasks?.at(-1)?.id === "t-once-ran", ran);
   check("a run that didn't happen counts as missed", typeof task("t-hourly")?.missed === "number" && task("t-hourly")?.lastRun === null, task("t-hourly"));
   check("20 an agent's permission, once its tool ran, no longer needs you", find(s, 20)?.status !== "waiting" && find(s, 20)?.needsYou === false, find(s, 20));
   check("21 an agent's unanswered permission needs you, whatever other agents do", find(s, 21)?.status === "waiting" && find(s, 21)?.needsYou === true, find(s, 21));
@@ -333,6 +379,16 @@ try {
   check("24 a short \"anything else?\" is done", find(s, 24)?.status === "done", find(s, 24));
   check("25 an offer of one thing asks you", find(s, 25)?.status === "asks" && /lo suba/.test(find(s, 25)?.ask ?? ""), find(s, 25));
   check("26 an open offer in English is done", find(s, 26)?.status === "done", find(s, 26));
+  check("28 a wakeup shows when it picks up again", find(s, 28)?.status === "done" && find(s, 28)?.reminder?.at === later && !find(s, 28)?.reminder?.every, find(s, 28)?.reminder);
+  const r29 = find(s, 29)?.reminder;
+  check("29 a repeating reminder says how often, its next run and when it stops",
+    r29?.every === "Every 5 minutes" && r29?.at > Date.now() && r29?.at <= Date.now() + 5 * 60_000 + 1000 && Math.abs(r29?.until - (Date.now() + 7 * 24 * HOUR)) < 5 * 60_000, r29);
+  check("30 a deleted reminder is gone", find(s, 30)?.reminder === null, find(s, 30)?.reminder);
+  check("31 a fired reminder and a stopped wakeup are gone", find(s, 31)?.reminder === null, find(s, 31)?.reminder);
+  check("32 closing the session ends its reminders", find(s, 32)?.status === "ended" && find(s, 32)?.reminder === null, find(s, 32));
+  const made33 = find(s, 33)?.made ?? [];
+  check("33 the tasks it set up, by the app's IDs, and not one that was never made",
+    made33.length === 2 && made33[0]?.name === "Weekday digest" && made33[1]?.id === "noon-check-2" && made33[1]?.next != null, made33);
   check("27 an offer of one thing in English asks you", find(s, 27)?.status === "asks" && /push it/.test(find(s, 27)?.ask ?? ""), find(s, 27));
 
   // Last 7 Days and All Sessions
@@ -351,6 +407,9 @@ try {
   s = await state();
   check("after a restart, the question is still there", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("19 after a restart, the run still knows its task", (await history("Weekday digest")).sessions.find((x: any) => x.sid === id(19))?.task === "t-digest");
+  check("28 after a restart, the wakeup is still there", find(s, 28)?.reminder?.at === later, find(s, 28)?.reminder);
+  check("33 after a restart, All Sessions still knows the tasks it set up",
+    (await history("noon check")).sessions.find((x: any) => x.sid === id(33))?.made?.length === 2);
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
 } finally {
   server.kill();
@@ -370,6 +429,40 @@ check("cron: day of month or day of week, either one", new Date(nextRun(parseCro
 check("cron: 7 is Sunday", new Date(nextRun(parseCron("0 7 * * 7")!, thursday)!).getDay() === 0);
 check("cron: the run before", prevRun(parseCron("0 7 * * 1-5")!, thursday) === new Date(2026, 9, 22, 7).getTime());
 check("cron: a bad expression is null", parseCron("61 * * * *") === null && parseCron("bad") === null && parseCron("* * * *") === null);
+
+// The hook keeps when a reminder fires and its ID, never what it will do. Needs jq.
+{
+  const hdir = mkdtempSync(join(tmpdir(), "csm-hook-"));
+  const hook = (payload: object) => Bun.spawnSync(["sh", join(import.meta.dir, "..", "hooks", "session-hook.sh")],
+    { stdin: new TextEncoder().encode(JSON.stringify(payload)), env: { ...process.env, CSM_DIR: hdir } });
+  const secret = "SECRET-PROMPT";
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "ScheduleWakeup",
+    tool_input: { delaySeconds: 1800, prompt: secret, reason: secret }, tool_response: { scheduledFor: 1_800_000_000_000 } });
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "CronCreate",
+    tool_input: { cron: "17 8 23 10 *", recurring: false, prompt: secret }, tool_response: { id: "1386eca0", nextFireAt: 1_800_000_000_000 } });
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "CronCreate",
+    tool_input: { cron: "*/5 * * * *", prompt: secret }, tool_response: "Scheduled recurring task ab12cd34 (*/5 * * * *)." });
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "CronDelete", tool_input: { id: "1386eca0" }, tool_response: [{ type: "text", text: "ok" }] });
+  hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: "mcp__scheduled-tasks__create_scheduled_task",
+    tool_input: { taskId: "noon-check", title: "Noon check", description: secret, prompt: secret } });
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "mcp__scheduled-tasks__create_scheduled_task",
+    tool_input: { taskId: "noon-check", description: secret, prompt: secret }, tool_response: [{ type: "text", text: "Created" }] });
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "Read", tool_input: { file_path: "/x" }, tool_response: "a string" });
+  hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "CronCreate",
+    tool_input: { cron: "0 9 * * *", prompt: secret }, tool_response: [{ type: "text", text: "Scheduled recurring task abcdef12 (0 9 * * *)." }] });
+  hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: 7, tool_input: "a string" });
+  const text = await Bun.file(join(hdir, "events.jsonl")).text().catch(() => "");
+  const lines = text.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  check("hook: one line per event, whatever shape the tool's input or reply has", lines.length === 9, lines.length);
+  check("hook: never a reminder's prompt or a task's description", !text.includes(secret));
+  check("hook: a wakeup's time", lines[0]?.x?.at === 1_800_000_000_000, lines[0]);
+  check("hook: a cron job's ID, time and that it runs once", lines[1]?.x?.id === "1386eca0" && lines[1]?.x?.at === 1_800_000_000_000 && lines[1]?.x?.rec === false, lines[1]);
+  check("hook: the ID from a text reply, and repeating by default", lines[2]?.x?.id === "ab12cd34" && lines[2]?.x?.rec === true, lines[2]);
+  check("hook: a deleted cron job's ID", lines[3]?.x?.id === "1386eca0", lines[3]);
+  check("hook: a scheduled task by its title and ID", lines[4]?.d === "Noon check" && lines[5]?.x?.task === "noon-check", [lines[4], lines[5]]);
+  check("hook: a cron job's ID from a reply in text blocks", lines[7]?.x?.id === "abcdef12", lines[7]);
+  rmSync(hdir, { recursive: true, force: true });
+}
 
 console.log(failed ? `\n${failed} failed` : "\nAll passed");
 process.exit(failed ? 1 : 0);
