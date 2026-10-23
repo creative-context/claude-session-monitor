@@ -1241,6 +1241,7 @@ function shownStatus(s: Session, agents: Agent[]): Shown {
 
 const MISSED_GRACE_MS = 10 * 60 * 1000; // a run gets this long to start before it counts as missed
 const BLOCK_STALE_MS = 3 * 60 * 1000; // no skip for this long: the app stopped trying (it's closed, say)
+const STUCK_MS = 30 * 60 * 1000; // a run that says it's working with no activity for this long is stuck
 const RUNS_SHOWN = 7;
 
 type RunView = {
@@ -1304,9 +1305,14 @@ function taskList(now: number) {
     const trying = skips.length > 0 && now - skips.at(-1)!.at < BLOCK_STALE_MS;
     const started = skips.length > 0 && lastRun != null && lastRun.first >= skips[0].at - 60_000;
     const open = skips.length ? runs.find((r) => r.first < skips[0].at && r.status !== "ended") : undefined;
+    // If the run that holds it up is busy and moving, there's nothing to do but wait:
+    // the app starts this one once that one ends. Otherwise (it waits on you, it's stuck,
+    // or it's done and still open) it needs you.
+    const queued = open?.status === "working" && now - open.last < STUCK_MS;
     const blocked = t.enabled && trying && !started ? {
       since: skips[0].at, last: skips.at(-1)!.at, tries: skips.length, reason: skips.at(-1)!.reason,
-      run: open ? { sid: open.sid, status: open.status, at: open.first } : null,
+      run: open ? { sid: open.sid, status: open.status, at: open.first, last: open.last } : null,
+      queued,
     } : null;
     const missed = Boolean(
       t.enabled && !ran && !blocked && prev != null && prev > Math.max(t.created ?? 0, taskChanged.get(t.id) ?? 0) &&
@@ -1314,7 +1320,7 @@ function taskList(now: number) {
       !(lastRun && lastRun.first >= prev - 60_000), // it ran, the file just hasn't caught up
     );
     const running = lastRun?.status === "working" || lastRun?.status === "waiting";
-    const rank = ran ? 5 : !t.enabled ? 4 : blocked || lastRun?.needsYou ? 0 : running ? 1 : missed ? 2 : 3;
+    const rank = ran ? 5 : !t.enabled ? 4 : (blocked && !blocked.queued) || lastRun?.needsYou ? 0 : running || blocked ? 1 : missed ? 2 : 3;
     return {
       id: t.id,
       name: t.name,
@@ -1410,7 +1416,7 @@ function snapshot() {
     });
   // A scheduled task the app can't start needs you too, like a session that stopped on an error.
   const taskViews = taskList(now);
-  return { now, needs: list.filter((x) => x.needsYou).length + taskViews.filter((t) => t.blocked).length, sessions: list, tasks: taskViews };
+  return { now, needs: list.filter((x) => x.needsYou).length + taskViews.filter((t) => t.blocked && !t.blocked.queued).length, sessions: list, tasks: taskViews };
 }
 
 // ---------------------------------------------------------------- web server
@@ -1540,7 +1546,7 @@ setInterval(readDesktopSessions, 15_000);
 // A task's next run, a missed run and a blocked one change with the clock, not with an event.
 let taskClock = "";
 setInterval(() => {
-  const sig = JSON.stringify(taskList(Date.now()).map((t) => [t.id, t.next, t.missed, t.blocked?.since, t.blocked?.run?.sid]));
+  const sig = JSON.stringify(taskList(Date.now()).map((t) => [t.id, t.next, t.missed, t.blocked?.since, t.blocked?.run?.sid, t.blocked?.queued]));
   if (sig !== taskClock) {
     taskClock = sig;
     version++;

@@ -395,7 +395,7 @@
   /* ---------- scheduled ---------- */
   /* A task's card is calm unless its last run needs you, failed today or is running: then
      it takes that run's color. Done, paused and missed stay plain, with the tag saying it. */
-  #scheduled .card.done, #scheduled .card.unrun, #scheduled .card.ended, #scheduled .card.paused, #scheduled .card.missed {
+  #scheduled .card.done, #scheduled .card.unrun, #scheduled .card.ended, #scheduled .card.paused, #scheduled .card.missed, #scheduled .card.queued {
     --tint: var(--color-background-card); --meta: var(--color-text-secondary);
   }
   #scheduled .card.paused .title { color: var(--color-text-secondary); }
@@ -777,7 +777,8 @@
     if (b.reason === "per_task_limit") {
       if (!b.run) return "a run of it is still open";
       const from = `the run from ${when(b.run.at)}`;
-      return b.run.status === "working" ? `${from} is still going`
+      if (b.queued) return `it starts once ${from} ends`;
+      return b.run.status === "working" ? `${from} has had no activity since ${when(b.run.last)}`
         : b.run.status === "waiting" || b.run.status === "asks" ? `${from} is waiting for you` : `${from} is still open`;
     }
     return b.reason ? `the Claude app skipped it (${b.reason.replace(/_/g, " ")})` : "the Claude app skipped it";
@@ -785,7 +786,7 @@
   const blockedText = (b) => `Didn't run ${when(b.since)}: ${blockedWhy(b)}`;
   const blockedHint = (b) => (b.reason === "per_task_limit" && b.run ? "It runs once that one is closed." : "The Claude app keeps trying every minute.");
   function blockedCards(st = state) {
-    return (st.tasks || []).filter((t) => t.blocked).map((t) => ({
+    return (st.tasks || []).filter((t) => t.blocked && !t.blocked.queued).map((t) => ({
       sid: `task:${t.id}`, kind: "task", task: t.id, taskName: t.name, title: t.name,
       project: t.project, cwd: t.cwd, file: t.file, status: "error", needsYou: true,
       since: t.blocked.since, first: t.blocked.since, last: t.blocked.since,
@@ -1278,6 +1279,7 @@
   function taskLook(t) {
     const r = t.lastRun;
     if (!t.enabled && !t.ran) return { cls: "paused", tag: tag(`${ICON.pause}<span>Paused</span>`, "s-idle"), label: "Paused" };
+    if (t.blocked?.queued) return { cls: "queued", tag: tag(`${ICON.clock}<span>Waiting</span>`, "s-idle"), label: "Waiting" };
     if (t.blocked) return { cls: "error", tag: tag(`${ICON.error}<span>Can't run</span>`, "s-error"), label: "Can't run", fresh: now() - t.blocked.since < FRESH_MS };
     if (r && (r.status === "working" || r.needsYou)) {
       const s = { ...r, background: false };
@@ -1298,7 +1300,9 @@
     const line = (html) => `<div class="line">${html}</div>`;
     const sched = line(`${ICON.calendarClock}<span class="txt">${t.schedule ? esc(t.schedule) : `<code>${esc(t.cron)}</code>`}</span>`);
     let second;
-    if (t.enabled && t.blocked) {
+    if (t.enabled && t.blocked?.queued) {
+      return sched + line(`${ICON.history}<span class="txt">Starts once the run from ${esc(when(t.blocked.run.at))} ends</span>`);
+    } else if (t.enabled && t.blocked) {
       // Two lines, so why it can't run is never cut off.
       const why = blockedWhy(t.blocked);
       return sched + `<div class="wrap"><b>${esc(`Didn't run ${when(t.blocked.since)}.`)}</b> ${esc(why[0].toUpperCase() + why.slice(1))}.</div>`;
@@ -1364,7 +1368,7 @@
       syncIcons(el);
       el.setAttribute("aria-label", [t.name, look.label, plain(taskDetail(t)), nextText ? `Next run ${when(t.next)}` : "", runSummary(t)].filter(Boolean).join(". "));
     }
-    el.title = t.blocked?.run ? "Open the run that's still open in the Claude app" : t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
+    el.title = t.blocked?.run ? (t.blocked.queued ? "Open the run it's waiting for in the Claude app" : "Open the run that's holding it up in the Claude app") : t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
     return el;
   }
 

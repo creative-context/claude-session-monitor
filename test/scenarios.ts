@@ -201,6 +201,12 @@ writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTa
   // still open. 35. Skipped at first, then it started.
   { id: "t-blocked", displayName: "Midnight cleanup", cronExpression: "0 0 * * *", enabled: true, cwd: "/tmp/demo",
     createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 6 * 60_000), lastScheduledFor: iso(midnight - DAY) },
+  // 37. Held up by a run that's busy and moving: it just waits. 38. By one that says it's
+  // working but hasn't done anything since yesterday: stuck, so it needs you.
+  { id: "t-queued", displayName: "Midnight sync", cronExpression: "0 0 * * *", enabled: true,
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 6 * 60_000), lastScheduledFor: iso(midnight - DAY) },
+  { id: "t-stuck", displayName: "Midnight export", cronExpression: "0 0 * * *", enabled: true,
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 6 * 60_000), lastScheduledFor: iso(midnight - DAY) },
   { id: "t-stale", displayName: "Midnight report", cronExpression: "0 0 * * *", enabled: true,
     createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 60_000), lastScheduledFor: iso(midnight - DAY) },
   { id: "t-unblocked", displayName: "Midnight backup", cronExpression: "0 0 * * *", enabled: true,
@@ -209,6 +215,8 @@ writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTa
   // Skipped since just after midnight, and still trying now.
   "t-blocked": [midnight + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" }))
     .concat([{ at: midnight - DAY - HOUR, reason: "per_task_limit" }]), // before its last run: old news
+  "t-queued": [midnight + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" })),
+  "t-stuck": [midnight + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" })),
   // 36. Skipped for a while, then the app stopped trying (it was closed): no longer blocked.
   "t-stale": [midnight + 53_000, midnight + 113_000].map((at) => ({ at, reason: "per_task_limit" })),
   "t-unblocked": [{ at: midnight + 53_000, reason: "per_task_limit" }],
@@ -224,6 +232,15 @@ writeFileSync(join(appDir, "local_run35.json"), JSON.stringify({
 }));
 ev(id(34), { ev: "UserPromptSubmit", prompt: "Midnight cleanup", t: midnight - DAY + 6 * 60_000 });
 ev(id(34), { ev: "Stop", t: midnight - DAY + 9 * 60_000 });
+for (const [n, task, name] of [[37, "t-queued", "Midnight sync"], [38, "t-stuck", "Midnight export"]] as const) {
+  writeFileSync(join(appDir, `local_run${n}.json`), JSON.stringify({
+    cliSessionId: id(n), scheduledTaskId: task, title: name, originCwd: "/tmp/demo",
+    createdAt: midnight - DAY + 6 * 60_000, lastActivityAt: midnight - DAY + 7 * 60_000,
+  }));
+  ev(id(n), { ev: "UserPromptSubmit", prompt: name, t: midnight - DAY + 6 * 60_000 });
+}
+ev(id(37), { ev: "PreToolUse", tool: "Bash", d: "Sync the files", t: Date.now() - 60_000 });
+ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: midnight - DAY + 7 * 60_000 });
 ev(id(35), { ev: "UserPromptSubmit", prompt: "Midnight backup", t: midnight + 2 * 60_000 });
 ev(id(35), { ev: "Stop", t: midnight + 4 * 60_000 });
 writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
@@ -363,7 +380,10 @@ try {
   const task = (tid: string) => snap.tasks?.find((x: any) => x.id === tid);
   const digest = task("t-digest");
   const next = digest && new Date(digest.next);
-  check("tasks are read from the app's file, one-time ones too", snap.tasks?.length === 9, snap.tasks?.map((x: any) => x.id));
+  check("tasks are read from the app's file, one-time ones too", snap.tasks?.length === 11, snap.tasks?.map((x: any) => x.id));
+  const q = task("t-queued"), st = task("t-stuck");
+  check("37 held up by a run that's busy and moving, it just waits: it doesn't need you", q?.blocked?.queued === true && q?.blocked?.run?.sid === id(37) && q?.rank === 1, q?.blocked);
+  check("38 held up by a run with no activity since yesterday, it needs you", st?.blocked?.queued === false && st?.blocked?.run?.sid === id(38) && st?.rank === 0, st?.blocked);
   const blk = task("t-blocked");
   check("34 a task the app keeps skipping is blocked, not missed, with the run that holds it up",
     blk?.blocked?.reason === "per_task_limit" && blk?.blocked?.tries === 3 && blk?.blocked?.run?.sid === id(34) && blk?.missed === null && blk?.rank === 0, blk);
@@ -375,7 +395,7 @@ try {
   check("19 its last run is linked, asks you, and nothing was missed", digest?.lastRun?.sid === id(19) && digest?.lastRun?.status === "asks" && digest?.missed === null, digest);
   check("19 the run knows its task", find(s, 19)?.task === "t-digest" && find(s, 19)?.taskName === "Weekday digest", find(s, 19));
   check("what needs you comes first: a task whose last run asks you, and one that can't run",
-    ["t-digest", "t-blocked"].every((id) => snap.tasks?.slice(0, 2).some((x: any) => x.id === id)), snap.tasks?.map((x: any) => x.id));
+    ["t-digest", "t-blocked", "t-stuck"].every((id) => snap.tasks?.slice(0, 3).some((x: any) => x.id === id)), snap.tasks?.map((x: any) => x.id));
   check("a paused task has no next run and comes after the ones that run", task("t-paused")?.enabled === false && task("t-paused")?.next === null && snap.tasks?.at(-3)?.id === "t-paused", snap.tasks?.map((x: any) => x.id));
   const on = task("t-once-on");
   check("a one-time task that ran is done even if the app left it on", on?.ran === true && on?.next === null && on?.missed === null, on);
@@ -388,8 +408,8 @@ try {
   check("21 an agent's unanswered permission needs you, whatever other agents do", find(s, 21)?.status === "waiting" && find(s, 21)?.needsYou === true, find(s, 21));
   check("22 a finished plan is dropped when the next request comes", find(s, 22)?.status === "working" && find(s, 22)?.plan === null, find(s, 22)?.plan);
   check("the needs count is the cards that need you plus the tasks that can't run",
-    snap.needs === s.filter((x) => x.needsYou).length + snap.tasks.filter((x: any) => x.blocked).length && snap.needs > 0,
-    [snap.needs, s.filter((x) => x.needsYou).length, snap.tasks.filter((x: any) => x.blocked).length]);
+    snap.needs === s.filter((x) => x.needsYou).length + snap.tasks.filter((x: any) => x.blocked && !x.blocked.queued).length && snap.needs > 0,
+    [snap.needs, s.filter((x) => x.needsYou).length, snap.tasks.filter((x: any) => x.blocked && !x.blocked.queued).length]);
 
   // Answer the question and approve the permission
   ev(id(3), { ev: "PostToolUse", tool: "AskUserQuestion", t: Date.now() });
