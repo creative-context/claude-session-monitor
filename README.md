@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.3.3-2D72D2?labelColor=1A1D21" alt="Version 0.3.3">
+  <img src="https://img.shields.io/badge/version-0.3.4-2D72D2?labelColor=1A1D21" alt="Version 0.3.4">
   <img src="https://img.shields.io/badge/license-MIT-238551?labelColor=1A1D21" alt="MIT license">
   <img src="https://img.shields.io/badge/macOS-14%2B-8A8F98?labelColor=1A1D21" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/data-stays_on_your_Mac-6FA6E8?labelColor=1A1D21" alt="Data stays on your Mac">
@@ -56,7 +56,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 
 ### Download the app
 
-1. Download `Claude-Session-Monitor-0.3.3.zip` from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
+1. Download `Claude-Session-Monitor-0.3.4.zip` from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
 2. Open it. The app isn't notarized, so the first time macOS says it can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
 
    ```bash
