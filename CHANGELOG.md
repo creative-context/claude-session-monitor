@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.8
 
 - A turn the Claude app itself marks as needing you (the orange dot in its sidebar) now needs you here too, with the app's words for what to do, even when the closing message asks nothing.
 
