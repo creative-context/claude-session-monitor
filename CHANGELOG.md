@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.5
 
 - A session that set itself a reminder (`/loop`, a cron job, a wakeup) shows when it picks up again, and stays in Active until then. The reminder goes when it fires, is deleted or the session closes.
 - A session that set up a scheduled task shows the task's name. A click on it opens the task in Scheduled.
