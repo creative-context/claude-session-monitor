@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.7
 
 - A scheduled task held up by a run that's busy and moving no longer shows as an error: it says Waiting, starts once that run ends, and doesn't count as needing you. If the run waits on you, has had no activity for 30 minutes, or is done and still open, it stays red and says which.
 
