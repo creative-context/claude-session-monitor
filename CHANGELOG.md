@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.3.6
 
 - A scheduled task the Claude app keeps skipping says Can't run, in red, with why: usually that its last run is still open, which lets no new one start. It used to say Missed. It shows in Active, counts as needing you, and a click opens the run that holds it up.
 
