@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- A turn that ends on an open offer for more ("if you want another change, let me know") or a short "anything else?" no longer counts as needing you. An offer of one specific thing still does.
+- A turn that ends on an open offer for more ("if you want another change, let me know", "let me know how it looks") or a short "anything else?" no longer counts as needing you, in English or Spanish. An offer of one specific thing still does, and so does "I need to know…".
 
 ## 0.3.3
 

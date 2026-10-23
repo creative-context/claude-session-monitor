@@ -530,17 +530,25 @@ const REQUEST = [
   /\b(dime|dimelo|confirmame|avisame|decide|elige|escoge|aprueba|indicame|me dices|me confirmas|me avisas)\b/,
   /\b(quieres que|prefieres|te parece (bien )?que|lo hago yo|lo mando yo|lo envio yo)\b/,
   /\bcon (un|una) ["'“‘][^"'”’]{1,40}["'”’] (lo|la|los|las|te|me|sigo|arranco)\b/,
-  /\b(let me know|tell me|should i|do you want|would you like|want me to|shall i|please confirm|your call|say the word|which (one|option|do you)|approve|i need (you|your)|waiting (for|on) (you|your))\b/,
+  /\b(let me know|tell me|should i|do you want|would you like|want me to|shall i|please confirm|your call|say the word|which (one|option|do you)|approve|i need (you|your|to know)|waiting (for|on) (you|your))\b/,
 ];
 const COURTESY = new RegExp(String.raw`\b(${[
   String.raw`si (necesitas|quieres|gustas|te late|ocupas) (algo|cualquier|otr[oa]s?|mas|seguir|hacer otr[oa]s?|ver otr[oa]s?)`,
   String.raw`cualquier (cosa|duda|otr[oa])`,
   String.raw`(algo|otra cosa) mas`,
+  String.raw`(quieres|necesitas) que (haga|cambie|ajuste|revise|vea|agregue|mueva) (algo|otr[oa]s?|mas)`,
+  String.raw`en que mas`,
+  String.raw`que mas (necesitas|quieres|hago|ocupas|puedo|te ayudo)`,
+  String.raw`(dime|avisame|cuentame) (como (se ve|queda|te va|funciona)|si algo (no|se ve|falla|truena|sale mal))`,
   String.raw`(quedo|sigo) (atento|pendiente|a la orden)`,
   String.raw`if (you|you['’]?d|you would) (need|want|like|have) (anything|any|something|another|more|other|to (keep going|continue))`,
   String.raw`if there['’]?s anything`,
-  String.raw`anything else`,
-  String.raw`any (other |more )?questions`,
+  String.raw`(anything|what) else`,
+  String.raw`any (other|more)`,
+  String.raw`any questions`,
+  String.raw`(let me know|tell me) how it (looks|goes|works|went)`,
+  String.raw`if (anything|something) (looks|seems|feels) (off|wrong|odd|weird|broken)`,
+  String.raw`if (anything|something) (breaks|is unclear)`,
   String.raw`happy to help`,
 ].join("|")})\b`);
 
