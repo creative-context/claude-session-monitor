@@ -38,7 +38,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 **What it does differently:**
 
 - **What needs you comes first.** A session blocked on a permission or a question, one whose turn ended asking you something, and one that stopped on an error get the strongest colors and the top of the screen, and so does a scheduled task the Claude app can't start. The same count shows in the window, on the Dock icon and in the menu bar.
-- **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one") and an API error each count as needing you. Courtesy closings don't: "anything else?", or an open offer like "if you want another change, let me know".
+- **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one"), an API error, and a turn the Claude app itself marks as needing you each count as needing you. Courtesy closings don't: "anything else?", or an open offer like "if you want another change, let me know".
 - **It sees the work behind a session.** The tool it's using and on what, the step of its plan, and its subagents and workflows with their phase and tokens.
 - **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened. A session that set itself a reminder or set up a task says so on its card.
 - **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.
@@ -112,7 +112,7 @@ Most urgent first. The whole card takes its state's color, strongest for what ne
 
 | State | Color | When |
 |---|---|---|
-| Needs you | Orange, strong | Blocked mid-turn: it asks for permission, asks a question, waits for a plan approval or needs input. Or its turn ended asking you something: the app's next-step question, a question in the last two sentences of its closing message, or a request without a question mark. Questions count for a day |
+| Needs you | Orange, strong | Blocked mid-turn: it asks for permission, asks a question, waits for a plan approval or needs input. Or its turn ended asking you something: the app's next-step question, a question in the last two sentences of its closing message, a request without a question mark, or the Claude app's own summary of the turn saying you need to do something. Questions count for a day |
 | Error | Red, strong | An API error ended the turn, such as a server error or a usage limit. Caught with or without a `Stop` event. Errors count for a day |
 | Working | Blue | Thinking or using a tool |
 | Agents working | Light blue | Its own turn ended, but subagents or a workflow are still running |
@@ -137,7 +137,7 @@ It never stores whole conversations.
 **What it reads and never writes:**
 
 - The end of each session's transcript in `~/.claude/projects`, to tell how a turn ended and to find its subagents and workflows.
-- The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag and which scheduled task a session is a run of.
+- The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag, which scheduled task a session is a run of, and the app's one-line note of what a finished turn needs from you, if anything.
 - The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times, and when the app skipped a run and why. It never reads what a task does.
 
 **What it changes:** the hook entries in `~/.claude/settings.json`, and nothing else.

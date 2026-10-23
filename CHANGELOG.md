@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A turn the Claude app itself marks as needing you (the orange dot in its sidebar) now needs you here too, with the app's words for what to do, even when the closing message asks nothing.
+
 ## 0.3.7
 
 - A scheduled task held up by a run that's busy and moving no longer shows as an error: it says Waiting, starts once that run ends, and doesn't count as needing you. If the run waits on you, has had no activity for 30 minutes, or is done and still open, it stays red and says which.

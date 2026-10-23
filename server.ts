@@ -98,6 +98,7 @@ type Session = {
   model?: string;
   appCwd?: string; // the folder the app opened the session in; needed to reopen it
   task?: string; // the scheduled task this session is a run of
+  appAsk?: { text: string; edge: number }; // what the Claude app says its last turn needs from you
   reminders?: Reminder[]; // what it set to wake itself up: a /loop wakeup or a cron job
   made?: { id: string; t: number }[]; // scheduled tasks of the Claude app it set up, as asked
 };
@@ -680,6 +681,7 @@ function classifyTurn(s: Session) {
     s.outcome = "done";
   }
   version++;
+  applyAppAsk(s); // the app's summary may already be in
 }
 
 function checkTurns() {
@@ -895,10 +897,32 @@ function readDesktopSoon() {
   desktopTimer = setTimeout(readDesktopSessions, 1500);
 }
 
+// The Claude app sums up each finished turn (postTurnSummary). When that summary is of the
+// session's latest message and names something you need to do (needs_action), the turn
+// asks you, even with no question in it. Only that one line is read.
+function appAskOf(j: any): { text: string; edge: number } | undefined {
+  const p = j?.postTurnSummary;
+  if (!p || typeof p !== "object" || typeof p.needs_action !== "string" || !p.needs_action.trim()) return undefined;
+  if (!p.summarizes_uuid || p.summarizes_uuid !== j.lastAssistantUuid) return undefined; // about an older turn
+  const edge = typeof j.lastTurnEdgeAt === "number" ? j.lastTurnEdgeAt : typeof j.lastActivityAt === "number" ? j.lastActivityAt : 0;
+  return { text: p.needs_action.trim().replace(/\s+/g, " ").slice(0, 200), edge };
+}
+
+// A turn we read as done that the app says needs you: it asks you, with the app's words.
+function applyAppAsk(s: Session) {
+  const a = s.appAsk;
+  if (!a || s.status !== "done" || !s.classified || s.outcome !== "done") return;
+  if (a.edge < s.since - 10_000) return; // the summary is of an earlier turn
+  s.outcome = "asks";
+  s.askText = a.text;
+  version++;
+}
+
 function readDesktopSessions() {
   if (!existsSync(APP_SESSIONS)) return;
   const byCli = new Map<string, {
     title?: string; archived?: boolean; model?: string; cwd?: string; created?: number; last?: number; task?: string;
+    ask?: { text: string; edge: number };
   }>();
   const found = new Map<string, Task>();
   try {
@@ -922,6 +946,7 @@ function readDesktopSessions() {
                 created: typeof j.createdAt === "number" ? j.createdAt : undefined,
                 last: typeof j.lastActivityAt === "number" ? j.lastActivityAt : undefined,
                 task: typeof j.scheduledTaskId === "string" ? j.scheduledTaskId : undefined,
+                ask: appAskOf(j),
               });
             }
           } catch {}
@@ -963,6 +988,10 @@ function readDesktopSessions() {
         title: d.title, model: d.model, archived: d.archived, tp: findTranscript(sid), task: d.task,
       });
       continue;
+    }
+    if (JSON.stringify(d.ask) !== JSON.stringify(s.appAsk)) {
+      s.appAsk = d.ask;
+      applyAppAsk(s);
     }
     if (d.title !== s.title || d.archived !== s.archived || d.model !== s.model || d.cwd !== s.appCwd || d.task !== s.task) {
       s.title = d.title;

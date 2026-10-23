@@ -241,6 +241,23 @@ for (const [n, task, name] of [[37, "t-queued", "Midnight sync"], [38, "t-stuck"
 }
 ev(id(37), { ev: "PreToolUse", tool: "Bash", d: "Sync the files", t: Date.now() - 60_000 });
 ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: midnight - DAY + 7 * 60_000 });
+// 39–41. The Claude app's own summary of the last turn. 39: it names something you need to
+// do, though the closing has no question. 40: the same, but about an earlier turn. 41: done.
+for (const [n, cat, action, about] of [
+  [39, "blocked", "In Routines, set Permissions to Bypass for the three tasks", "u-last"],
+  [40, "blocked", "Approve the old plan", "u-older"],
+  [41, "completed", "", "u-last"],
+] as const) {
+  const tp = transcript(`t${n}.jsonl`, [{ type: "user", message: { content: "Fix the routines" } }, said("Listo, quedó arreglado.")]);
+  const stop = Date.now() - 30_000 + n;
+  ev(id(n), { ev: "UserPromptSubmit", prompt: "Fix the routines", tp, t: stop - 60_000 });
+  ev(id(n), { ev: "Stop", tp, t: stop });
+  writeFileSync(join(appDir, `local_sum${n}.json`), JSON.stringify({
+    cliSessionId: id(n), title: `Routines ${n}`, originCwd: "/tmp/demo", createdAt: stop - 60_000, lastActivityAt: stop,
+    lastTurnEdgeAt: stop, lastAssistantUuid: "u-last",
+    postTurnSummary: { status_category: cat, status_detail: "Some detail", needs_action: action, summarizes_uuid: about },
+  }));
+}
 ev(id(35), { ev: "UserPromptSubmit", prompt: "Midnight backup", t: midnight + 2 * 60_000 });
 ev(id(35), { ev: "Stop", t: midnight + 4 * 60_000 });
 writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
@@ -435,6 +452,10 @@ try {
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
+  check("39 when the Claude app says the turn needs you, it asks you, in the app's words",
+    find(s, 39)?.status === "asks" && find(s, 39)?.ask === "In Routines, set Permissions to Bypass for the three tasks" && find(s, 39)?.needsYou === true, find(s, 39));
+  check("40 a summary of an earlier turn doesn't count", find(s, 40)?.status === "done", find(s, 40));
+  check("41 a completed turn stays done", find(s, 41)?.status === "done", find(s, 41));
   check("24 a short \"anything else?\" is done", find(s, 24)?.status === "done", find(s, 24));
   check("25 an offer of one thing asks you", find(s, 25)?.status === "asks" && /lo suba/.test(find(s, 25)?.ask ?? ""), find(s, 25));
   check("26 an open offer in English is done", find(s, 26)?.status === "done", find(s, 26));
