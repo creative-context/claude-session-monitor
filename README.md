@@ -38,7 +38,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 **What it does differently:**
 
 - **What needs you comes first.** A session blocked on a permission or a question, one whose turn ended asking you something, and one that stopped on an error get the strongest colors and the top of the screen. The same count shows in the window, on the Dock icon and in the menu bar.
-- **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one") and an API error each count as needing you. Courtesy closings don't.
+- **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one") and an API error each count as needing you. Courtesy closings don't: "anything else?", or an open offer like "if you want another change, let me know".
 - **It sees the work behind a session.** The tool it's using and on what, the step of its plan, and its subagents and workflows with their phase and tokens.
 - **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened.
 - **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.

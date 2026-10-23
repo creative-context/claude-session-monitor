@@ -216,6 +216,17 @@ ev(id(22), { ev: "PreToolUse", tool: "mcp__ccd_turn__update_plan", x: { items: [
 ev(id(22), { ev: "Stop" });
 ev(id(22), { ev: "UserPromptSubmit", prompt: "And one more thing" });
 
+// 23–25. An open offer for more is a courtesy closing, and so is a short "anything else?".
+// An offer of one specific thing still asks you.
+const closing = (n: number, text: string) => {
+  const tp = transcript(`t${n}.jsonl`, [{ type: "user", message: { content: "Ship it" } }, said(text)]);
+  ev(id(n), { ev: "UserPromptSubmit", prompt: "Ship it", tp });
+  ev(id(n), { ev: "Stop", tp });
+};
+closing(23, "Ya está publicada la versión nueva. Si quieres seguir con otro ajuste, dime.");
+closing(24, "El banner ya está arriba. ¿Algo más?");
+closing(25, "Dejé el borrador listo. Si quieres que lo suba, dime.");
+
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
@@ -316,6 +327,9 @@ try {
   check("0 SubagentStop ends the agent, session back to done", find(s, 0)?.status === "done" && find(s, 0)?.agentCount === 0, find(s, 0));
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
+  check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
+  check("24 a short \"anything else?\" is done", find(s, 24)?.status === "done", find(s, 24));
+  check("25 an offer of one thing asks you", find(s, 25)?.status === "asks" && /lo suba/.test(find(s, 25)?.ask ?? ""), find(s, 25));
 
   // Last 7 Days and All Sessions
   check("17 a session from 8 days ago is not in Last 7 Days", !find(s, 17), find(s, 17));

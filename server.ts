@@ -509,15 +509,21 @@ function closingSentences(text: string, count: number): string[] {
 }
 
 // The question a closing message ends on: one of the last two sentences of its last
-// paragraph ("¿…?" works too). A question earlier in the text doesn't count.
+// paragraph ("¿…?" works too). A question earlier in the text doesn't count, and neither
+// does a short courtesy one ("¿Algo más?", "Anything else I can help with?").
 function closingQuestion(text: string): string | undefined {
-  const q = closingSentences(text, 2).reverse().find((s) => s.endsWith("?"));
+  const q = closingSentences(text, 2).reverse().find((s) => s.endsWith("?") && !courtesyQuestion(s));
   return q && q.length > 3 ? q.slice(0, 160) : undefined;
+}
+function courtesyQuestion(s: string): boolean {
+  return COURTESY.test(fold(s)) && s.split(/\s+/).length <= 6;
 }
 
 // Requests without a question mark ("Solo me falta saber cuál prefieres", "Con un
-// 'adelante' lo hago", "Let me know which one"). Courtesy closings ("if you need
-// anything else") don't count.
+// 'adelante' lo hago", "Let me know which one"). Courtesy closings, open offers for
+// anything more ("si necesitas algo más, avísame", "si quieres seguir con otro ajuste,
+// dime", "if you want another change, let me know"), don't count. An offer of one
+// thing ("si quieres que lo suba, dime") does.
 const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
 const REQUEST = [
   /\b(me falta saber|solo falta|necesito (saber|que)|falta que (me )?(digas|confirmes|decidas|elijas|apruebes))\b/,
@@ -526,7 +532,17 @@ const REQUEST = [
   /\bcon (un|una) ["'“‘][^"'”’]{1,40}["'”’] (lo|la|los|las|te|me|sigo|arranco)\b/,
   /\b(let me know|tell me|should i|do you want|would you like|want me to|shall i|please confirm|your call|say the word|which (one|option|do you)|approve|i need (you|your)|waiting (for|on) (you|your))\b/,
 ];
-const COURTESY = /\b(si necesitas (algo|cualquier)|cualquier (cosa|duda)|if you (need|have) (anything|any)|any (other )?questions|happy to help)\b/;
+const COURTESY = new RegExp(String.raw`\b(${[
+  String.raw`si (necesitas|quieres|gustas|te late|ocupas) (algo|cualquier|otr[oa]s?|mas|seguir|hacer otr[oa]s?|ver otr[oa]s?)`,
+  String.raw`cualquier (cosa|duda|otr[oa])`,
+  String.raw`(algo|otra cosa) mas`,
+  String.raw`(quedo|sigo) (atento|pendiente|a la orden)`,
+  String.raw`if (you|you['’]?d|you would) (need|want|like|have) (anything|any|something|another|more|other|to (keep going|continue))`,
+  String.raw`if there['’]?s anything`,
+  String.raw`anything else`,
+  String.raw`any (other |more )?questions`,
+  String.raw`happy to help`,
+].join("|")})\b`);
 
 function closingRequest(text: string): string | undefined {
   // The first request in the closing lines says the most ("which of the two"); the

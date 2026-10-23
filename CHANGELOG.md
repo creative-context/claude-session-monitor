@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- A turn that ends on an open offer for more ("if you want another change, let me know") or a short "anything else?" no longer counts as needing you. An offer of one specific thing still does.
+
 ## 0.3.3
 
 - All Sessions splits a long day into two columns in a wide window, as Last 7 Days does.
