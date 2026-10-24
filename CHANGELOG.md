@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Last 7 Days moves more smoothly, with anime.js's layout module, which ships inside the app. A card that leaves Active turns into its row in the day below, a card that goes away fades out, and the rows and sections around them slide into place. Reduce Motion turns it off.
 - An open offer like "cuando quieras, dímelo" or "whenever you're ready, let me know" is a courtesy closing, not a request.
 - When the Claude app reads a finished turn as done with nothing for you, a request without a question mark no longer counts as needing you. Questions still do.
 

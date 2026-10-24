@@ -148,7 +148,7 @@ It never stores whole conversations.
 
 1. **Hook** (`hooks/session-hook.sh`). Claude Code runs it on every event of every session, and it appends one short line to `events.jsonl`. No network, no output, and it always exits 0. It takes about 12 ms.
 2. **Server** (`server.ts`, Bun). It reads that file, keeps a small state per session, saves it to `sessions.db` and streams it to the page. `cron.ts` reads the scheduled tasks' schedules, to say them in words and to work out the next run and a missed one.
-3. **Page** (`public/index.html`). The cards, the three views and their empty and offline states. It uses the colors of the [Obsidian theme](https://github.com/creative-context/astryx-theme-obsidian) and Apple\'s system fonts, SF Pro and SF Mono, so it ships no font files.
+3. **Page** (`public/index.html`). The cards, the three views and their empty and offline states. It uses the colors of the [Obsidian theme](https://github.com/creative-context/astryx-theme-obsidian) and Apple\'s system fonts, SF Pro and SF Mono, so it ships no font files. In Last 7 Days, cards that move, leave or turn into rows are animated with the layout module of [anime.js](https://animejs.com), which ships inside the app (`public/anime-layout.js`), so it loads nothing from the network. Reduce Motion turns it off.
 4. **App** (`app/main.swift`). A standard macOS window with a transparent title bar, the usual menus, Settings, a toolbar for the views, search and sound, a Dock icon and a menu bar item. It runs the server it carries and starts it again if it stops.
 
 ## Develop
@@ -183,4 +183,4 @@ Every push to `main` runs the tests on GitHub Actions. Publishing a release buil
 
 ## License
 
-[MIT](LICENSE).
+[MIT](LICENSE). `public/anime-layout.js` is anime.js 4.5.0 by Julian Garnier, also MIT; its license is at the top of that file.

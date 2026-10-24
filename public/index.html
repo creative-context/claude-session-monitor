@@ -255,6 +255,7 @@
     border-radius: var(--radius-container);
     overflow: hidden;
     position: relative;
+    /* A color change fades here; when the card also moves, the layout animation fades it. */
     transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow 700ms var(--ease-standard);
   }
   /* What needs you (blocked, or a question) and errors get the strongest tint; work in
@@ -921,6 +922,8 @@
   ];
 
   const cards = new Map(); // sid → card element, kept between updates
+  let weekLayout = null; // anime.js layout for Last 7 Days, once its module has loaded
+  let weekShape = ""; // which sessions are in which section, in order, at the last draw
   const groups = new Map(); // section id → section element
 
   function upsertCard(s) {
@@ -929,7 +932,8 @@
       el = document.createElement("button");
       el.type = "button";
       el.dataset.sid = s.sid;
-      if (seen.size) el.classList.add("new"); // not on the first draw
+      el.dataset.layoutId = `s-${s.sid}`; // the same as its row, so one can turn into the other
+      if (seen.size && !weekLayout) el.classList.add("new"); // not on the first draw; the layout fades it in otherwise
       el.addEventListener("animationend", (e) => { if (e.animationName === "enter") el.classList.remove("new"); });
       cards.set(s.sid, el);
     }
@@ -996,7 +1000,7 @@
     const time = earlier ? `${new Date(s.last).toLocaleDateString("en-US", { weekday: "short" })} ${clock(s.last)}` : clock(s.last);
     const sched = s.task ? `<span class="hsched" title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : "";
     const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time, ...schedWords(s)].filter(Boolean).join(". ");
-    return `<button type="button" class="hrow s-${st}${isStale(s) ? " stale" : ""}" data-sid="${esc(s.sid)}" title="Open in the Claude app" aria-label="${esc(aria)}">
+    return `<button type="button" class="hrow s-${st}${isStale(s) ? " stale" : ""}" data-sid="${esc(s.sid)}" data-layout-id="s-${esc(s.sid)}" title="Open in the Claude app" aria-label="${esc(aria)}">
       <span class="hicon" title="${esc(label(s))}">${still(statusIcon(s))}</span>
       <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}${schedIcons(s)}</span>
       ${s.project ? tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project) : "<span></span>"}
@@ -1011,22 +1015,23 @@
     listEl._html = html;
     const next = document.createElement("template");
     next.innerHTML = html;
-    const fresh = [...next.content.children];
-    const old = [...listEl.children];
-    if (fresh.length !== old.length || fresh.some((n, i) => n.dataset.sid !== old[i].dataset.sid)) {
-      const focused = listEl.contains(document.activeElement) ? document.activeElement.dataset.sid : null;
-      listEl.replaceChildren(...fresh);
-      for (const el of listEl.children) el._html = el.innerHTML;
-      if (focused) listEl.querySelector(`[data-sid="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
-      return;
-    }
-    fresh.forEach((n, i) => {
-      const o = old[i];
+    // Keep each session's row element and change it in place, so it keeps hover and focus
+    // and the layout animation sees it move rather than leave and come back.
+    const old = new Map([...listEl.children].map((el) => [el.dataset.sid, el]));
+    const focused = listEl.contains(document.activeElement) ? document.activeElement.dataset.sid : null;
+    const els = [...next.content.children].map((n) => {
+      const o = old.get(n.dataset.sid);
+      if (!o) { n._html = n.innerHTML; return n; }
       const cls = n.className + (o.classList.contains("found") ? " found" : "");
       if (o.className !== cls) o.className = cls;
       for (const a of ["title", "aria-label"]) if (o.getAttribute(a) !== n.getAttribute(a)) o.setAttribute(a, n.getAttribute(a));
       if (o._html !== n.innerHTML) { o.innerHTML = n.innerHTML; o._html = n.innerHTML; }
+      return o;
     });
+    if (els.length !== listEl.children.length || els.some((el, i) => listEl.children[i] !== el)) {
+      listEl.replaceChildren(...els);
+      if (focused && document.activeElement?.dataset?.sid !== focused) listEl.querySelector(`[data-sid="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
+    }
   }
 
   const LONG_DAY = 6; // more rows than this, and a wide window splits the day in two columns
@@ -1053,6 +1058,7 @@
       $week.innerHTML = emptyWeek();
       return;
     }
+    const hadShell = Boolean($week.querySelector(":scope > .wsplit"));
     weekShell();
     const $main = $week.querySelector(".wmain");
     const $side = $week.querySelector(".wside");
@@ -1060,6 +1066,14 @@
     // Cards are kept between updates, one per session. A status change then fades the
     // card's color instead of redrawing it, and a card that changes place slides there.
     const before = new Map([...cards].map(([sid, el]) => [sid, el.isConnected ? el.getBoundingClientRect() : null]));
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    // Only a change in what is where (which cards and rows, in what order) is animated by
+    // the layout. While it measures it mutes CSS transitions, and a card's color fade on a
+    // status change must keep running, so updates that only change content skip it.
+    const shape = JSON.stringify(SECTIONS.map((g) => [g.id, list.filter((s) => SECTIONS.find((x) => x.test(s)).id === g.id).map((s) => s.sid)]));
+    const moved = shape !== weekShape;
+    weekShape = shape;
+    const glide = moved && hadShell && weekLayout && !still && document.visibilityState === "visible";
     const buckets = new Map(SECTIONS.map((g) => [g.id, []]));
     for (const s of list) buckets.get(SECTIONS.find((g) => g.test(s)).id).push(s);
     // Newest first in the day sections; the server's order (urgency) in Active.
@@ -1068,18 +1082,32 @@
     const section = (g, body) => {
       const sec = document.createElement("section");
       sec.className = `group ${g.id}`;
+      sec.dataset.layoutId = `g-${g.id}`;
       sec.setAttribute("aria-label", g.label);
       sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2>${body}`;
       groups.set(g.id, sec);
       return sec;
     };
 
+    // What leaves for good is hidden first, so the layout can fade it out, and taken out
+    // on the next draw. A card that becomes a row is taken out now: the row takes its place.
+    const listed = new Set(list.map((s) => s.sid));
+    const drop = (el) => {
+      if (!glide) return el.remove();
+      el.style.display = "none";
+      el.dataset.leaving = String(Date.now());
+      // Its rows may show up in another section now; their ids belong to those.
+      el.querySelectorAll("[data-layout-id]").forEach((c) => c.removeAttribute("data-layout-id"));
+    };
+    const mutate = () => {
+    // Gone once their fade has run its course, even if the next update comes sooner.
+    $week.querySelectorAll("[data-leaving]").forEach((el) => { if (Date.now() - Number(el.dataset.leaving) > 500) el.remove(); });
     // Active: cards.
     const active = buckets.get("active");
     const keep = new Set();
     let sec = groups.get("active");
     if (!active.length) {
-      sec?.remove();
+      if (sec) drop(sec);
       groups.delete("active");
     } else {
       if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="grid"></div>`));
@@ -1088,17 +1116,18 @@
       active.forEach((s, i) => {
         const el = upsertCard(s);
         keep.add(s.sid);
-        if (grid.children[i] !== el) grid.insertBefore(el, grid.children[i] || null);
+        const at = [...grid.children].filter((c) => !("leaving" in c.dataset))[i]; // what's leaving doesn't count
+        if (at !== el) grid.insertBefore(el, at || null);
       });
     }
-    for (const [sid, el] of cards) if (!keep.has(sid)) { el.remove(); cards.delete(sid); }
+    for (const [sid, el] of cards) if (!keep.has(sid)) { listed.has(sid) ? el.remove() : drop(el); cards.delete(sid); }
 
     // The rest of the week: compact rows, by day.
     let prev = null;
     for (const g of SECTIONS.slice(1)) {
       const items = buckets.get(g.id);
       sec = groups.get(g.id);
-      if (!items.length) { sec?.remove(); groups.delete(g.id); continue; }
+      if (!items.length) { if (sec) drop(sec); groups.delete(g.id); continue; }
       if (!sec) sec = section(g, `<div class="hlist"></div>`);
       const want = prev ? prev.nextSibling : $side.firstChild;
       if (sec !== want) $side.insertBefore(sec, want);
@@ -1108,10 +1137,17 @@
       rows.classList.toggle("long", items.length > LONG_DAY);
       morphRows(rows, items.map((s) => weekRow(s, g.id === "earlier")).join(""));
     }
+    };
 
-    // FLIP: start each moved card where it was on screen and let it glide to its new
-    // place. Starting from the on-screen position keeps it smooth even mid-move.
-    if (!matchMedia("(prefers-reduced-motion: reduce)").matches) {
+    // anime.js measures before and after, then animates what changed: a card that moves
+    // glides, one that leaves fades out instead of vanishing, a section opens and closes,
+    // and a card that becomes a row (or a row a card) turns into it.
+    if (glide) return void weekLayout.update(mutate); // it fades colors as it moves things
+    mutate();
+
+    // Without it, FLIP: start each moved card where it was on screen and let it glide to
+    // its new place. Starting from the on-screen position keeps it smooth even mid-move.
+    if (!still) {
       for (const [sid, el] of cards) {
         const a = before.get(sid);
         if (!a) continue;
@@ -1510,7 +1546,8 @@
   $content.addEventListener("keydown", (e) => {
     const from = e.target.closest?.(".card, .hrow");
     if (!from || e.metaKey || e.altKey || e.ctrlKey) return;
-    const items = [...(view === "week" ? $week : view === "history" ? $history : $scheduled).querySelectorAll(".card, .hrow")];
+    const items = [...(view === "week" ? $week : view === "history" ? $history : $scheduled).querySelectorAll(".card, .hrow")]
+      .filter((el) => !el.closest("[data-leaving]")); // on its way out
     const i = items.indexOf(from);
     let to;
     if (e.key === "Home") to = items[0];
@@ -1940,6 +1977,18 @@
   render();
   connect();
   setInterval(render, 15000); // keeps "5m ago" fresh
+
+  // anime.js's layout module ships with the page (no network). Until it loads, or if it
+  // can't, the cards still glide with the page's own FLIP.
+  import("./anime-layout.js").then(({ createLayout }) => {
+    weekLayout = createLayout($week, {
+      children: [".group", ".card", ".hrow"],
+      duration: 420,
+      ease: "out(4)",
+      enterFrom: { opacity: 0, scale: 0.98 },
+      leaveTo: { opacity: 0, scale: 0.98 },
+    });
+  }).catch(() => {});
 </script>
 </body>
 </html>

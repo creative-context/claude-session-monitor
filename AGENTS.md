@@ -9,6 +9,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page.
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.
 - `public/index.html`: the whole page, styles and script: the Obsidian theme's colors in Apple's system fonts (SF Pro, SF Mono), with no font files.
+- `public/anime-layout.js`: anime.js's layout module (`createLayout`), MIT, built from the npm package with `bun build` (its header says how). It animates Last 7 Days; the page works without it. Never load it from a CDN: the app makes one network request only.
 - `app/main.swift`: the native app. `app/build.sh` builds it universal and copies the server, the page and the hook into it.
 - `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots.
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
