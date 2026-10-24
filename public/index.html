@@ -325,8 +325,8 @@
      what the agents do. */
   @media (max-height: 600px) {
     :root { --csm-card-h: 130px; }
-    .card .title { -webkit-line-clamp: 1; margin-top: 10px; font-size: 14px; line-height: 18px; }
-    .card .detail { margin-top: 3px; font-size: 12px; line-height: 15px; }
+    .card .title { -webkit-line-clamp: 1; margin-top: 10px; font-size: 13.5px; line-height: 17px; }
+    .card .detail { margin-top: 3px; font-size: 11.5px; line-height: 15px; }
     .card .tags { padding-top: 8px; }
     .card:has(.bar) .tags { display: none; } /* the plan's bar takes the folder's place */
     .card .bar { margin-top: 8px; }
@@ -349,7 +349,11 @@
   .tags .tag { flex: 0 1 auto; }
   .tags .tag.name { flex: 0 100 auto; min-width: 40px; }
   /* A folder is a name from the file system, so it's the one thing set in mono. */
-  .card .tags .tag.name { font-family: var(--font-family-mono); font-size: 10.5px; }
+  .card .tags .tag.name { font-family: var(--font-family-mono); font-size: 10.5px; font-weight: 500; }
+  /* Weights as in the strip mockup: the state tag reads first, then the time. */
+  .card .top .tag { font-weight: 600; }
+  .card .time { font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
+  .card .detail .cur { font-weight: 500; color: var(--csm-text-on-tint); }
   .sdot { width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
   .sdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
   /* Needs you: a dot that beats where the icon was, for as long as it needs you. */
@@ -853,7 +857,7 @@
     const wrap = (html) => `<div class="wrap">${html}</div>`;
     const lines = (a, b) => `<div class="line">${a}</div>${b ? `<div class="line">${b}</div>` : ""}`;
     const plan = s.plan?.current
-      ? `${ICON.listChecks}<span class="txt"><span class="sub">Step ${s.plan.index} of ${s.plan.total} ·</span> ${esc(s.plan.current)}</span>` : "";
+      ? `${ICON.listChecks}<span class="txt"><span class="sub">Step ${s.plan.index} of ${s.plan.total} ·</span> <span class="cur">${esc(s.plan.current)}</span></span>` : "";
     const agent = busiest(s);
 
     if (s.kind === "task") {
