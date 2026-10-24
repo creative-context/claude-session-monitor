@@ -4,7 +4,7 @@
 
 - In a short window the cards are lower (130 px) and keep their folder close to the text; a card with a plan shows its bar in the folder's place.
 - The header reads like a strip: each count's number in white and its words in gray, only what needs you in orange, the working count neutral, and Active as a small label.
-- Folder names on cards drop their icon; the mono name says what it is.
+- Folder names on cards are set in Medium mono, next to their folder icon.
 - Card type follows the mockup: the state tag in Semibold, the time in Medium, the folder in Medium mono and the current step's name in Medium.
 
 ## 0.4.0

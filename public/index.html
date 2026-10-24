@@ -887,7 +887,7 @@
 
   function tags(s) {
     const out = [];
-    if (s.project) out.push(tag(`<span>${esc(s.project)}</span>`, "name", s.project)); // the mono name says it's a folder
+    if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
     const wf = s.workflows?.[0];
     if (wf || s.agentCount) {
       const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);
