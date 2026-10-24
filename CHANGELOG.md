@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.2
 
 - In a short window, a card's plan bar sits at the foot of the card, in line with the other cards' folders.
 
