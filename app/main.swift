@@ -82,6 +82,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var statusItem: NSStatusItem!
     var liveLabel: NSTextField!
     var soundItem: NSToolbarItem?
+    var soundButton: NSButton?
     var viewSwitch: NSSegmentedControl?
     var searchItem: NSSearchToolbarItem?
     var statusSoundItem: NSMenuItem!
@@ -353,11 +354,19 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             paintLive()
             return item
         case .sound:
+            // While the sound is on, the speaker takes the accent color; the button itself
+            // stays plain, so it never competes with what needs you.
             let item = NSToolbarItem(itemIdentifier: id)
             item.label = "Sound"
-            item.target = self
-            item.action = #selector(toggleSound)
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .toolbar
+            button.setButtonType(.momentaryPushIn)
+            button.imagePosition = .imageOnly
+            button.target = self
+            button.action = #selector(toggleSound)
+            item.view = button
             soundItem = item
+            soundButton = button
             paintSound()
             return item
         default:
@@ -414,11 +423,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let box = NSSize(width: ceil(symbols.map(\.size.width).max()!), height: ceil(symbols.map(\.size.height).max()!))
         let symbol = symbols[on ? 0 : 1]
         let image = NSImage(size: box, flipped: false) { rect in
-            symbol.draw(in: NSRect(x: (rect.width - symbol.size.width) / 2, y: (rect.height - symbol.size.height) / 2,
-                                   width: symbol.size.width, height: symbol.size.height))
+            let at = NSRect(x: (rect.width - symbol.size.width) / 2, y: (rect.height - symbol.size.height) / 2,
+                            width: symbol.size.width, height: symbol.size.height)
+            symbol.draw(in: at)
+            // On, the speaker is drawn in the accent color: toolbar buttons ignore a tint.
+            if on {
+                NSColor.controlAccentColor.set()
+                at.fill(using: .sourceAtop)
+            }
             return true
         }
-        image.isTemplate = true // the toolbar tints it like any other icon
+        image.isTemplate = !on // off, the toolbar tints it like any other icon
         image.accessibilityDescription = description
         return image
     }
@@ -428,6 +443,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         // A speaker, not a bell: on a Mac a bell reads as notifications, and this is sound.
         soundItem?.image = soundIcon(on: soundOn, description: text)
         soundItem?.toolTip = text
+        soundButton?.image = soundIcon(on: soundOn, description: text)
+        soundButton?.toolTip = text
+        soundButton?.setAccessibilityLabel("Alert sound")
         statusSoundItem?.state = soundOn ? .on : .off
         settingsSound?.state = soundOn ? .on : .off
     }
