@@ -1100,7 +1100,7 @@
 
   // The empty Active tells, in a loop, what the app does with sessions: two start working,
   // one stops to need you and moves to the first place (with the cards' own glide), then
-  // both finish, rest done for a while, fade out and start again. Reduce Motion shows them
+  // both finish and rest done for a while before the next round. Reduce Motion shows them
   // done and still.
   function quietStory(el) {
     const art = el.querySelector(".qart");
@@ -1118,15 +1118,17 @@
         if (Math.abs(dx) > 1) k.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], glide);
       }
     };
-    const steps = [[200, () => enter(a, "work")], [700, () => enter(b, "work")],
-      [2200, () => { set(b, "need"); first(b); }], [4200, () => set(b, "done")], [5200, () => set(a, "done")],
-      [8000, () => { set(a, "off"); set(b, "off"); }]];
+    // Each round, the card in second place is the one that needs you, so they take turns.
     const play = () => {
       if (!el.isConnected) return;
-      art.append(a, b); set(a, "off"); set(b, "off");
+      const [x, y] = art.children;
+      const go = (c) => c.classList.contains("off") ? enter(c, "work") : set(c, "work");
+      const steps = [[200, () => go(x)], [700, () => go(y)], [2200, () => { set(y, "need"); first(y); }],
+        [4200, () => set(y, "done")], [5200, () => set(x, "done")]];
       for (const [at, fn] of steps) setTimeout(() => el.isConnected && fn(), at);
-      setTimeout(play, 8600);
+      setTimeout(play, 8200);
     };
+    set(a, "off"); set(b, "off");
     play();
   }
 
