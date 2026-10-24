@@ -98,7 +98,7 @@ type Session = {
   model?: string;
   appCwd?: string; // the folder the app opened the session in; needed to reopen it
   task?: string; // the scheduled task this session is a run of
-  appAsk?: { text: string; edge: number }; // what the Claude app says its last turn needs from you
+  appAsk?: { text: string; edge: number }; // what the Claude app says its last turn needs from you ("" = nothing)
   reminders?: Reminder[]; // what it set to wake itself up: a /loop wakeup or a cron job
   made?: { id: string; t: number }[]; // scheduled tasks of the Claude app it set up, as asked
 };
@@ -643,6 +643,8 @@ const COURTESY = new RegExp(String.raw`\b(${[
   String.raw`que mas (necesitas|quieres|hago|ocupas|puedo|te ayudo)`,
   String.raw`(dime|avisame|cuentame) (como (se ve|queda|te va|funciona)|si algo (no|se ve|falla|truena|sale mal))`,
   String.raw`(quedo|sigo) (atento|pendiente|a la orden)`,
+  String.raw`cuando (quieras|gustes|lo necesites|te late)`,
+  String.raw`whenever you(['’]re ready| want| like| need)`,
   String.raw`if (you|you['’]?d|you would) (need|want|like|have) (anything|any|something|another|more|other|to (keep going|continue))`,
   String.raw`if there['’]?s anything`,
   String.raw`(anything|what) else`,
@@ -902,20 +904,29 @@ function readDesktopSoon() {
 // asks you, even with no question in it. Only that one line is read.
 function appAskOf(j: any): { text: string; edge: number } | undefined {
   const p = j?.postTurnSummary;
-  if (!p || typeof p !== "object" || typeof p.needs_action !== "string" || !p.needs_action.trim()) return undefined;
+  if (!p || typeof p !== "object") return undefined;
   if (!p.summarizes_uuid || p.summarizes_uuid !== j.lastAssistantUuid) return undefined; // about an older turn
   const edge = typeof j.lastTurnEdgeAt === "number" ? j.lastTurnEdgeAt : typeof j.lastActivityAt === "number" ? j.lastActivityAt : 0;
-  return { text: p.needs_action.trim().replace(/\s+/g, " ").slice(0, 200), edge };
+  const needs = typeof p.needs_action === "string" ? p.needs_action.trim().replace(/\s+/g, " ").slice(0, 200) : "";
+  if (needs) return { text: needs, edge };
+  return p.status_category === "completed" ? { text: "", edge } : undefined; // done, nothing for you
 }
 
 // A turn we read as done that the app says needs you: it asks you, with the app's words.
 function applyAppAsk(s: Session) {
   const a = s.appAsk;
-  if (!a || s.status !== "done" || !s.classified || s.outcome !== "done") return;
+  if (!a || s.status !== "done" || !s.classified) return;
   if (a.edge < s.since - 10_000) return; // the summary is of an earlier turn
-  s.outcome = "asks";
-  s.askText = a.text;
-  version++;
+  if (a.text && s.outcome === "done") {
+    s.outcome = "asks";
+    s.askText = a.text;
+    version++;
+  } else if (!a.text && s.outcome === "asks" && !s.ask && !(s.askText ?? "").includes("?")) {
+    // The app read the whole turn as done; a request without a question mark was a guess.
+    s.outcome = "done";
+    s.askText = undefined;
+    version++;
+  }
 }
 
 function readDesktopSessions() {

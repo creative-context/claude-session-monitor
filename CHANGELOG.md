@@ -1,5 +1,10 @@
 # Changelog
 
+## Unreleased
+
+- An open offer like "cuando quieras, dímelo" or "whenever you're ready, let me know" is a courtesy closing, not a request.
+- When the Claude app reads a finished turn as done with nothing for you, a request without a question mark no longer counts as needing you. Questions still do.
+
 ## 0.3.8
 
 - A turn the Claude app itself marks as needing you (the orange dot in its sidebar) now needs you here too, with the app's words for what to do, even when the closing message asks nothing.

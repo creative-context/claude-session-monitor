@@ -247,8 +247,11 @@ for (const [n, cat, action, about] of [
   [39, "blocked", "In Routines, set Permissions to Bypass for the three tasks", "u-last"],
   [40, "blocked", "Approve the old plan", "u-older"],
   [41, "completed", "", "u-last"],
+  [42, "completed", "", "u-last"],
 ] as const) {
-  const tp = transcript(`t${n}.jsonl`, [{ type: "user", message: { content: "Fix the routines" } }, said("Listo, quedó arreglado.")]);
+  // 42: a request with no question mark ("dime cuál") that the app read as done.
+  const close = n === 42 ? "Revisé el buzón. Dime cuál carpeta limpio primero." : "Listo, quedó arreglado.";
+  const tp = transcript(`t${n}.jsonl`, [{ type: "user", message: { content: "Fix the routines" } }, said(close)]);
   const stop = Date.now() - 30_000 + n;
   ev(id(n), { ev: "UserPromptSubmit", prompt: "Fix the routines", tp, t: stop - 60_000 });
   ev(id(n), { ev: "Stop", tp, t: stop });
@@ -456,6 +459,7 @@ try {
     find(s, 39)?.status === "asks" && find(s, 39)?.ask === "In Routines, set Permissions to Bypass for the three tasks" && find(s, 39)?.needsYou === true, find(s, 39));
   check("40 a summary of an earlier turn doesn't count", find(s, 40)?.status === "done", find(s, 40));
   check("41 a completed turn stays done", find(s, 41)?.status === "done", find(s, 41));
+  check("42 a request without a question mark the app read as done is done", find(s, 42)?.status === "done", find(s, 42));
   check("24 a short \"anything else?\" is done", find(s, 24)?.status === "done", find(s, 24));
   check("25 an offer of one thing asks you", find(s, 25)?.status === "asks" && /lo suba/.test(find(s, 25)?.ask ?? ""), find(s, 25));
   check("26 an open offer in English is done", find(s, 26)?.status === "done", find(s, 26));
