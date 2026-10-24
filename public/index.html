@@ -208,6 +208,9 @@
   #week, #history { container: list / inline-size; }
   .wsplit { display: flex; flex-direction: column; gap: 28px; }
   .wmain:empty, .wside:empty { display: none; }
+  .quiet { display: flex; align-items: center; gap: 8px; padding: 12px; border-radius: var(--radius-container);
+    background: var(--color-background-card); color: var(--color-text-secondary); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
+  .quiet svg.i { width: 14px; height: 14px; color: var(--color-text-green); }
   .wside .hlist { max-width: none; } /* as wide as the cards above, so the edges line up */
   @container list (min-width: 1100px) {
     #history .hlist, #history .group-head { max-width: none; } /* as wide as Last 7 Days, so both columns have room */
@@ -1150,12 +1153,15 @@
     // Active: cards.
     const active = buckets.get("active");
     const keep = new Set();
+    // Active stays even when it's empty, and then says so: a calm line instead of a gap.
     let sec = groups.get("active");
+    if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="grid"></div>`));
+    const quiet = sec.querySelector(".quiet");
     if (!active.length) {
-      if (sec) drop(sec);
-      groups.delete("active");
+      sec.querySelector(".count").textContent = "";
+      if (!quiet) sec.insertAdjacentHTML("beforeend", `<div class="quiet" role="status">${ICON.check}<span>Nothing needs you, and nothing is working.</span></div>`);
     } else {
-      if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="grid"></div>`));
+      quiet?.remove();
       sec.querySelector(".count").textContent = active.length;
       const grid = sec.querySelector(".grid");
       active.forEach((s, i) => {
