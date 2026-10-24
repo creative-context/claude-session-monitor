@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.0
 
 - Only what needs you moves now. Needs you has a small beating dot in place of its icon, and so does the "need you" count; Working and Done tags are soft, Working shows three calm dots, and the working count is still.
 - Cards that need you or are working show how long, in minutes ("2m"); finished ones still say how long ago.
