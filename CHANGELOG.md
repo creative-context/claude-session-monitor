@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.1
 
 - In a short window the cards are lower (130 px) and keep their folder close to the text; a card with a plan shows its bar in the folder's place.
 - The header reads like a strip: each count's number in white and its words in gray, only what needs you in orange, the working count neutral, and Active as a small label.
