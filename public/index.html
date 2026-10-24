@@ -135,6 +135,12 @@
   /* When the header runs out of room, the counts drop their words and keep the number,
      then the less important ones go. They are never squeezed or cut (fitCounts). */
   #counts .tag { flex: none; }
+  /* The number reads first, in white; the words after it in gray. What needs you stays orange. */
+  #counts .tag > span:not(.pdot):not(.sdot) { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+  #counts .tag .word { color: var(--color-text-secondary); font-weight: 400; }
+  #counts .tag.s-waiting > span:not(.pdot), #counts .tag.s-waiting .word { color: var(--color-text-orange); }
+  #counts .tag.working .sdot { color: var(--color-accent); }
+  .group.active .group-head .count { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   #counts.tight .tag .word { display: none; }
   #counts.tighter .tag.low { display: none; }
   #counts.tightest .tag:not(.s-waiting) { display: none; } /* last, only what needs you */
@@ -146,7 +152,7 @@
     font-weight: var(--font-weight-heading);
     margin-right: 6px;
   }
-  #counts { display: flex; gap: 4px; min-width: 0; overflow: hidden; }
+  #counts { display: flex; gap: 8px; min-width: 0; overflow: hidden; }
   header .spacer { flex: 1; }
   .link { display: inline-flex; align-items: center; gap: 6px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
   .link i { width: 6px; height: 6px; border-radius: 50%; background: #26A756; }
@@ -221,8 +227,8 @@
   .group-head .count { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   /* Active is the zone that matters: its header is a title, the rest are labels. */
-  .group.active .group-head { font-size: var(--csm-text-title); line-height: var(--csm-lh-title); color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
-  .group.active .group-head svg.i { width: 16px; height: 16px; }
+  .group.active .group-head { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+  .group.active .group-head svg.i { width: 14px; height: 14px; }
   .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); font-weight: 400; }
   /* The rest of the week sits a step back from the active zone. */
   .group.active + .group { margin-top: 28px; }
@@ -318,8 +324,12 @@
      keeps one line, and both lines of detail stay, since they carry the plan step and
      what the agents do. */
   @media (max-height: 600px) {
-    :root { --csm-card-h: 148px; }
-    .card .title { -webkit-line-clamp: 1; }
+    :root { --csm-card-h: 130px; }
+    .card .title { -webkit-line-clamp: 1; margin-top: 10px; font-size: 14px; line-height: 18px; }
+    .card .detail { margin-top: 3px; font-size: 12px; line-height: 15px; }
+    .card .tags { padding-top: 8px; }
+    .card:has(.bar) .tags { display: none; } /* the plan's bar takes the folder's place */
+    .card .bar { margin-top: 8px; }
   }
   .detail .sub { color: var(--color-text-secondary); }
   /* Secondary text on a colored card. Plain gray drops below 4.5:1 on the strong tints
@@ -873,7 +883,7 @@
 
   function tags(s) {
     const out = [];
-    if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
+    if (s.project) out.push(tag(`<span>${esc(s.project)}</span>`, "name", s.project)); // the mono name says it's a folder
     const wf = s.workflows?.[0];
     if (wf || s.agentCount) {
       const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);
@@ -1627,9 +1637,9 @@
       `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-label="${n} ${words}" title="${n} ${words}">${icon}<span>${n}<span class="word"> ${words}</span></span>${ICON.chev}</span>`;
     const counts = [
       needs ? count("needs", PDOT, needs, needs === 1 ? "needs you" : "need you", "s-waiting") : "",
-      working ? count("working", '<span class="sdot" aria-hidden="true"></span>', working, "working", "s-working") : "", // still: only what needs you moves
+      working ? count("working", '<span class="sdot" aria-hidden="true"></span>', working, "working", "low working") : "", // neutral and still: only what needs you moves
       agents ? count("agents", ICON.agents, agents, agents === 1 ? "agent" : "agents", "low") : "",
-      list.length ? count("week", ICON.calendar, list.length, "in 7 days", "low") : "",
+      list.length ? count("week", "", list.length, "in 7 days", "low") : "",
     ].join("");
     if ($counts._html !== counts) {
       $counts.innerHTML = counts;

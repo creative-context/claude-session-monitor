@@ -1,5 +1,11 @@
 # Changelog
 
+## Unreleased
+
+- In a short window the cards are lower (130 px) and keep their folder close to the text; a card with a plan shows its bar in the folder's place.
+- The header reads like a strip: each count's number in white and its words in gray, only what needs you in orange, the working count neutral, and Active as a small label.
+- Folder names on cards drop their icon; the mono name says what it is.
+
 ## 0.4.0
 
 - Only what needs you moves now. Needs you has a small beating dot in place of its icon, and so does the "need you" count; Working and Done tags are soft, Working shows three calm dots, and the working count is still.
