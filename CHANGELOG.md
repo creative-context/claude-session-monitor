@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- In a short window, a card's plan bar sits at the foot of the card, in line with the other cards' folders.
+
 ## 0.4.1
 
 - In a short window the cards are lower (130 px) and keep their folder close to the text; a card with a plan shows its bar in the folder's place.
