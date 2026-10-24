@@ -1098,16 +1098,23 @@
 
   const LONG_DAY = 6; // more rows than this, and a wide window splits the day in two columns
 
-  // The empty Active tells its story once, as the app sees a session's life: it starts,
-  // works, finishes; another one needs you for a moment, then finishes too. It ends
-  // still, both done, which is what the line beside it says.
+  // The empty Active tells, in a loop, a session's life as the app sees it: it starts,
+  // works, finishes; another one needs you for a moment, then finishes too. Both rest
+  // done for a while, fade out and start again. Reduce Motion shows them done and still.
   function quietStory(el) {
     const [a, b] = el.querySelectorAll(".qcard");
     const set = (c, st) => { c.className = `qcard ${st}`; syncIcons(c); };
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) { set(a, "done"); set(b, "done"); return; }
-    const steps = [[a, "work", 200], [a, "done", 1500], [b, "work", 2000], [b, "need", 3200], [b, "done", 4600]];
-    set(a, "off"); set(b, "off");
-    for (const [c, st, at] of steps) setTimeout(() => el.isConnected && set(c, st), at);
+    const steps = [[a, "work", 200], [a, "done", 1500], [b, "work", 2000], [b, "need", 3200], [b, "done", 4600],
+      [a, "off", 8000], [b, "off", 8000]];
+    const LOOP = 8600;
+    const play = () => {
+      if (!el.isConnected) return;
+      set(a, "off"); set(b, "off");
+      for (const [c, st, at] of steps) setTimeout(() => el.isConnected && set(c, st), at);
+      setTimeout(play, LOOP);
+    };
+    play();
   }
 
   function weekShell() {
