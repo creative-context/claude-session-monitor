@@ -19,7 +19,7 @@ let stateURL = URL(string: "http://127.0.0.1:\(port)/api/state")!
 let appName = "Claude Session Monitor"
 
 // Obsidian surfaces: the window paints the body color so nothing shows through.
-let obsidianBody = NSColor(srgbRed: 0x08 / 255, green: 0x09 / 255, blue: 0x0A / 255, alpha: 1)
+let obsidianBody = NSColor(srgbRed: 0x03 / 255, green: 0x03 / 255, blue: 0x04 / 255, alpha: 1) // the page's --color-background-body
 
 extension NSToolbarItem.Identifier {
     static let view = NSToolbarItem.Identifier("view")
