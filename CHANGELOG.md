@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- Only what needs you moves now. Needs you has a small beating dot in place of its icon, and so does the "need you" count; Working and Done tags are soft, Working shows three calm dots, and the working count is still.
+- Cards that need you or are working show how long, in minutes ("2m"); finished ones still say how long ago.
+- The plan bar is thicker, drops its "2/5 done" count (the step line says it) and only the active step pulses.
+- Folder names are set in SF Mono.
 - The sound button in the toolbar shows its speaker in the accent color while the alert sound is on, so you can tell at a glance.
 - Last 7 Days moves more smoothly, with anime.js's layout module, which ships inside the app. A card that leaves Active turns into its row in the day below, a card that goes away fades out, and the rows and sections around them slide into place. Reduce Motion turns it off.
 - An open offer like "cuando quieras, dímelo" or "whenever you're ready, let me know" is a courtesy closing, not a request.

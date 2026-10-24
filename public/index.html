@@ -283,11 +283,12 @@
 
   /* On a colored card the status tag is solid. */
   /* State tags a step darker than the theme's fills, so white text reaches 5.8:1. */
-  .card .tag.s-working { background: #2864BC; color: var(--color-on-accent); }
+  /* Only what needs you gets a solid tag; work and done are soft, so they don't pull the eye. */
+  .card .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); }
   .card .tag.s-waiting, .card .tag.s-asks { background: var(--color-warning); color: var(--color-on-light); }
   .card.stale .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); }
   .card.stale .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); }
-  .card .tag.s-done { background: #1D7244; color: var(--color-on-accent); }
+  .card .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); }
   .card .tag.s-error { background: #B5383C; color: var(--color-on-accent); }
 
   .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
@@ -337,6 +338,23 @@
   .tags { margin-top: auto; display: flex; gap: 4px; overflow: hidden; }
   .tags .tag { flex: 0 1 auto; }
   .tags .tag.name { flex: 0 100 auto; min-width: 40px; }
+  /* A folder is a name from the file system, so it's the one thing set in mono. */
+  .card .tags .tag.name { font-family: var(--font-family-mono); font-size: 10.5px; }
+  .sdot { width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
+  .sdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  /* Needs you: a dot that beats where the icon was, for as long as it needs you. */
+  .pdot { position: relative; width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
+  .pdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+  .pdot::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0;
+    animation: dotping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; animation-delay: var(--sync, 0s); }
+  @keyframes dotping { 0% { transform: scale(1); opacity: 0.55; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+  /* Working: three dots that light up in turn, calmly. */
+  .calm { display: inline-flex; gap: 2.5px; align-items: center; height: 12px; flex: none; }
+  .calm i { width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; opacity: 0.35;
+    animation: calm 2.4s ease-in-out infinite; animation-delay: var(--sync, 0s); }
+  .calm i:nth-child(2) { animation-delay: calc(var(--sync, 0s) + 0.4s); }
+  .calm i:nth-child(3) { animation-delay: calc(var(--sync, 0s) + 0.8s); }
+  @keyframes calm { 0%, 50%, 100% { opacity: 0.35; } 20% { opacity: 1; } }
   /* A reminder's time and a "+1" never shrink; a long task name gives way first. */
   .tags .tag.sched { flex: none; }
   .tags .tag.made { flex: 0 100000 auto; min-width: 64px; }
@@ -344,13 +362,12 @@
   /* The plan's progress, one segment per step: done, the one it's on, still to do. The
      row is taller than the 2 px line so its tooltip is easy to hover. */
   .bar { display: flex; align-items: center; gap: 8px; height: 12px; margin-top: 2px; }
-  .bar .segs { flex: 1; display: flex; align-items: center; gap: 3px; }
-  .bar .segs span { flex: 1; height: 2px; border-radius: 1px; background: var(--color-overlay-pressed); }
+  .bar .segs { flex: 1; display: flex; align-items: center; gap: 4px; }
+  .bar .segs span { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); }
   .bar .segs span.on { background: var(--color-text-accent); }
   .bar .segs span.now { background: color-mix(in srgb, var(--color-text-accent) 45%, transparent); }
   /* The step in progress breathes while the session works, in step with its spinner. */
   .card.working .bar .segs span.now { background: var(--color-text-accent); animation: step 2.4s ease-in-out infinite; }
-  .bar .n { font-size: 10px; line-height: 12px; color: var(--meta); font-variant-numeric: tabular-nums; white-space: nowrap; }
 
   /* Paused or closed sessions step down in brightness, not opacity. */
   .idle .title, .ended .title { color: var(--csm-text-on-tint); }
@@ -803,6 +820,18 @@
     return at < 0 ? [...list, ...extra] : [...list.slice(0, at), ...extra, ...list.slice(at)];
   }
   const statusIcon = (s) => (s.background ? ICON.bot : STATUS_ICON[s.status] || ICON.check);
+  // On a card: a beating dot while it needs you, three calm dots while it works.
+  const PDOT = '<span class="pdot" aria-hidden="true"></span>';
+  const CALM = '<span class="calm" aria-hidden="true"><i></i><i></i><i></i></span>';
+  const cardIcon = (s) => ((s.status === "waiting" || s.status === "asks") && needsYou(s) ? PDOT
+    : s.status === "working" && !s.background ? CALM : statusIcon(s));
+  // How long it has been waiting on you or working: "2m", "1h 5m". Minutes, so it changes
+  // once a minute, not every second.
+  const spanWords = (s) => `${s.status === "working" ? "working" : "waiting for you"} for ${span2(s.since || s.last).replace(/h/, " hours").replace(/(\d+)m/, "$1 minutes")}`;
+  function span2(t) {
+    const m = Math.max(1, Math.floor((now() - t) / 60_000));
+    return m < 60 ? `${m}m` : `${Math.floor(m / 60)}h${m % 60 ? ` ${m % 60}m` : ""}`;
+  }
   const busiest = (s) => [...(s.agents || [])].sort((a, b) => (b.lastAt || 0) - (a.lastAt || 0))[0];
   const agentLine = (a) => {
     const d = base(a.detail);
@@ -903,8 +932,7 @@
     const segs = Array.from({ length: s.plan.total }, (_, i) =>
       `<span class="${i < s.plan.done ? "on" : i === s.plan.index - 1 ? "now" : ""}"></span>`).join("");
     const tip = `Plan: ${s.plan.done} of ${s.plan.total} steps done${s.plan.current ? `, now on step ${s.plan.index}` : ""}`;
-    // The count next to the segments says what they are: steps of the plan, done of total.
-    return `<div class="bar" title="${tip}" aria-hidden="true"><span class="segs">${segs}</span><span class="n">${s.plan.done}/${s.plan.total} done</span></div>`;
+    return `<div class="bar" title="${tip}" aria-hidden="true"><span class="segs">${segs}</span></div>`;
   }
 
   // ---------------------------------------------------------------- Last 7 Days
@@ -941,14 +969,17 @@
     const keep = ["new", "found"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
-    const agoText = ago(s.status === "working" ? s.last : s.since);
+    // Needs you and working say for how long; anything else says how long ago.
+    const lasting = s.kind !== "task" && (s.status === "working" || ((s.status === "waiting" || s.status === "asks") && needsYou(s)));
+    const agoText = lasting ? span2(s.since || s.last) : ago(s.status === "working" ? s.last : s.since);
     // A run of a scheduled task shows a calendar clock by its time instead of the plain clock.
     const timeTip = s.kind === "task" ? ` title="${esc(`Can't start since ${when(s.since)}`)}"`
+      : lasting ? ` title="${esc(`${s.task ? `${s.taskName ? `A run of ${s.taskName}` : "A scheduled run"}. ` : ""}${s.status === "working" ? "Working" : "Waiting for you"} since ${when(s.since || s.last)}`)}"`
       : s.task ? ` title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}"` : "";
     const inner = `
       <div class="top">
-        ${tag(`${statusIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
-        <span class="time"${timeTip}>${s.task ? ICON.calendarClock : ICON.clock}${agoText}</span>
+        ${tag(`${cardIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
+        <span class="time"${timeTip}>${s.task ? ICON.calendarClock : lasting ? "" : ICON.clock}${agoText}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
@@ -959,7 +990,7 @@
       el._inner = inner;
       syncIcons(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", agoText, ...schedWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
     el.title = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
@@ -1595,8 +1626,8 @@
     const count = (kind, icon, n, words, cls) =>
       `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-label="${n} ${words}" title="${n} ${words}">${icon}<span>${n}<span class="word"> ${words}</span></span>${ICON.chev}</span>`;
     const counts = [
-      needs ? count("needs", ICON.alert.replace(" pulse", ""), needs, needs === 1 ? "needs you" : "need you", "s-waiting") : "",
-      working ? count("working", ICON.spinner, working, "working", "s-working") : "",
+      needs ? count("needs", PDOT, needs, needs === 1 ? "needs you" : "need you", "s-waiting") : "",
+      working ? count("working", '<span class="sdot" aria-hidden="true"></span>', working, "working", "s-working") : "", // still: only what needs you moves
       agents ? count("agents", ICON.agents, agents, agents === 1 ? "agent" : "agents", "low") : "",
       list.length ? count("week", ICON.calendar, list.length, "in 7 days", "low") : "",
     ].join("");
@@ -1657,7 +1688,7 @@
       const items = withBlocked(list).filter(needsYou);
       const what = (s) => (s.status === "waiting" ? s.wait || "Waiting for your answer" : s.status === "asks" ? s.ask || "It asked you something" : s.error || "The turn ended with an error");
       return popHead(ICON.alert, items.length === 1 ? "1 needs you" : `${items.length} need you`) +
-        items.slice(0, POP_MAX).map((s) => popRow(s, what(s), ago(s.since))).join("") + popMore(items.length - POP_MAX);
+        items.slice(0, POP_MAX).map((s) => popRow(s, what(s), s.kind === "task" || s.status === "error" ? ago(s.since) : span2(s.since || s.last))).join("") + popMore(items.length - POP_MAX);
     }
     if (kind === "working") {
       const items = list.filter((s) => s.status === "working");
@@ -1880,6 +1911,7 @@
   function syncIcons(root) {
     const offset = `-${Math.round(performance.now() % 2400)}ms`;
     root.querySelectorAll("svg.spin, svg.pulse, svg.bot, .bar .now").forEach((d) => { d.style.animationDelay = offset; });
+    root.querySelectorAll(".pdot, .calm").forEach((d) => d.style.setProperty("--sync", offset)); // their dots run on a CSS variable
   }
 
   // ---------------------------------------------------------------- sound
