@@ -210,7 +210,21 @@
   .wmain:empty, .wside:empty { display: none; }
   .quiet { display: flex; align-items: center; gap: 8px; padding: 12px; border-radius: var(--radius-container);
     background: var(--color-background-card); color: var(--color-text-secondary); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
-  .quiet svg.i { width: 14px; height: 14px; color: var(--color-text-green); }
+  .quiet { gap: 14px; }
+  .qart { display: inline-flex; gap: 6px; flex: none; }
+  .qcard { width: 84px; height: 34px; border-radius: 6px; padding: 7px 8px; display: flex; flex-direction: column; gap: 6px;
+    background: var(--color-background-card); opacity: 1; transition: background-color 450ms var(--ease-standard), opacity 400ms var(--ease-standard); }
+  .qcard.off { opacity: 0; }
+  .qcard b { height: 4px; width: 70%; border-radius: 2px; background: #FFFFFF26; }
+  .qrow { display: flex; align-items: center; gap: 4px; height: 10px; }
+  .qpill { width: 24px; height: 8px; border-radius: 3px; background: #FFFFFF26; transition: background-color 450ms var(--ease-standard); }
+  .qcard .calm, .qcard .pdot, .qok { display: none; }
+  .qcard .calm { transform: scale(0.8); transform-origin: left center; color: var(--color-text-accent); }
+  .qcard .pdot { transform: scale(0.85); color: var(--color-text-orange); }
+  .qok svg.i { width: 10px; height: 10px; color: var(--color-text-green); }
+  .qcard.work { background: color-mix(in srgb, var(--color-accent) 16%, transparent); } .qcard.work .qpill { background: var(--color-accent-muted); } .qcard.work .calm { display: inline-flex; }
+  .qcard.need { background: color-mix(in srgb, var(--color-warning) 34%, transparent); } .qcard.need .qpill { background: var(--color-warning); } .qcard.need .pdot { display: inline-grid; }
+  .qcard.done { background: color-mix(in srgb, var(--color-success) 14%, transparent); } .qcard.done .qpill { background: var(--color-success-muted); } .qcard.done .qok { display: inline-flex; }
   .wside .hlist { max-width: none; } /* as wide as the cards above, so the edges line up */
   @container list (min-width: 1100px) {
     #history .hlist, #history .group-head { max-width: none; } /* as wide as Last 7 Days, so both columns have room */
@@ -1084,6 +1098,18 @@
 
   const LONG_DAY = 6; // more rows than this, and a wide window splits the day in two columns
 
+  // The empty Active tells its story once, as the app sees a session's life: it starts,
+  // works, finishes; another one needs you for a moment, then finishes too. It ends
+  // still, both done, which is what the line beside it says.
+  function quietStory(el) {
+    const [a, b] = el.querySelectorAll(".qcard");
+    const set = (c, st) => { c.className = `qcard ${st}`; syncIcons(c); };
+    if (matchMedia("(prefers-reduced-motion: reduce)").matches) { set(a, "done"); set(b, "done"); return; }
+    const steps = [[a, "work", 200], [a, "done", 1500], [b, "work", 2000], [b, "need", 3200], [b, "done", 4600]];
+    set(a, "off"); set(b, "off");
+    for (const [c, st, at] of steps) setTimeout(() => el.isConnected && set(c, st), at);
+  }
+
   function weekShell() {
     if ($week.querySelector(":scope > .wsplit")) return;
     cards.clear();
@@ -1159,7 +1185,11 @@
     const quiet = sec.querySelector(".quiet");
     if (!active.length) {
       sec.querySelector(".count").textContent = "";
-      if (!quiet) sec.insertAdjacentHTML("beforeend", `<div class="quiet" role="status">${ICON.check}<span>Nothing needs you, and nothing is working.</span></div>`);
+      if (!quiet) {
+        const mini = (id) => `<span class="qcard" id="${id}"><span class="qrow"><span class="qpill"></span>${CALM}${PDOT}<span class="qok">${ICON.check}</span></span><b></b></span>`;
+        sec.insertAdjacentHTML("beforeend", `<div class="quiet" role="status"><span class="qart" aria-hidden="true">${mini("qa")}${mini("qb")}</span><span>Nothing needs you, and nothing is working.</span></div>`);
+        quietStory(sec.querySelector(".quiet"));
+      }
     } else {
       quiet?.remove();
       sec.querySelector(".count").textContent = active.length;
