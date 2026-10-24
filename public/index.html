@@ -1098,21 +1098,34 @@
 
   const LONG_DAY = 6; // more rows than this, and a wide window splits the day in two columns
 
-  // The empty Active tells, in a loop, a session's life as the app sees it: it starts,
-  // works, finishes; another one needs you for a moment, then finishes too. Both rest
-  // done for a while, fade out and start again. Reduce Motion shows them done and still.
+  // The empty Active tells, in a loop, what the app does with sessions: two start working,
+  // one stops to need you and moves to the first place (with the cards' own glide), then
+  // both finish, rest done for a while, fade out and start again. Reduce Motion shows them
+  // done and still.
   function quietStory(el) {
-    const [a, b] = el.querySelectorAll(".qcard");
+    const art = el.querySelector(".qart");
+    const [a, b] = art.querySelectorAll(".qcard");
     const set = (c, st) => { c.className = `qcard ${st}`; syncIcons(c); };
     if (matchMedia("(prefers-reduced-motion: reduce)").matches) { set(a, "done"); set(b, "done"); return; }
-    const steps = [[a, "work", 200], [a, "done", 1500], [b, "work", 2000], [b, "need", 3200], [b, "done", 4600],
-      [a, "off", 8000], [b, "off", 8000]];
-    const LOOP = 8600;
+    const glide = { duration: 380, easing: "cubic-bezier(0.2, 0, 0, 1)" };
+    const enter = (c, st) => { set(c, st); c.animate([{ transform: "scale(0.98)" }, { transform: "none" }], { duration: 420, easing: glide.easing }); };
+    const first = (c) => {
+      if (art.firstElementChild === c) return;
+      const kids = [...art.children], was = new Map(kids.map((k) => [k, k.getBoundingClientRect().left]));
+      art.prepend(c);
+      for (const k of kids) {
+        const dx = was.get(k) - k.getBoundingClientRect().left;
+        if (Math.abs(dx) > 1) k.animate([{ transform: `translateX(${dx}px)` }, { transform: "none" }], glide);
+      }
+    };
+    const steps = [[200, () => enter(a, "work")], [700, () => enter(b, "work")],
+      [2200, () => { set(b, "need"); first(b); }], [4200, () => set(b, "done")], [5200, () => set(a, "done")],
+      [8000, () => { set(a, "off"); set(b, "off"); }]];
     const play = () => {
       if (!el.isConnected) return;
-      set(a, "off"); set(b, "off");
-      for (const [c, st, at] of steps) setTimeout(() => el.isConnected && set(c, st), at);
-      setTimeout(play, LOOP);
+      art.append(a, b); set(a, "off"); set(b, "off");
+      for (const [at, fn] of steps) setTimeout(() => el.isConnected && fn(), at);
+      setTimeout(play, 8600);
     };
     play();
   }

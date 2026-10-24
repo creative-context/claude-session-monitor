@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- When nothing needs you and nothing is working, Active stays and says so in one calm line, instead of disappearing. Two tiny cards beside it play a session's life in a loop (it works, it needs you, it's done), and rest still for a few seconds between rounds. With Reduce Motion they stay still, both done.
+- When nothing needs you and nothing is working, Active stays and says so in one calm line, instead of disappearing. Two tiny cards beside it show in a loop what the app does: both start working, one needs you and glides to the first place, then both finish and rest for a few seconds. With Reduce Motion they stay still, both done.
 
 ## 0.4.2
 
