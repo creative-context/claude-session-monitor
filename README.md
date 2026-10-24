@@ -29,6 +29,10 @@
   <a href="CHANGELOG.md"><b>Changelog</b></a>
 </p>
 
+<p align="center">
+  <img src="docs/demo.gif" alt="The app's Active zone with demo data: a working session stops on a permission, turns orange with a beating dot and moves to the first place; a few seconds later another session finishes and turns green" width="100%">
+</p>
+
 ## Overview
 
 With a few Claude Code sessions going at once, the one that needs you is easy to miss. It sits in another window, waiting on a permission or a question, while you watch the one that's working.

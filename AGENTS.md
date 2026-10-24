@@ -15,6 +15,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
 - `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome on a Mac, for SF Pro (the command is at the top of the file). Edit the HTML, never the PNG.
 - `docs/screenshot.png`: the app's window on the demo data (`bun test/demo.ts 4747`).
+- `docs/demo.gif`: the README's top animation, 880 px wide, recorded from the demo data (`bun test/demo.ts`): a session turns Needs you and moves first, then another one finishes.
 
 ## Commands
 
