@@ -1209,7 +1209,7 @@
       sec.querySelector(".count").textContent = "";
       if (!quiet) {
         const mini = (id) => `<span class="qcard" id="${id}"><span class="qrow"><span class="qpill"></span>${CALM}${PDOT}<span class="qok">${ICON.check}</span></span><b></b></span>`;
-        sec.insertAdjacentHTML("beforeend", `<div class="quiet" role="status"><span class="qart" aria-hidden="true">${mini("qa")}${mini("qb")}</span><span>Nothing needs you, and nothing is working.</span></div>`);
+        sec.insertAdjacentHTML("beforeend", `<div class="quiet" role="status"><span class="qart" aria-hidden="true">${mini("qa")}${mini("qb")}</span><span>You're all caught up.</span></div>`);
         quietStory(sec.querySelector(".quiet"));
       }
     } else {
