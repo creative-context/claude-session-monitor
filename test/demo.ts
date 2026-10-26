@@ -56,6 +56,7 @@ ev(s, now - 13 * MIN, {
   ] },
 });
 ev(s, now - 20_000, { ev: "PreToolUse", tool: "Bash", d: "Run the checkout tests", cwd: project("web-app") });
+const checkout = s;
 
 // A workflow keeps this one busy after its own turn ended.
 s = id();
@@ -128,6 +129,19 @@ finished("Set up the staging database", project("infra"), now - 9 * 24 * H, "Sta
 // session file per run that names its task.
 const appDir = join(dir, "app", "account", "org");
 mkdirSync(appDir, { recursive: true });
+
+// A side session the checkout fix started in the Claude app: the app's file for the side
+// session says which session it came from.
+const side = finished("Write the cart race regression test", project("web-app"), now - 6 * MIN,
+  "The test reproduces the race in 3 of 10 runs before the fix and never after it.");
+writeFileSync(join(appDir, "local_checkout.json"), JSON.stringify({
+  sessionId: "local_checkout", cliSessionId: checkout, title: "Fix the flaky checkout test", originCwd: project("web-app"),
+  createdAt: now - 14 * MIN, lastActivityAt: now - 20_000,
+}));
+writeFileSync(join(appDir, "local_side.json"), JSON.stringify({
+  sessionId: "local_side", cliSessionId: side, title: "Write the cart race regression test", originCwd: project("web-app"),
+  createdAt: now - 12 * MIN, lastActivityAt: now - 6 * MIN, spawnedFrom: { sessionId: "local_checkout" },
+}));
 const taskFile: any[] = [];
 let runFiles = 0;
 const prev = (cron: string, before = now) => prevRun(parseCron(cron)!, before)!;

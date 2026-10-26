@@ -459,6 +459,11 @@
   .dots i.r-working { background: var(--color-text-accent); }
   .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
   /* A scheduled task a session set up: its tag on the card opens it in Scheduled. */
+  .card .tags .tag.rel { flex: none; cursor: pointer; }
+  .card .tags .tag.rel:hover { color: var(--color-text-primary); }
+  /* Hovering or focusing a session outlines its relatives, wherever they are on screen. */
+  .card, .hrow { outline: 1.5px solid transparent; outline-offset: 2px; }
+  .card.rel-lit, .hrow.rel-lit { outline-color: #FFFFFFA6; transition: outline-color 200ms var(--ease-standard); }
   .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
   .top .time { margin-left: auto; }
 
@@ -699,6 +704,8 @@
     // An alarm clock with hands: a session set to pick up again on its own.
     wake: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
     calendarPlus: svg('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M12 12.5v5"/><path d="M9.5 15h5"/>'),
+    // A branch: a session the Claude app started from another one, or the one it came from.
+    branch: svg('<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7"/><path d="M18 10.5c0 4-3 5.5-9.5 6.5"/>'),
     chev: svg('<path d="m6 9 6 6 6-6"/>', "chev"),
     close: svg('<path d="M6 6l12 12"/><path d="M18 6 6 18"/>'),
     arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
@@ -905,6 +912,10 @@
   function tags(s) {
     const out = [];
     if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
+    // Relatives take only an icon (and a count): the name is in the tip, and hovering the
+    // card outlines the other one. A click opens it.
+    if (s.from) out.push(`<span class="tag rel" data-open-sid="${esc(s.from.sid)}" title="${esc(relTip(s, "from"))}">${ICON.branch}</span>`);
+    if (s.sides) out.push(`<span class="tag rel" data-open-sid="${esc(s.sides[0].sid)}" title="${esc(relTip(s, "sides"))}">${ICON.branch}<span>${s.sides.length}</span></span>`);
     const wf = s.workflows?.[0];
     if (wf || s.agentCount) {
       const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);
@@ -950,6 +961,19 @@
     s.reminder ? `Picks up again on its own ${when(s.reminder.at)}` : "",
     (s.made || []).length ? `Set up the scheduled ${(s.made || []).length === 1 ? "task" : "tasks"} ${(s.made || []).map((t) => t.name).join(", ")}, shown in Scheduled (Command-3)` : "",
   ].filter(Boolean);
+  function relTip(s, which) {
+    if (which === "from") return `Started from ${s.from.title}. Click to open it.`;
+    return `${s.sides.length === 1 ? "Started a side session" : `Started ${s.sides.length} side sessions`}: ${s.sides.map((x) => x.title).join(", ")}. Click to open ${s.sides.length === 1 ? "it" : "the first"}.`;
+  }
+  function relWords(s) {
+    return [s.from ? `Started from ${s.from.title}` : "",
+      s.sides ? `${s.sides.length === 1 ? "Started a side session" : `Started ${s.sides.length} side sessions`}: ${s.sides.map((x) => x.title).join(", ")}` : ""];
+  }
+  function relIcon(s) {
+    if (!s.from && !s.sides) return "";
+    return `<span class="hsched" title="${esc([s.from ? `Started from ${s.from.title}` : "", s.sides ? relTip(s, "sides").replace(/ Click.*$/, "") : ""].filter(Boolean).join("\n"))}">${ICON.branch}</span>`;
+  }
+
   function schedIcons(s) {
     const out = [];
     if (s.reminder) out.push(`<span class="hsched" title="${esc(wakeTip(s.reminder))}">${ICON.wake}</span>`);
@@ -997,7 +1021,7 @@
       cards.set(s.sid, el);
     }
     // "new" and "found" are short-lived marks that a live update must not wipe.
-    const keep = ["new", "found"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
+    const keep = ["new", "found", "rel-lit"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
     // Needs you and working say for how long; anything else says how long ago.
@@ -1021,7 +1045,7 @@
       el._inner = inner;
       syncIcons(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s), ...relWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
     el.title = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
@@ -1061,10 +1085,10 @@
     const snip = st === "asks" ? s.ask : st === "error" ? s.error : s.note || s.recap || "";
     const time = earlier ? `${new Date(s.last).toLocaleDateString("en-US", { weekday: "short" })} ${clock(s.last)}` : clock(s.last);
     const sched = s.task ? `<span class="hsched" title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : "";
-    const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time, ...schedWords(s)].filter(Boolean).join(". ");
+    const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time, ...schedWords(s), ...relWords(s)].filter(Boolean).join(". ");
     return `<button type="button" class="hrow s-${st}${isStale(s) ? " stale" : ""}" data-sid="${esc(s.sid)}" data-layout-id="s-${esc(s.sid)}" title="Open in the Claude app" aria-label="${esc(aria)}">
       <span class="hicon" title="${esc(label(s))}">${still(statusIcon(s))}</span>
-      <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}${schedIcons(s)}</span>
+      <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}${schedIcons(s)}${relIcon(s)}</span>
       ${s.project ? tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project) : "<span></span>"}
       <span class="htime">${time}</span>
       ${snip ? `<span class="hsnip">${esc(snip)}</span>` : ""}
@@ -1084,7 +1108,7 @@
     const els = [...next.content.children].map((n) => {
       const o = old.get(n.dataset.sid);
       if (!o) { n._html = n.innerHTML; return n; }
-      const cls = n.className + (o.classList.contains("found") ? " found" : "");
+      const cls = n.className + ["found", "rel-lit"].filter((c) => o.classList.contains(c)).map((c) => ` ${c}`).join("");
       if (o.className !== cls) o.className = cls;
       for (const a of ["title", "aria-label"]) if (o.getAttribute(a) !== n.getAttribute(a)) o.setAttribute(a, n.getAttribute(a));
       if (o._html !== n.innerHTML) { o.innerHTML = n.innerHTML; o._html = n.innerHTML; }
@@ -1615,6 +1639,8 @@
     if (go) return setView(go.dataset.go);
     const made = e.target.closest("[data-show-task]");
     if (made) return showTask(made.dataset.showTask);
+    const rel = e.target.closest("[data-open-sid]");
+    if (rel) return openSession(rel.dataset.openSid);
     if (e.target.closest("[data-more]")) return loadHistory(false);
     const item = e.target.closest("[data-sid]");
     if (!item) return;
@@ -1627,6 +1653,23 @@
   // In the app, a right click opens the app's own menu for that session, and anywhere
   // else no web menu (Reload, Inspect) at all.
   const sessionFor = (sid) => live.get(sid) ?? hist.items.find((h) => h.sid === sid);
+
+  // Pointing at a session (or focusing it) outlines the sessions it's related to: the one it
+  // came from and the side sessions it started.
+  let litFor = null;
+  function lightRelatives(item) {
+    if (item === litFor) return;
+    litFor = item;
+    for (const el of $content.querySelectorAll(".rel-lit")) el.classList.remove("rel-lit");
+    const s = item && sessionFor(item.dataset.sid);
+    if (!s) return;
+    const sids = [s.from?.sid, ...(s.sides || []).map((x) => x.sid)].filter(Boolean);
+    for (const sid of sids) for (const el of $content.querySelectorAll(`.card[data-sid="${CSS.escape(sid)}"], .hrow[data-sid="${CSS.escape(sid)}"]`)) el.classList.add("rel-lit");
+  }
+  $content.addEventListener("pointerover", (e) => lightRelatives(e.target.closest?.(".card, .hrow")));
+  $content.addEventListener("pointerleave", () => lightRelatives(null));
+  $content.addEventListener("focusin", (e) => lightRelatives(e.target.closest?.(".card, .hrow")));
+  $content.addEventListener("focusout", (e) => { if (!$content.contains(e.relatedTarget)) lightRelatives(null); });
   document.addEventListener("contextmenu", (e) => {
     if (!embed) return;
     e.preventDefault();

@@ -261,6 +261,20 @@ for (const [n, cat, action, about] of [
     postTurnSummary: { status_category: cat, status_detail: "Some detail", needs_action: action, summarizes_uuid: about },
   }));
 }
+// 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
+// in the file name); 45 names a session the app no longer has.
+for (const [n, file, extra] of [
+  [43, "local_par43", {}],
+  [44, "local_kid44", { sessionId: "local_kid44", spawnedFrom: { sessionId: "local_par43", title: "Side work", name: "side-work" } }],
+  [45, "local_kid45", { spawnedFrom: { sessionId: "local_gone" } }],
+] as const) {
+  const at = Date.now() - 20 * 60_000 + n;
+  ev(id(n), { ev: "UserPromptSubmit", prompt: `Pricing page ${n}`, t: at });
+  ev(id(n), { ev: "Stop", t: at + 60_000 });
+  writeFileSync(join(appDir, `${file}.json`), JSON.stringify({
+    cliSessionId: id(n), title: `Pricing page ${n}`, originCwd: "/tmp/demo", createdAt: at, lastActivityAt: at + 60_000, ...extra,
+  }));
+}
 ev(id(35), { ev: "UserPromptSubmit", prompt: "Midnight backup", t: midnight + 2 * 60_000 });
 ev(id(35), { ev: "Stop", t: midnight + 4 * 60_000 });
 writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
@@ -460,6 +474,11 @@ try {
   check("40 a summary of an earlier turn doesn't count", find(s, 40)?.status === "done", find(s, 40));
   check("41 a completed turn stays done", find(s, 41)?.status === "done", find(s, 41));
   check("42 a request without a question mark the app read as done is done", find(s, 42)?.status === "done", find(s, 42));
+  check("44 a side session names the session it came from", find(s, 44)?.from?.sid === id(43) && find(s, 44)?.from?.title === "Pricing page 43", find(s, 44)?.from);
+  check("43 the session it came from lists its side session", find(s, 43)?.sides?.length === 1 && find(s, 43)?.sides?.[0]?.sid === id(44), find(s, 43)?.sides);
+  check("45 a side session of a session the app no longer has shows no link", !find(s, 45)?.from && !find(s, 45)?.sides, find(s, 45));
+  const h44 = (await history("Pricing page 44")).sessions?.find((x: any) => x.sid === id(44));
+  check("44 All Sessions knows where it came from too", h44?.from?.sid === id(43), h44);
   check("24 a short \"anything else?\" is done", find(s, 24)?.status === "done", find(s, 24));
   check("25 an offer of one thing asks you", find(s, 25)?.status === "asks" && /lo suba/.test(find(s, 25)?.ask ?? ""), find(s, 25));
   check("26 an open offer in English is done", find(s, 26)?.status === "done", find(s, 26));

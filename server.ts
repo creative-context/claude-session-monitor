@@ -829,6 +829,7 @@ function history(q: string, limit: number, offset: number) {
       task: r.task ?? undefined,
       taskName: r.task ? tasks.get(r.task)?.name : undefined,
       made: madeTasks(schedOf(r.sched).m, Date.now()),
+      ...relativesOf(r.sid),
     })),
   };
 }
@@ -929,6 +930,25 @@ function applyAppAsk(s: Session) {
   }
 }
 
+// Sessions the Claude app started from another one (a side session): child → parent,
+// both as Claude Code session IDs. Only the app knows this; it says so in the child's file.
+let spawnedFrom = new Map<string, string>();
+const appTitles = new Map<string, string>();
+function titleOf(sid: string): string {
+  const s = sessions.get(sid);
+  return s?.title || appTitles.get(sid) || s?.prompt || "another session";
+}
+// What a session's card and row say about its relatives: where it came from, and the side
+// sessions it started.
+function relativesOf(sid: string) {
+  const parent = spawnedFrom.get(sid);
+  const sides = [...spawnedFrom].filter(([, p]) => p === sid).map(([c]) => ({ sid: c, title: titleOf(c) }));
+  return {
+    from: parent ? { sid: parent, title: titleOf(parent) } : undefined,
+    sides: sides.length ? sides : undefined,
+  };
+}
+
 function readDesktopSessions() {
   if (!existsSync(APP_SESSIONS)) return;
   const byCli = new Map<string, {
@@ -936,6 +956,8 @@ function readDesktopSessions() {
     ask?: { text: string; edge: number };
   }>();
   const found = new Map<string, Task>();
+  const cliOf = new Map<string, string>(); // the app's own session ID → Claude Code's
+  const spawned = new Map<string, string>(); // a side session (Claude Code ID) → the app ID it came from
   try {
     for (const account of readdirSync(APP_SESSIONS)) {
       const accDir = join(APP_SESSIONS, account);
@@ -952,6 +974,8 @@ function readDesktopSessions() {
           try {
             const j = JSON.parse(readFileSync(join(orgDir, f), "utf8"));
             if (typeof j.cliSessionId === "string") {
+              cliOf.set(typeof j.sessionId === "string" ? j.sessionId : f.slice(0, -5), j.cliSessionId);
+              if (typeof j.spawnedFrom?.sessionId === "string") spawned.set(j.cliSessionId, j.spawnedFrom.sessionId);
               byCli.set(j.cliSessionId, {
                 title: j.title, archived: j.isArchived === true, model: j.model, cwd: j.originCwd ?? j.cwd,
                 created: typeof j.createdAt === "number" ? j.createdAt : undefined,
@@ -966,6 +990,16 @@ function readDesktopSessions() {
     }
   } catch {
     return;
+  }
+  const links = new Map<string, string>();
+  for (const [child, from] of spawned) {
+    const parent = cliOf.get(from);
+    if (parent && parent !== child) links.set(child, parent);
+  }
+  for (const [sid, d] of byCli) if (d.title) appTitles.set(sid, d.title);
+  if (JSON.stringify([...links]) !== JSON.stringify([...spawnedFrom])) {
+    spawnedFrom = links;
+    version++;
   }
   if (JSON.stringify([...found.values()]) !== JSON.stringify([...tasks.values()])) {
     for (const [id, t] of found) {
@@ -1421,6 +1455,7 @@ function snapshot() {
         cwd: s.appCwd ?? s.cwd ?? "", // for Reveal in Finder
         task: s.task,
         taskName: s.task ? tasks.get(s.task)?.name : undefined,
+        ...relativesOf(s.sid),
         background: shown === "working" && s.status !== "working", // only its agents are working
         since: s.since,
         first: s.first,

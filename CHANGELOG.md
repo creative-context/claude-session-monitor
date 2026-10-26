@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Related sessions show it. A side session the Claude app started from another session gets a branch icon, and the session it came from gets one with how many it started. Point at either one and the other gets an outline, wherever it is on screen; click the icon to open it. Its tip and VoiceOver name the other session.
+
 ## 0.4.3
 
 - When nothing needs you and nothing is working, Active stays and says "You're all caught up." instead of disappearing. Two tiny cards beside it show in a loop what the app does: both start working, one needs you and glides to the first place, then both finish and rest for a few seconds before the next round. With Reduce Motion they stay still, both done.

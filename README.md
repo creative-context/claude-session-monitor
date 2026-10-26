@@ -108,6 +108,8 @@ To work on this repository itself, an agent reads [`AGENTS.md`](AGENTS.md), whic
 
 A session that set itself a reminder, with `/loop`, a cron job or a wakeup, shows when it picks up again by an alarm clock, until its time comes or the session closes. One that set up a scheduled task shows the task's name; click it to see the task in Scheduled.
 
+A side session, one the Claude app started from another session, shows a branch icon, and so does the session it came from, with how many it started. Point at either one to outline the other wherever it is on screen, and click the icon to open it. The names are in the icon's tip and in what VoiceOver reads. Only the Claude app records this, so sessions you start with `claude` in a terminal never show it.
+
 Hover a count in the header (needs you, working, agents, last 7 days) to see what's behind it, and click the count or one of its rows to jump to those cards. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
 
 ### States
@@ -141,7 +143,7 @@ It never stores whole conversations.
 **What it reads and never writes:**
 
 - The end of each session's transcript in `~/.claude/projects`, to tell how a turn ended and to find its subagents and workflows.
-- The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag, which scheduled task a session is a run of, and the app's one-line note of what a finished turn needs from you, if anything.
+- The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag, which scheduled task a session is a run of, which session a side session was started from (by the app's own session ID), and the app's one-line note of what a finished turn needs from you, if anything.
 - The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times, and when the app skipped a run and why. It never reads what a task does.
 
 **What it changes:** the hook entries in `~/.claude/settings.json`, and nothing else.
@@ -179,6 +181,7 @@ Every push to `main` runs the tests on GitHub Actions. Publishing a release buil
 | Subagent events don't change the session's own status or trigger alerts | Vibe Notch #36 and #18 |
 | Workflow agents never send `SubagentStart`, so agents are tracked by ID from their hooks and files, not with a counter | Found here |
 | A run of a scheduled task is a normal session. Its file in the Claude app names its task (`scheduledTaskId`), and the task's schedule is a cron expression in local time | Found here |
+| A side session's file in the Claude app names the session it was started from (`spawnedFrom.sessionId`), by the app's own ID, not Claude Code's | Found here |
 | A comment line keeps a stream open, but the page can't see it. A ping event every 10 seconds lets the page notice a server that died without closing the connection | Found here |
 | "Needs you" lasts until the next real activity | agents-observe |
 | Only hook events that every Claude Code version in use knows are registered. Older versions lack `StopFailure` and `PermissionDenied` | agents-observe #7 |
