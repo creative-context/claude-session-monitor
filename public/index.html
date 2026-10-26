@@ -459,7 +459,7 @@
   .dots i.r-working { background: var(--color-text-accent); }
   .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
   /* A scheduled task a session set up: its tag on the card opens it in Scheduled. */
-  .card .tags .tag.rel { flex: none; cursor: pointer; }
+  .card .tags .tag.rel { flex: 0 1 auto; min-width: 25px; cursor: pointer; }
   .card .tags .tag.rel:hover { color: var(--color-text-primary); }
   /* Hovering or focusing a session outlines its relatives, wherever they are on screen. */
   .card, .hrow { outline: 1.5px solid transparent; outline-offset: 2px; }
@@ -912,10 +912,11 @@
   function tags(s) {
     const out = [];
     if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
-    // Relatives take only an icon (and a count): the name is in the tip, and hovering the
-    // card outlines the other one. A click opens it.
-    if (s.from) out.push(`<span class="tag rel" data-open-sid="${esc(s.from.sid)}" title="${esc(relTip(s, "from"))}">${ICON.branch}</span>`);
-    if (s.sides) out.push(`<span class="tag rel" data-open-sid="${esc(s.sides[0].sid)}" title="${esc(relTip(s, "sides"))}">${ICON.branch}<span>${s.sides.length}</span></span>`);
+    // Relatives: where it came from, or how many side sessions it started. The name gives
+    // way first when the footer is full, down to the icon; hovering the card outlines the
+    // other one, and a click opens it.
+    if (s.from) out.push(`<span class="tag rel" data-open-sid="${esc(s.from.sid)}" title="${esc(relTip(s, "from"))}">${ICON.branch}<span>From ${esc(s.from.title)}</span></span>`);
+    if (s.sides) out.push(`<span class="tag rel" data-open-sid="${esc(s.sides[0].sid)}" title="${esc(relTip(s, "sides"))}">${ICON.branch}<span>${s.sides.length === 1 ? "1 side session" : `${s.sides.length} side sessions`}</span></span>`);
     const wf = s.workflows?.[0];
     if (wf || s.agentCount) {
       const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);

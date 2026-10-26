@@ -108,7 +108,7 @@ To work on this repository itself, an agent reads [`AGENTS.md`](AGENTS.md), whic
 
 A session that set itself a reminder, with `/loop`, a cron job or a wakeup, shows when it picks up again by an alarm clock, until its time comes or the session closes. One that set up a scheduled task shows the task's name; click it to see the task in Scheduled.
 
-A side session, one the Claude app started from another session, shows a branch icon, and so does the session it came from, with how many it started. Point at either one to outline the other wherever it is on screen, and click the icon to open it. The names are in the icon's tip and in what VoiceOver reads. Only the Claude app records this, so sessions you start with `claude` in a terminal never show it.
+A side session, one the Claude app started from another session, says which one it came from on its card, and that session says how many side sessions it started. Point at either one to outline the other wherever it is on screen, and click the tag to open it. In a full footer the name shortens; the whole name is in the tag's tip and in what VoiceOver reads. Only the Claude app records this, so sessions you start with `claude` in a terminal never show it.
 
 Hover a count in the header (needs you, working, agents, last 7 days) to see what's behind it, and click the count or one of its rows to jump to those cards. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
 
