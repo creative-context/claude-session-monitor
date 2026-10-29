@@ -96,6 +96,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var settingsHookButton: NSButton?
     var settingsUpdates: NSButton?
     var statusUpdateItem: NSMenuItem!
+    var needsMenuItems: [NSMenuItem] = [] // what needs you, at the top of the menu bar menu
+    var needsMenuKey = ""
     var availableUpdate: Release?
     var sizeMenus: [NSMenu] = []
     var server: Process?
@@ -792,20 +794,82 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
     @objc func showWindowAction() { showWindow() }
 
+    // The menu bar menu starts with what needs you, the same list as the window's first
+    // cards: each session's title and why, in its state's color. A click opens it in the
+    // Claude app; a task that can't run opens the run that holds it up.
+    struct NeedsEntry: Equatable { let title: String; let why: String; let sid: String; let error: Bool }
+
+    nonisolated func needsEntries(_ json: [String: Any]) -> [NeedsEntry] {
+        let one = { (text: String) in text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text }
+        var out: [NeedsEntry] = []
+        for s in json["sessions"] as? [[String: Any]] ?? [] where s["needsYou"] as? Bool == true {
+            let status = s["status"] as? String ?? ""
+            let why: String
+            switch status {
+            case "waiting": why = s["wait"] as? String ?? "Waiting for your answer"
+            case "error": why = s["error"] as? String ?? "The turn ended with an error"
+            default: why = s["ask"] as? String ?? "It asked you something"
+            }
+            out.append(NeedsEntry(title: s["title"] as? String ?? "Session", why: one(why),
+                                  sid: s["sid"] as? String ?? "", error: status == "error"))
+        }
+        for t in json["tasks"] as? [[String: Any]] ?? [] {
+            guard let b = t["blocked"] as? [String: Any], b["queued"] as? Bool != true else { continue }
+            let run = (b["run"] as? [String: Any])?["sid"] as? String ?? ""
+            out.append(NeedsEntry(title: t["name"] as? String ?? "Scheduled task", why: "Can't run: its last run is still open",
+                                  sid: run, error: true))
+        }
+        return out
+    }
+
+    func paintNeedsMenu(_ entries: [NeedsEntry]) {
+        let key = entries.map { "\($0.sid)|\($0.title)|\($0.why)" }.joined(separator: "\n")
+        guard key != needsMenuKey, let menu = statusItem?.menu else { return }
+        needsMenuKey = key
+        for i in needsMenuItems { menu.removeItem(i) }
+        var items: [NSMenuItem] = [.sectionHeader(title: entries.isEmpty ? "You're all caught up" : entries.count == 1 ? "1 Needs You" : "\(entries.count) Need You")]
+        let shown = entries.prefix(8)
+        for e in shown {
+            let i = NSMenuItem(title: e.title, action: e.sid.isEmpty ? #selector(showWindowAction) : #selector(openSession(_:)), keyEquivalent: "")
+            i.target = self
+            i.representedObject = e.sid
+            let why = e.why.count > 70 ? String(e.why.prefix(69)) + "…" : e.why
+            let text = NSMutableAttributedString(string: e.title, attributes: [.font: NSFont.menuFont(ofSize: 0)])
+            text.append(NSAttributedString(string: "\n" + why, attributes: [
+                .font: NSFont.menuFont(ofSize: NSFont.smallSystemFontSize), .foregroundColor: NSColor.secondaryLabelColor]))
+            i.attributedTitle = text
+            i.toolTip = e.why
+            let dot = NSImage(systemSymbolName: e.error ? "exclamationmark.triangle.fill" : "circle.fill", accessibilityDescription: e.error ? "Error" : "Needs you")?
+                .withSymbolConfiguration(.init(pointSize: e.error ? 11 : 8, weight: .regular)
+                    .applying(.init(paletteColors: [e.error ? .systemRed : .systemOrange])))
+            i.image = dot
+            items.append(i)
+        }
+        if entries.count > shown.count {
+            items.append(item("\(entries.count - shown.count) More in the Window…", #selector(showWindowAction), ""))
+        }
+        items.append(.separator())
+        for (n, i) in items.enumerated() { menu.insertItem(i, at: n) }
+        needsMenuItems = items
+    }
+
     // The count of what needs you comes from the server, the same number the window
     // shows: blocked on you, or a question or an error from the last day. In orange.
     func refreshStatus() {
         URLSession.shared.dataTask(with: stateURL) { data, _, _ in
             var waiting = 0
             var working = 0
+            var entries: [NeedsEntry]? = nil
             if let data, let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
                let sessions = json["sessions"] as? [[String: Any]] {
                 waiting = json["needs"] as? Int ?? 0
                 working = sessions.filter { $0["status"] as? String == "working" }.count
+                entries = self.needsEntries(json)
             }
             let ok = data != nil
             Task { @MainActor in
                 self.setLive(ok)
+                if let entries { self.paintNeedsMenu(entries) }
                 NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : nil
                 guard let button = self.statusItem?.button else { return }
                 button.attributedTitle = waiting > 0
