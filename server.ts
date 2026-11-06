@@ -442,7 +442,9 @@ function apply(e: Ev) {
       break;
 
     case "PreCompact":
-      if (s.status !== "waiting") setStatus(s, "working", e.t);
+      // The Claude app also compacts a session that sits idle after its turn ended, and
+      // no Stop follows that. Only a compaction in the middle of a turn shows.
+      if (s.status !== "working") break;
       s.tool = "Compact";
       s.detail = undefined;
       break;
@@ -570,7 +572,8 @@ function checkProcesses() {
 //   error        an API error ended it (isApiErrorMessage, e.g. server_error, rate_limit)
 //   text         a closing message; its text says whether it asks you something
 //   none         still mid-turn (a tool call or a tool result is the last thing)
-type LastTurn = { kind: "interrupted" | "error" | "text" | "none"; text?: string };
+// ended: Claude Code wrote that the turn's Stop hooks ran after its last reply.
+type LastTurn = { kind: "interrupted" | "error" | "text" | "none"; text?: string; ended?: boolean };
 
 const textOf = (row: any): string => {
   const c = row.message?.content;
@@ -582,6 +585,7 @@ function readLastTurn(tp: string): LastTurn {
   const size = statSync(tp).size;
   const from = Math.max(0, size - 262144);
   const lines = readRange(tp, from, size).split("\n");
+  let ended = false;
   // The first line is only cut short when we started reading mid-file.
   for (let i = lines.length - 1; i >= (from > 0 ? 1 : 0); i--) {
     let row: any;
@@ -591,13 +595,17 @@ function readLastTurn(tp: string): LastTurn {
       continue;
     }
     if (row.isSidechain || row.isMeta) continue;
+    if (row.type === "system" && row.subtype === "stop_hook_summary") {
+      ended = true;
+      continue;
+    }
     if (row.type === "user") {
       return textOf(row).includes("[Request interrupted by user") ? { kind: "interrupted" } : { kind: "none" };
     }
     if (row.type !== "assistant") continue;
     const text = textOf(row).trim();
     if (row.isApiErrorMessage) return { kind: "error", text: text || row.error || "API error" };
-    return text ? { kind: "text", text } : { kind: "none" };
+    return text ? { kind: "text", text, ended } : { kind: "none", ended };
   }
   return { kind: "none" };
 }
@@ -702,6 +710,15 @@ function checkQuietTurns() {
     if (s.status !== "working" || s.inFlight > 0 || !s.tp) continue;
     if (now - s.lastMain < 8000 || !existsSync(s.tp)) continue;
     const last = readLastTurn(s.tp);
+    // A turn that ended without its Stop reaching us (a session saved as working
+    // before the app's idle compaction stopped counting as work): it's over.
+    if (last.ended && now - s.lastMain >= 60_000 && activeAgents(s).length === 0) {
+      setStatus(s, "done", s.lastMain || now);
+      s.tool = s.detail = undefined;
+      s.classified = false; // checkTurns() reads how it ended
+      version++;
+      continue;
+    }
     if (last.kind !== "interrupted" && last.kind !== "error") continue;
     setStatus(s, "done", now);
     s.tool = s.detail = undefined;

@@ -32,6 +32,24 @@ ev(id(1), { ev: "PreToolUse", tool: "Bash", d: "Start dev server" });
 ev(id(1), { ev: "Stop" });
 ev(id(1), { ev: "PostToolUse", tool: "Bash" });
 
+// 50. The Claude app compacts a session that sits idle after its turn: it stays done
+ev(id(50), { ev: "UserPromptSubmit", prompt: "Tidy the notes" });
+ev(id(50), { ev: "Stop" });
+ev(id(50), { ev: "PreCompact" });
+ev(id(50), { ev: "SubagentStop", agent: "c50" });
+
+// 51. A compaction in the middle of a turn shows as working
+ev(id(51), { ev: "UserPromptSubmit", prompt: "Keep going" });
+ev(id(51), { ev: "PreToolUse", tool: "Read", d: "/x/a.ts" });
+ev(id(51), { ev: "PostToolUse", tool: "Read" });
+ev(id(51), { ev: "PreCompact" });
+
+// 52. Saved as working, but its transcript says the turn ended: it's done
+{
+  const tp = transcript("t52.jsonl", [said("Started."), said("All set, the notes are tidy."), { type: "system", subtype: "stop_hook_summary" }]);
+  ev(id(52), { ev: "UserPromptSubmit", prompt: "Tidy more notes", tp, t: Date.now() - 5 * 60_000 });
+}
+
 // 2. Subagent events do not change the session's status (Vibe Notch #36),
 //    and each agent is tracked by id until its SubagentStop
 ev(id(2), { ev: "UserPromptSubmit", prompt: "Review everything" });
@@ -387,6 +405,8 @@ const find = (list: any[], n: number) => list.find((s) => s.sid === id(n));
 try {
   let s = await state();
   check("1 late PostToolUse after Stop stays done", find(s, 1)?.status === "done", find(s, 1));
+  check("50 an idle session compacted by the app stays done", find(s, 50)?.status === "done" && find(s, 50)?.tool == null, find(s, 50));
+  check("51 a compaction mid-turn shows as working", find(s, 51)?.status === "working" && find(s, 51)?.tool === "Compact", find(s, 51));
   check("2 subagents leave status working", find(s, 2)?.status === "working", find(s, 2));
   check("2 only the agent without SubagentStop counts", find(s, 2)?.agentCount === 1, find(s, 2)?.agents);
   const s9 = find(s, 9);
@@ -467,6 +487,7 @@ try {
   check("9 journal result ends the agent, session back to done", find(s, 9)?.status === "done" && find(s, 9)?.agentCount === 0, find(s, 9));
   check("0 SubagentStop ends the agent, session back to done", find(s, 0)?.status === "done" && find(s, 0)?.agentCount === 0, find(s, 0));
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
+  check("52 a quiet turn whose transcript ended is done", find(s, 52)?.status === "done", find(s, 52));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",

@@ -4,6 +4,7 @@
 
 - The menu bar menu starts with what needs you: each session's title and why (its question, the permission it waits for, or its error), with a dot in its color. Pick one to open it in the Claude app. Up to eight show; the rest are a click away in the window.
 - Related sessions show it. A side session the Claude app started from another session says on its card which one it came from ("From …"), and that session says how many side sessions it started. Point at either one and the other gets an outline, wherever it is on screen; click the tag to open it. In a full footer the name shortens, and its tip and VoiceOver have it whole.
+- Fix: a finished session no longer shows "Compacting context" for hours. The Claude app compacts idle sessions in the background after their turn ends, and the app took that for new work. Sessions already stuck that way go back to done once their transcript shows the turn ended.
 
 ## 0.4.3
 
