@@ -1194,7 +1194,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         defaults.set(true, forKey: "hookOffered")
         let alert = NSAlert()
         alert.messageText = "Connect Claude Code?"
-        alert.informativeText = "To see your sessions, the app adds a small hook to Claude Code's settings (~/.claude/settings.json). It saves a copy of the file first and changes nothing else. You can remove it in Settings."
+        alert.informativeText = "To see your sessions, the app adds a small hook to Claude Code's settings (~/.claude/settings.json), and a status line for your weekly usage if you have none. It saves a copy of the file first and changes nothing else. To read the usage, it also opens Claude Code out of sight for a few seconds every 30 minutes, sending nothing. You can remove it all in Settings."
         alert.addButton(withTitle: "Install Hook")
         alert.addButton(withTitle: "Not Now")
         if alert.runModal() == .alertFirstButtonReturn { installHook() }

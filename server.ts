@@ -1491,11 +1491,18 @@ expect eof
 exit $code
 `;
 const claudeCli = () =>
-  [join(homedir(), ".local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].find((p) => existsSync(p));
+  [join(homedir(), ".local/bin/claude"), join(homedir(), ".claude/local/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].find((p) => existsSync(p));
 let probing = false;
+let probeAfter = 0; // a wait after Claude Code asked to trust the folder
 function probeUsage() {
   // Only the real app: tests and the demo point CSM_DIR at a temp folder.
-  if (process.env.CSM_DIR || probing) return;
+  if (process.env.CSM_DIR || probing || Date.now() < probeAfter) return;
+  // Only while the hook is in use: without it the user never agreed to any of this.
+  try {
+    if (Date.now() - statSync(LOG).mtimeMs > WEEK_MS) return;
+  } catch {
+    return;
+  }
   const status = join(import.meta.dir, "hooks", "statusline.sh");
   const cli = claudeCli();
   if (!cli || !existsSync("/usr/bin/expect") || !existsSync(status)) {
@@ -1512,13 +1519,22 @@ function probeUsage() {
   probing = true;
   // Claude Code runs it through a shell, and the app's path has spaces.
   const settings = JSON.stringify({ statusLine: { type: "command", command: `'${status.replace(/'/g, "'\\''")}'` } });
-  const p = Bun.spawn(["/usr/bin/expect", join(DIR, "probe.exp"), settings, cli], { cwd: PROBE_DIR, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  let p: ReturnType<typeof Bun.spawn>;
+  try {
+    p = Bun.spawn(["/usr/bin/expect", join(DIR, "probe.exp"), settings, cli], { cwd: PROBE_DIR, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  } catch {
+    probing = false;
+    return;
+  }
   const kill = setTimeout(() => p.kill(), 45_000);
   p.exited.then((code) => {
     clearTimeout(kill);
     probing = false;
     readUsage();
-    if (code === 2) console.log(`Usage check: Claude Code asks to trust ${PROBE_DIR} first (see the README).`);
+    if (code === 2) {
+      probeAfter = Date.now() + 6 * 3600_000;
+      console.log(`Usage check: Claude Code asks to trust ${PROBE_DIR} first (see the README). Trying again in 6 hours.`);
+    }
     else if (code !== 0) console.log(`Usage check: no usage from Claude Code (exit ${code}).`);
   });
 }
@@ -1526,7 +1542,8 @@ function probeUsage() {
 function usageView(now: number) {
   if (!usage) return null;
   // Past its reset a window's number no longer holds, so it goes until the next reply.
-  const live = (w: UsageWindow | null) => (w && (w.resets == null || w.resets > now) ? w : null);
+  // One with no reset time goes after a week.
+  const live = (w: UsageWindow | null) => (w && (w.resets == null ? now - usage!.at < WEEK_MS : w.resets > now) ? w : null);
   const week = live(usage.week);
   const five = live(usage.five);
   return week || five ? { at: usage.at, week, five } : null;

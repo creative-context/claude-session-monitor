@@ -66,7 +66,7 @@ This app puts every session on one screen, colored by what it needs from you. It
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Claude Session Monitor.app"
    ```
-3. The app asks to connect Claude Code. **Install Hook** adds the hook to `~/.claude/settings.json`. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
+3. The app asks to connect Claude Code. **Install Hook** adds the hook to `~/.claude/settings.json`, and a status line for your weekly usage if you have none. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
 
 Sessions show up as soon as they do something. Open at Login is off until you turn it on in Settings.
 
@@ -160,7 +160,7 @@ It never stores whole conversations.
 
 **What it sends:** once a day, and when you choose Check for Updates…, a request to GitHub's public API for the newest release of this app. It carries nothing about you or your sessions. GitHub sees your IP address, as with any web page. Turn the daily check off in Settings › Updates.
 
-**What it starts:** every 30 minutes, Claude Code itself, for a few seconds, to read your usage (see What it shows). Claude Code connects to Anthropic as it always does when it starts, with your own sign-in; the app adds nothing to that and sends nothing of its own.
+**What it starts:** every 30 minutes, while the hook is active, Claude Code itself, for a few seconds, to read your usage (see What it shows). Claude Code connects to Anthropic as it always does when it starts, with your own sign-in, and keeps its own record of the folder as it does for any folder you open; the app adds nothing to that and sends nothing of its own. If the folder isn't allowed yet, it tries again six hours later.
 
 ## How it works
 
