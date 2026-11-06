@@ -4,7 +4,7 @@
 //
 //   bun test/scenarios.ts
 
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeCron, nextRun, parseCron, prevRun } from "../cron.ts";
@@ -368,6 +368,13 @@ ev(id(33), { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_ta
 ev(id(33), { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "never-made" } });
 ev(id(33), { ev: "Stop" });
 
+// The plan's usage from the status line: a week that resets later, 5 hours that already reset
+writeFileSync(join(dir, "usage.json"), JSON.stringify({
+  at: Date.now() / 1000 - 60,
+  week: { used_percentage: 42.6, resets_at: Math.floor(Date.now() / 1000) + 3 * 86400 },
+  five_hour: { used_percentage: 90, resets_at: Math.floor(Date.now() / 1000) - 60 },
+}));
+
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
@@ -407,6 +414,8 @@ try {
   check("1 late PostToolUse after Stop stays done", find(s, 1)?.status === "done", find(s, 1));
   check("50 an idle session compacted by the app stays done", find(s, 50)?.status === "done" && find(s, 50)?.tool == null, find(s, 50));
   check("51 a compaction mid-turn shows as working", find(s, 51)?.status === "working" && find(s, 51)?.tool === "Compact", find(s, 51));
+  check("usage: the week's share and reset, from the status line", snap.usage?.week?.pct === 42.6 && snap.usage.week.resets > Date.now(), snap.usage);
+  check("usage: a window past its reset is dropped", snap.usage?.five === null, snap.usage);
   check("2 subagents leave status working", find(s, 2)?.status === "working", find(s, 2));
   check("2 only the agent without SubagentStop counts", find(s, 2)?.agentCount === 1, find(s, 2)?.agents);
   const s9 = find(s, 9);
@@ -586,6 +595,21 @@ check("cron: a bad expression is null", parseCron("61 * * * *") === null && pars
   check("hook: a scheduled task by its title and ID", lines[4]?.d === "Noon check" && lines[5]?.x?.task === "noon-check", [lines[4], lines[5]]);
   check("hook: a cron job's ID from a reply in text blocks", lines[7]?.x?.id === "abcdef12", lines[7]);
   rmSync(hdir, { recursive: true, force: true });
+}
+
+// The status line keeps two percentages and their resets, nothing else, and prints them.
+{
+  const udir = mkdtempSync(join(tmpdir(), "csm-usage-"));
+  const run = (payload: object) => Bun.spawnSync(["sh", join(import.meta.dir, "..", "hooks", "statusline.sh")],
+    { stdin: new TextEncoder().encode(JSON.stringify(payload)), env: { ...process.env, CSM_DIR: udir } });
+  const out = run({ session_id: "SECRET", cwd: "/secret", model: { id: "m" },
+    rate_limits: { five_hour: { used_percentage: 18.4, resets_at: 1_800_000_000 }, seven_day: { used_percentage: 42.7, resets_at: 1_800_100_000 } } });
+  const saved = readFileSync(join(udir, "usage.json"), "utf8");
+  check("status line: prints the week and 5 hours", out.stdout.toString().trim() === "Week 42% · 5h 18%", out.stdout.toString());
+  check("status line: saves only the percentages and resets", JSON.parse(saved).week?.used_percentage === 42.7 && !saved.includes("SECRET") && !saved.includes("/secret"), saved);
+  run({ session_id: "x" });
+  check("status line: a reply without limits keeps the last numbers", readFileSync(join(udir, "usage.json"), "utf8") === saved);
+  rmSync(udir, { recursive: true, force: true });
 }
 
 console.log(failed ? `\n${failed} failed` : "\nAll passed");

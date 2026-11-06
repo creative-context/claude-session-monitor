@@ -1,4 +1,5 @@
-// Adds (or removes, with --uninstall) the Claude Session Monitor hook in ~/.claude/settings.json.
+// Adds (or removes, with --uninstall) the Claude Session Monitor hook in ~/.claude/settings.json,
+// and its status line, which saves the plan's weekly and 5-hour usage for the header.
 //
 //   bun install-hooks.ts               install, or refresh if already there
 //   bun install-hooks.ts --hook <path> register that copy of the hook instead (the app
@@ -10,12 +11,16 @@
 
 import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { join, resolve } from "node:path";
+import { dirname, join, resolve } from "node:path";
 
 const SETTINGS = join(homedir(), ".claude", "settings.json");
 const flag = process.argv.indexOf("--hook");
 const HOOK = flag > 0 && process.argv[flag + 1] ? resolve(process.argv[flag + 1]) : resolve(import.meta.dir, "hooks", "session-hook.sh");
 const MARK = "session-hook.sh";
+// The status line sits next to the hook. Settings hold one status line only, so it goes
+// in only when there is none, and it never replaces someone else's.
+const STATUS = join(dirname(HOOK), "statusline.sh");
+const isOurs = (c?: string) => !!c && c.includes("statusline.sh") && (c.includes(STATUS) || c.includes("claude-session-monitor"));
 
 // Only long-standing events, so older Claude Code versions still load them (the CLI
 // can lag behind the desktop app). StopFailure and PermissionDenied are left out on
@@ -55,6 +60,15 @@ if (!uninstall) {
   for (const event of OTHER_EVENTS) (hooks[event] ??= []).push({ hooks: [command] });
 }
 
+let status = "";
+if (isOurs(settings.statusLine?.command)) delete settings.statusLine;
+if (!uninstall && existsSync(STATUS)) {
+  if (!settings.statusLine) {
+    settings.statusLine = { type: "command", command: /\s/.test(STATUS) ? `"${STATUS}"` : STATUS };
+    status = " Status line installed, for the weekly usage.";
+  } else status = " Another status line is set, so the weekly usage stays off.";
+}
+
 if (Object.keys(hooks).length > 0) settings.hooks = hooks;
 else delete settings.hooks;
 
@@ -64,4 +78,4 @@ JSON.parse(readFileSync(tmp, "utf8")); // fails loudly before replacing if somet
 renameSync(tmp, SETTINGS);
 
 const count = TOOL_EVENTS.length + OTHER_EVENTS.length;
-console.log(uninstall ? "Claude Session Monitor hooks removed." : `Claude Session Monitor hook installed on ${count} events: ${HOOK}`);
+console.log(uninstall ? "Claude Session Monitor hooks removed." : `Claude Session Monitor hook installed on ${count} events: ${HOOK}.${status}`);

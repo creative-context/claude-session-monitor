@@ -108,7 +108,15 @@ To work on this repository itself, an agent reads [`AGENTS.md`](AGENTS.md), whic
 
 A session that set itself a reminder, with `/loop`, a cron job or a wakeup, shows when it picks up again by an alarm clock, until its time comes or the session closes. One that set up a scheduled task shows the task's name; click it to see the task in Scheduled.
 
-A side session, one the Claude app started from another session, says which one it came from on its card, and that session says how many side sessions it started. Point at either one to outline the other wherever it is on screen, and click the tag to open it. In a full footer the name shortens; the whole name is in the tag's tip and in what VoiceOver reads. Only the Claude app records this, so sessions you start with `claude` in a terminal never show it.
+A side session, one the Claude app started from another session, says which one it came from on its card, and that session says how many side sessions it started. Point at either one and its family stays in focus while everything else steps back, wherever they are on screen, and click the tag to open it. In a full footer the name shortens; the whole name is in the tag's tip and in what VoiceOver reads. Only the Claude app records this, so sessions you start with `claude` in a terminal never show it.
+
+**Weekly usage.** At the right of Active, a narrow column shows how much of your plan's weekly limit you've used: the figure, then the week as seven blocks from the reset, bottom up, filled up to what you've used, with a blue line for now, where an even week would be. Under it, how that compares: Plenty left, On pace, A little fast, Running hot or Almost at the limit, and the day it resets. Only the part ahead of the blue line takes a color, orange when you run hot, and the whole fill turns red at 90%. Its tip adds the time it resets and the last 5 hours. In a narrow window and in the other views, a small version sits in the header instead. Claude Code only hands these numbers to a status line, and the Claude app doesn't run one, so the hook installer adds a small status line to `~/.claude/settings.json` (only when you have none), and every 30 minutes the app opens Claude Code in a hidden terminal for a few seconds, in its own empty folder and without your settings, so it runs that status line. Nothing is sent to Claude and no session is saved. Allow that folder once, from a terminal:
+
+```bash
+mkdir -p ~/.claude-session-monitor/probe && cd ~/.claude-session-monitor/probe && claude --setting-sources project --strict-mcp-config
+```
+
+Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal.
 
 Hover a count in the header (needs you, working, agents, last 7 days) to see what's behind it, and click the count or one of its rows to jump to those cards. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
 
@@ -136,7 +144,9 @@ Your sessions stay on your Mac. The server listens on `127.0.0.1` only and answe
 
 - `events.jsonl`: one line per Claude Code event. Each line has the session ID, its folder, the tool's name and a short detail (a file name, or a command or its description, up to 160 characters), the first 200 characters of each prompt, and the text of a session's last question or recap, up to 300 characters. For a reminder a session sets itself, it has when it fires, how often and its ID, never what it will do. For a scheduled task a session sets up, it has the task's title and ID, never its description or instructions. The file rotates at 8 MB.
 - `sessions.db`: one row per session with its title, folder, first prompt, status, last recap or question, its scheduled task if it's a run of one, its pending reminders and the tasks it set up, and times.
-- `hooks/`: the app's copy of the hook, when the app installed it.
+- `usage.json`: your plan's weekly and 5-hour usage, as two percentages and when each resets, written by the status line. Nothing else from what Claude Code gives a status line is kept.
+- `probe/` and `probe.exp`: the empty folder and the script for the 30-minute usage check.
+- `hooks/`: the app's copy of the hook and the status line, when the app installed them.
 
 It never stores whole conversations.
 
@@ -146,13 +156,15 @@ It never stores whole conversations.
 - The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag, which scheduled task a session is a run of, which session a side session was started from (by the app's own session ID), and the app's one-line note of what a finished turn needs from you, if anything.
 - The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times, and when the app skipped a run and why. It never reads what a task does.
 
-**What it changes:** the hook entries in `~/.claude/settings.json`, and nothing else.
+**What it changes:** the hook entries in `~/.claude/settings.json`, and its `statusLine` when you had none, and nothing else.
 
 **What it sends:** once a day, and when you choose Check for Updates…, a request to GitHub's public API for the newest release of this app. It carries nothing about you or your sessions. GitHub sees your IP address, as with any web page. Turn the daily check off in Settings › Updates.
 
+**What it starts:** every 30 minutes, Claude Code itself, for a few seconds, to read your usage (see What it shows). Claude Code connects to Anthropic as it always does when it starts, with your own sign-in; the app adds nothing to that and sends nothing of its own.
+
 ## How it works
 
-1. **Hook** (`hooks/session-hook.sh`). Claude Code runs it on every event of every session, and it appends one short line to `events.jsonl`. No network, no output, and it always exits 0. It takes about 12 ms.
+1. **Hook** (`hooks/session-hook.sh`). Claude Code runs it on every event of every session, and it appends one short line to `events.jsonl`. No network, no output, and it always exits 0. It takes about 12 ms. Its neighbor `hooks/statusline.sh` is the status line that saves your usage.
 2. **Server** (`server.ts`, Bun). It reads that file, keeps a small state per session, saves it to `sessions.db` and streams it to the page. `cron.ts` reads the scheduled tasks' schedules, to say them in words and to work out the next run and a missed one.
 3. **Page** (`public/index.html`). The cards, the three views and their empty and offline states. It uses the colors of the [Obsidian theme](https://github.com/creative-context/astryx-theme-obsidian) and Apple\'s system fonts, SF Pro and SF Mono, so it ships no font files. In Last 7 Days, cards that move, leave or turn into rows are animated with the layout module of [anime.js](https://animejs.com), which ships inside the app (`public/anime-layout.js`), so it loads nothing from the network. Reduce Motion turns it off.
 4. **App** (`app/main.swift`). A standard macOS window with a transparent title bar, the usual menus, Settings, a toolbar for the views, search and sound, a Dock icon and a menu bar item. It runs the server it carries and starts it again if it stops.
@@ -163,6 +175,7 @@ It never stores whole conversations.
 bun test/scenarios.ts    # end-to-end checks of the tricky cases, against a server with its own temp folder
 bun test/demo.ts         # a server with made-up sessions and tasks on http://127.0.0.1:4748, for screenshots
 bun test/demo.ts --edge  # the same, plus edge cases: long text, a usage limit, many agents
+bun test/demo.ts --hot   # the same, with a week running hot
 sh app/build.sh --release  # the universal app, zipped for a release
 ```
 

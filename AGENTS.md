@@ -4,7 +4,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 
 ## Layout
 
-- `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`.
+- `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`. `hooks/statusline.sh`: the status line that saves the plan's weekly and 5-hour usage to `usage.json`; the server runs Claude Code in a hidden terminal every 30 minutes so it runs (`probeUsage`).
 - `install-hooks.ts`: adds or removes the hook's entries in `~/.claude/settings.json`, after a dated backup.
 - `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page.
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.
@@ -21,7 +21,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 
 ```bash
 bun test/scenarios.ts      # port 4749
-bun test/demo.ts           # port 4748, or 4747 to show it in the app. --edge adds edge cases
+bun test/demo.ts           # port 4748, or 4747 to show it in the app. --edge adds edge cases, --hot a week running hot
 sh app/build.sh --install  # build, copy to ~/Applications, reopen
 sh app/build.sh --release  # build and zip for a release
 ```
@@ -30,7 +30,7 @@ sh app/build.sh --release  # build and zip for a release
 
 - **The hook never blocks or breaks a session.** No network, nothing on stdout, always exit 0, and only hook events that every Claude Code version in use knows.
 - **Privacy is a contract.** Read and store only what the README's Privacy section lists, and update that section with any new read. Never read or store a scheduled task's text, its permissions or a whole conversation.
-- **One network request, and only one:** the app's update check in `app/main.swift`, to GitHub's releases API. It only ever opens this repository's release pages. To test it, serve a fake reply such as `{"tag_name": "v9.9.9", "html_url": "…/releases/tag/v9.9.9"}` and point the app at it with `defaults write com.creativecontext.ClaudeSessionMonitor updateFeedURL http://127.0.0.1:4760/latest` (delete the key afterwards).
+- **One network request, and only one:** the app's update check in `app/main.swift`, to GitHub's releases API. The usage probe starts Claude Code itself, which connects as it always does; the app adds nothing to that and sends nothing of its own. It only ever opens this repository's release pages. To test it, serve a fake reply such as `{"tag_name": "v9.9.9", "html_url": "…/releases/tag/v9.9.9"}` and point the app at it with `defaults write com.creativecontext.ClaudeSessionMonitor updateFeedURL http://127.0.0.1:4760/latest` (delete the key afterwards).
 - **Tests and the demo never touch the user's data.** They point `CSM_DIR`, `CSM_APP_SESSIONS` and `CSM_PROJECTS` at temp folders.
 - **The app runs its own copy of the server.** After changing `server.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
 - **One rule for "needs you",** computed in `server.ts` and shared by the window, the Dock badge and the menu bar.

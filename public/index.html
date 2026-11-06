@@ -154,6 +154,18 @@
   }
   #counts { display: flex; gap: 8px; min-width: 0; overflow: hidden; }
   header .spacer { flex: 1; }
+  /* The plan's weekly usage, from the status line: quiet gray, orange from 80%. */
+  .usage { display: inline-flex; align-items: center; gap: 7px; flex: none; height: var(--csm-tag-h); padding: 0 8px; border-radius: var(--radius-inner); background: var(--obsidian-veil-selected); font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); margin-right: 6px; cursor: default; }
+  .usage[hidden] { display: none; }
+  .usage .u-bar { width: 84px; height: 6px; border-radius: 3px; background: var(--color-overlay-pressed); overflow: hidden; }
+  .usage .u-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--obsidian-text-hover); transition: width 600ms var(--ease-standard), background-color 200ms var(--ease-standard); }
+  .usage .u-pct { color: var(--color-text-primary); font-weight: var(--font-weight-heading); font-variant-numeric: tabular-nums; }
+  .usage.high { background: var(--color-warning-muted); }
+  .usage.high .u-bar i { background: var(--color-warning); }
+  .usage.high .u-pct { color: var(--color-text-orange); }
+  @media (prefers-reduced-motion: reduce) { .usage .u-bar i { transition: background-color 200ms linear; } }
+  @container (max-width: 640px) { .usage .u-lbl, .usage .u-reset { display: none; } }
+  @container (max-width: 480px) { .usage { display: none; } }
   .link { display: inline-flex; align-items: center; gap: 6px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
   .link i { width: 6px; height: 6px; border-radius: 50%; background: #26A756; }
   .link.off i { background: var(--color-error); }
@@ -247,6 +259,57 @@
   .group.active .group-head { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   .group.active .group-head svg.i { width: 14px; height: 14px; }
   .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); font-weight: 400; }
+  /* The week's usage, a narrow tile at the right of Active, two cards tall. The week
+     reads bottom up as its seven days; the fill is what you've used, the blue mark is
+     where an even week would be today. Gray while you're on pace, orange when you run
+     hot, red near the limit. */
+  .abody { display: flex; gap: 8px; align-items: stretch; }
+  .abody > .grid { flex: 1; min-width: 0; }
+  .abody > .grid:empty { display: none; }
+  .abody > .quiet { flex: 1; align-self: flex-start; }
+  .meter { --fill: #C4C8CF; --over: var(--fill); --say: var(--color-text-secondary);
+    flex: none; width: 96px; box-sizing: border-box; min-height: var(--csm-card-h); max-height: calc(2 * var(--csm-card-h) + 8px);
+    display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 4px 10px; cursor: default; }
+  .meter[hidden] { display: none; }
+  .meter.on-pace, .meter.plenty { --say: var(--color-text-green); }
+  /* Ahead of pace, only the part above the blue line takes the color: how much too fast. */
+  .meter.fast { --over: var(--color-text-orange); --say: var(--color-text-orange); }
+  .meter.hot { --over: var(--color-warning); --say: var(--color-text-orange); }
+  .meter.limit { --fill: var(--color-error); --over: var(--color-error); --say: var(--color-text-red); }
+  .meter .m-lbl { font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); letter-spacing: 0.01em; color: var(--color-text-secondary); }
+  /* The figure in SF Pro Rounded, as in Apple's activity widgets. */
+  /* The digits sit on the column's axis, over the day blocks; the % follows on the same
+     baseline, same family and weight, a step quieter. An invisible % on the left balances it. */
+  .meter .m-pct { display: block; white-space: nowrap; font-family: ui-rounded, var(--font-family-body); font-size: 32px; line-height: 34px; font-weight: var(--font-weight-heading); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+  .meter .m-pct small.ghost { visibility: hidden; margin-left: 0; margin-right: 1px; }
+  .meter .m-pct small { font-size: 17px; line-height: 1; font-weight: var(--font-weight-heading); letter-spacing: 0; margin-left: 1px; color: var(--color-text-secondary); }
+  /* The week, bottom up: one segment a day, filled up to what you've used; the days gone
+     by a step lighter than the ones to come; now is the blue line across today. */
+  .meter .m-week { flex: 1; min-height: 40px; display: flex; flex-direction: column-reverse; gap: 2px; margin: 12px 0 10px; }
+  .meter .m-row { flex: 1; min-height: 0; display: flex; align-items: center; gap: 7px; }
+  .meter .m-row::after { content: ""; width: 9px; flex: none; } /* balances the letter, so the days sit on the axis */
+  .meter .m-dl { width: 9px; flex: none; font-size: 10px; line-height: 10px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); text-align: center; }
+  .meter .m-row.today .m-dl { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+  .meter .m-seg { position: relative; align-self: stretch; width: 22px; border-radius: 2px; background: #FFFFFF0D; }
+  .meter .m-row.past .m-seg, .meter .m-row.today .m-seg { background: #FFFFFF1C; }
+  .meter .m-seg b { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: inherit; background: var(--fill);
+    transition: height 380ms var(--ease-standard) var(--d, 0ms), background-color 450ms var(--ease-standard); }
+  .meter .m-seg i { position: absolute; left: 0; right: 0; height: 0; border-radius: inherit; background: var(--over);
+    transition: height 380ms var(--ease-standard) var(--d, 0ms), background-color 450ms var(--ease-standard); }
+  .meter .m-now { position: absolute; left: -5px; right: -5px; height: 2px; margin-bottom: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1px var(--color-background-body); z-index: 1; }
+  .meter .m-say { font-size: var(--csm-text-body); line-height: var(--csm-lh-body); font-weight: var(--font-weight-heading); color: var(--say); }
+  .meter .m-reset { margin-top: 1px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+  .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; box-shadow: 0 -1px 0 #FFFFFF0F; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+  .meter .m-five i { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); position: relative; overflow: hidden; }
+  .meter .m-five i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--color-text-secondary); }
+  .meter .m-five span { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+  /* Short cards: the tile drops what it can do without. */
+  @container list (max-width: 520px) { .meter { display: none; } }
+  /* The fills carry their height from the first draw; only the very first time they grow
+     from empty, in turn from the bottom. */
+  @starting-style { .meter.intro .m-seg b, .meter.intro .m-seg i { height: 0; } }
+  @media (prefers-reduced-motion: reduce) { .meter .m-seg b, .meter .m-seg i { transition: background-color 200ms linear; } }
+
   /* The rest of the week sits a step back from the active zone. */
   .group.active + .group { margin-top: 28px; }
 
@@ -279,7 +342,7 @@
     overflow: hidden;
     position: relative;
     /* A color change fades here; when the card also moves, the layout animation fades it. */
-    transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow 700ms var(--ease-standard);
+    transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
   }
   /* What needs you (blocked, or a question) and errors get the strongest tint; work in
      progress a quieter blue; done a faint green, and only in Active, so green keeps its
@@ -420,7 +483,7 @@
     padding: 10px 12px;
     border-radius: var(--radius-container);
     background: var(--tint);
-    transition: --tint 450ms var(--ease-standard), box-shadow 700ms var(--ease-standard);
+    transition: --tint 450ms var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
   }
   /* A session that is live right now keeps its state's color here too, quieter than on
      its card, and updates as it changes. */
@@ -461,9 +524,11 @@
   /* A scheduled task a session set up: its tag on the card opens it in Scheduled. */
   .card .tags .tag.rel { flex: 0 1 auto; min-width: 25px; cursor: pointer; }
   .card .tags .tag.rel:hover { color: var(--color-text-primary); }
-  /* Hovering or focusing a session outlines its relatives, wherever they are on screen. */
-  .card, .hrow { outline: 1.5px solid transparent; outline-offset: 2px; }
-  .card.rel-lit, .hrow.rel-lit { outline-color: #FFFFFFA6; transition: outline-color 200ms var(--ease-standard); }
+  /* Pointing at a session with relatives spotlights its family: it and the sessions it's
+     related to stay as they are, everything else steps back, and their relation tags light up. */
+  .family :is(.card, .hrow):not(.rel-lit):not(.rel-self), .family .meter { opacity: 0.3; }
+  .meter { transition: opacity 220ms var(--ease-standard); }
+  :is(.rel-lit, .rel-self) .tag.rel { color: var(--color-text-primary); background: #FFFFFF24; }
   .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
   .top .time { margin-left: auto; }
 
@@ -625,7 +690,7 @@
   @media (prefers-reduced-motion: reduce) {
     .pop { transform: none !important; }
     *, *::before, *::after { animation: none !important; }
-    .card { transition: --tint 450ms var(--ease-standard); }
+    .card { transition: --tint 450ms var(--ease-standard), opacity 220ms var(--ease-standard); }
     .card:active { transform: none; }
   }
 </style>
@@ -637,6 +702,7 @@
     <span class="name">Sessions</span>
     <span id="counts"></span>
     <span class="spacer"></span>
+    <span id="usage" class="usage" hidden></span>
     <span id="link" class="link off" title="Connection to the local server"><i></i><span>Connecting…</span></span>
     <button id="sound" class="icon-btn" type="button" aria-pressed="false"></button>
   </header>
@@ -1022,7 +1088,7 @@
       cards.set(s.sid, el);
     }
     // "new" and "found" are short-lived marks that a live update must not wipe.
-    const keep = ["new", "found", "rel-lit"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
+    const keep = ["new", "found", "rel-lit", "rel-self"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
     // Needs you and working say for how long; anything else says how long ago.
@@ -1109,7 +1175,7 @@
     const els = [...next.content.children].map((n) => {
       const o = old.get(n.dataset.sid);
       if (!o) { n._html = n.innerHTML; return n; }
-      const cls = n.className + ["found", "rel-lit"].filter((c) => o.classList.contains(c)).map((c) => ` ${c}`).join("");
+      const cls = n.className + ["found", "rel-lit", "rel-self"].filter((c) => o.classList.contains(c)).map((c) => ` ${c}`).join("");
       if (o.className !== cls) o.className = cls;
       for (const a of ["title", "aria-label"]) if (o.getAttribute(a) !== n.getAttribute(a)) o.setAttribute(a, n.getAttribute(a));
       if (o._html !== n.innerHTML) { o.innerHTML = n.innerHTML; o._html = n.innerHTML; }
@@ -1228,13 +1294,13 @@
     const keep = new Set();
     // Active stays even when it's empty, and then says so: a calm line instead of a gap.
     let sec = groups.get("active");
-    if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="grid"></div>`));
+    if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="abody"><div class="grid"></div><aside class="meter" hidden role="meter" aria-valuemin="0" aria-valuemax="100"></aside></div>`));
     const quiet = sec.querySelector(".quiet");
     if (!active.length) {
       sec.querySelector(".count").textContent = "";
       if (!quiet) {
         const mini = (id) => `<span class="qcard" id="${id}"><span class="qrow"><span class="qpill"></span>${CALM}${PDOT}<span class="qok">${ICON.check}</span></span><b></b></span>`;
-        sec.insertAdjacentHTML("beforeend", `<div class="quiet" role="status"><span class="qart" aria-hidden="true">${mini("qa")}${mini("qb")}</span><span>You're all caught up.</span></div>`);
+        sec.querySelector(".meter").insertAdjacentHTML("beforebegin", `<div class="quiet" role="status"><span class="qart" aria-hidden="true">${mini("qa")}${mini("qb")}</span><span>You're all caught up.</span></div>`);
         quietStory(sec.querySelector(".quiet"));
       }
     } else {
@@ -1249,6 +1315,8 @@
       });
     }
     for (const [sid, el] of cards) if (!keep.has(sid)) { listed.has(sid) ? el.remove() : drop(el); cards.delete(sid); }
+    renderMeter();
+    checkFamily();
 
     // The rest of the week: compact rows, by day.
     let prev = null;
@@ -1600,6 +1668,7 @@
     $content.scrollTop = 0;
     if (v === "history") { renderHistory(); loadHistory(true); }
     if (v === "scheduled") renderScheduled();
+    renderUsage(); // the header carries the usage when the Active tile is out of view
     if (!fromApp) bridge()?.postMessage({ view: v }); // keep the app's toolbar switch in step
   }
 
@@ -1655,22 +1724,43 @@
   // else no web menu (Reload, Inspect) at all.
   const sessionFor = (sid) => live.get(sid) ?? hist.items.find((h) => h.sid === sid);
 
-  // Pointing at a session (or focusing it) outlines the sessions it's related to: the one it
-  // came from and the side sessions it started.
+  // Pointing at a session (or focusing it) spotlights its family: the one it came from and
+  // the side sessions it started stay, the rest steps back. A short pause before it starts,
+  // so passing over the window doesn't make it flicker; at once from the keyboard.
   let litFor = null;
-  function lightRelatives(item) {
+  let litTimer;
+  const FAMILY_DELAY = 180;
+  function lightRelatives(item, now) {
+    clearTimeout(litTimer);
     if (item === litFor) return;
-    litFor = item;
-    for (const el of $content.querySelectorAll(".rel-lit")) el.classList.remove("rel-lit");
     const s = item && sessionFor(item.dataset.sid);
-    if (!s) return;
-    const sids = [s.from?.sid, ...(s.sides || []).map((x) => x.sid)].filter(Boolean);
-    for (const sid of sids) for (const el of $content.querySelectorAll(`.card[data-sid="${CSS.escape(sid)}"], .hrow[data-sid="${CSS.escape(sid)}"]`)) el.classList.add("rel-lit");
+    const sids = s ? [s.from?.sid, ...(s.sides || []).map((x) => x.sid)].filter(Boolean) : [];
+    const apply = () => {
+      litFor = item;
+      for (const el of $content.querySelectorAll(".rel-lit, .rel-self")) el.classList.remove("rel-lit", "rel-self");
+      const lit = sids.flatMap((sid) => [...$content.querySelectorAll(`.card[data-sid="${CSS.escape(sid)}"], .hrow[data-sid="${CSS.escape(sid)}"]`)]);
+      $content.classList.toggle("family", lit.length > 0);
+      if (!lit.length) return;
+      item.classList.add("rel-self");
+      lit.forEach((el) => el.classList.add("rel-lit"));
+    };
+    // Crossing the gap between two cards, or onto one with no relatives, waits the same
+    // pause before the spotlight goes, so it doesn't blink off and on.
+    if (now) apply();
+    else litTimer = setTimeout(apply, FAMILY_DELAY);
   }
   $content.addEventListener("pointerover", (e) => lightRelatives(e.target.closest?.(".card, .hrow")));
-  $content.addEventListener("pointerleave", () => lightRelatives(null));
-  $content.addEventListener("focusin", (e) => lightRelatives(e.target.closest?.(".card, .hrow")));
-  $content.addEventListener("focusout", (e) => { if (!$content.contains(e.relatedTarget)) lightRelatives(null); });
+  $content.addEventListener("pointerleave", () => lightRelatives(null, true));
+  // WebKit doesn't always say the pointer left when it leaves the window or the app goes to
+  // the back, so the spotlight also goes then.
+  const endFamily = () => lightRelatives(null, true);
+  addEventListener("blur", endFamily);
+  document.addEventListener("pointerout", (e) => { if (!e.relatedTarget) endFamily(); });
+  document.addEventListener("visibilitychange", () => { if (document.hidden) endFamily(); });
+  // A redraw can take away the card that lit it, under a pointer that didn't move.
+  function checkFamily() { if (litFor && !litFor.isConnected) endFamily(); }
+  $content.addEventListener("focusin", (e) => lightRelatives(e.target.closest?.(".card, .hrow"), true));
+  $content.addEventListener("focusout", (e) => { if (!$content.contains(e.relatedTarget)) lightRelatives(null, true); });
   document.addEventListener("contextmenu", (e) => {
     if (!embed) return;
     e.preventDefault();
@@ -1732,7 +1822,109 @@
   }
   addEventListener("resize", () => requestAnimationFrame(fitCounts));
 
+  // The plan's usage, saved by the status line after each reply in any session.
+  const $usage = document.getElementById("usage");
+  const USAGE_HIGH = 80;
+  // Within a day, the time it resets; further off, the day (and the time, in the tooltip).
+  const resetWords = (t, full) => {
+    if (!t) return "";
+    const day = new Date(t).toLocaleDateString("en-US", { weekday: "short" });
+    return t - now() < DAY ? clock(t) : full ? `${day} ${clock(t)}` : day;
+  };
+  function usageTip(u) {
+    const line = (name, w) => w && `${name}: ${Math.floor(w.pct)}% used${w.resets ? `, resets ${resetWords(w.resets, true)}` : ""}`;
+    const p = u.week ? pace(u.week) : null;
+    const even = p?.gone != null ? `${p.say}: an even week would be at ${Math.round(p.gone)}% by now` : "";
+    return [line("This week", u.week), even, line("Last 5 hours", u.five), `Updated ${ago(u.at)}`].filter(Boolean).join("\n");
+  }
+  // How the week is going: the share used against the share of the week gone by.
+  const WEEK = 7 * DAY;
+  function pace(w) {
+    if (!w.resets) return { key: "", say: "" };
+    const gone = Math.min(1, Math.max(0, 1 - (w.resets - now()) / WEEK)) * 100;
+    const ahead = w.pct - gone;
+    if (w.pct >= 90) return { key: "limit", say: "Almost at the limit", gone };
+    if (ahead > 15) return { key: "hot", say: "Running hot", gone };
+    if (ahead > 5) return { key: "fast", say: "A little fast", gone };
+    if (ahead < -15) return { key: "plenty", say: "Plenty left", gone };
+    return { key: "on-pace", say: "On pace", gone };
+  }
+  function renderMeter() {
+    const $m = document.querySelector("#week .meter");
+    if (!$m) return;
+    const w = state.usage?.week;
+    if (!w) { $m.hidden = true; $m._html = ""; renderUsage(); return; }
+    const p = pace(w);
+    const pct = Math.floor(w.pct);
+    // The week's 7 days from the reset, bottom up, filled up to what you've used. Past the
+    // blue line (an even week by now), the fill is the overshoot, in the pace's color.
+    const start = w.resets ? w.resets - WEEK : null;
+    const used = (Math.min(100, w.pct) / 100) * 7; // in days
+    const even = p.gone != null ? (p.gone / 100) * 7 : used;
+    const base = Math.min(used, even);
+    const lighting = !$m._lit && !matchMedia("(prefers-reduced-motion: reduce)").matches; // the first time, they fill in turn
+    if (lighting) {
+      $m._lit = true;
+      $m._intro = true;
+      setTimeout(() => { $m._intro = false; $m.classList.remove("intro"); }, 1500);
+    }
+    const share = (x, d) => Math.max(0, Math.min(1, x - d)) * 100;
+    const days = Array.from({ length: 7 }, (_, d) => {
+      const today = start && now() >= start + d * DAY && now() < start + (d + 1) * DAY;
+      const past = start && now() >= start + (d + 1) * DAY;
+      const fill = share(base, d);
+      const overFrom = share(even, d);
+      const overTo = used > even ? share(used, d) : 0;
+      const over = Math.max(0, overTo - overFrom);
+      const at = today ? ((now() - start - d * DAY) / DAY) * 100 : null;
+      const delay = `--d:${lighting ? d * 90 : 0}ms`;
+      const letter = start ? new Date(start + d * DAY + 1).toLocaleDateString("en-US", { weekday: "narrow" }) : "";
+      return `<span class="m-row${today ? " today" : past ? " past" : ""}"><span class="m-dl">${letter}</span><span class="m-seg"><b style="height:${fill.toFixed(1)}%;${delay}"></b>${over > 0 ? `<i style="bottom:${overFrom.toFixed(1)}%;height:${over.toFixed(1)}%;${delay}"></i>` : ""}${at != null ? `<span class="m-now" style="bottom:${Math.round(at)}%"></span>` : ""}</span></span>`;
+    }).join("");
+    const five = state.usage.five;
+    const html = `<span class="m-lbl">This week</span>
+      <span class="m-pct"><small class="ghost">%</small>${pct}<small>%</small></span>
+      <span class="m-week" aria-hidden="true">${days}</span>
+      ${p.say ? `<span class="m-say">${p.say}</span>` : ""}
+      ${w.resets ? `<span class="m-reset">Resets ${resetWords(w.resets)}</span>` : ""}
+      ${five ? `<span class="m-five">5 h<i><b style="width:${Math.min(100, five.pct)}%"></b></i><span>${Math.floor(five.pct)}%</span></span>` : ""}`;
+    $m.hidden = false;
+    $m.className = `meter ${p.key}${$m._intro ? " intro" : ""}`;
+    $m.setAttribute("aria-valuenow", String(pct));
+    $m.setAttribute("aria-label", `This week: ${pct}% used${p.say ? `, ${p.say.toLowerCase()}` : ""}`);
+    if ($m._html !== html) {
+      $m.innerHTML = html;
+      $m._html = html;
+    }
+    $m.title = usageTip(state.usage);
+    renderUsage();
+  }
+
+  function renderUsage() {
+    const u = state.usage;
+    // The tile in Active says it better; the header carries it only when the tile is off screen.
+    const tile = document.querySelector("#week .meter");
+    const tileShown = tile && !tile.hidden && view === "week" && tile.offsetParent !== null;
+    if (!u || tileShown) { $usage.hidden = true; $usage._html = ""; return; }
+    // The week leads; without it, the 5-hour window stands in.
+    const [name, w] = u.week ? ["This week", u.week] : ["Last 5 hours", u.five];
+    const pct = Math.floor(w.pct);
+    const html = `<span class="u-lbl">${name}</span><span class="u-bar" role="meter" aria-label="${name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i></i></span><span class="u-pct">${pct}%</span>${w.resets ? `<span class="u-reset">· resets ${resetWords(w.resets)}</span>` : ""}`;
+    $usage.hidden = false;
+    $usage.classList.toggle("high", u.week ? ["hot", "limit"].includes(pace(u.week).key) : w.pct >= USAGE_HIGH);
+    if ($usage._html !== html) {
+      $usage.innerHTML = html;
+      $usage._html = html;
+      requestAnimationFrame(() => { const bar = $usage.querySelector(".u-bar i"); if (bar) bar.style.width = `${Math.min(100, w.pct)}%`; });
+      requestAnimationFrame(fitCounts);
+    }
+    $usage.title = usageTip(u);
+  }
+  addEventListener("resize", () => requestAnimationFrame(renderUsage));
+  $usage.addEventListener("pointerenter", () => { if (state.usage) $usage.title = usageTip(state.usage); });
+
   function renderHeader() {
+    renderUsage();
     const list = state.sessions;
     const needs = state.needs ?? list.filter(needsYou).length;
     const working = list.filter((s) => s.status === "working").length;

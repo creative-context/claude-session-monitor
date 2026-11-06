@@ -297,6 +297,15 @@ if (EDGE) {
 
 writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile, recordedSkips: skips }));
 
+// The plan's usage, as the status line saves it: a week on pace (--hot: well
+// past an even pace), and the last 5 hours.
+const hot = process.argv.includes("--hot");
+writeFileSync(join(dir, "usage.json"), JSON.stringify({
+  at: now / 1000 - 4 * 60,
+  week: { used_percentage: hot ? 74 : 50, resets_at: Math.floor(now / 1000 + 3.25 * 86400) },
+  five_hour: { used_percentage: hot ? 61 : 22, resets_at: Math.floor(now / 1000 + 2.4 * 3600) },
+}));
+
 const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
     ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir,

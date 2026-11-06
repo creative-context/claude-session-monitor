@@ -1156,7 +1156,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         guard let source = serverDir?.appendingPathComponent("hooks") else { throw CocoaError(.fileNoSuchFile) }
         let fm = FileManager.default
         try fm.createDirectory(at: hookDir, withIntermediateDirectories: true)
-        for name in ["session-hook.sh", "event.jq"] {
+        for name in ["session-hook.sh", "event.jq", "statusline.sh"] {
             let from = source.appendingPathComponent(name)
             let to = hookDir.appendingPathComponent(name)
             if fm.contentsEqual(atPath: from.path, andPath: to.path) { continue }
@@ -1164,6 +1164,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             try fm.copyItem(at: from, to: to)
         }
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookFile.path)
+        try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookDir.appendingPathComponent("statusline.sh").path)
     }
 
     // When Claude Code uses the app's copy of the hook, a newer app brings a newer hook.

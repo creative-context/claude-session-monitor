@@ -7,7 +7,7 @@
 
 import {
   closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync,
-  renameSync, statSync, watch,
+  renameSync, statSync, watch, writeFileSync,
 } from "node:fs";
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
@@ -1433,6 +1433,105 @@ function taskList(now: number) {
   }).sort((a, b) => a.rank - b.rank || (a.next ?? Infinity) - (b.next ?? Infinity) || a.name.localeCompare(b.name));
 }
 
+// ---------------------------------------------------------------- plan usage
+
+// The status line (hooks/statusline.sh) saves the plan's weekly and 5-hour usage after
+// each reply: two percentages and when they reset, nothing else.
+const USAGE = join(DIR, "usage.json");
+type UsageWindow = { pct: number; resets: number | null };
+let usage: { at: number; week: UsageWindow | null; five: UsageWindow | null } | null = null;
+let usageMtime = 0;
+// Claude Code gives epoch seconds; milliseconds and ISO dates are taken too, in case.
+const toMs = (v: unknown): number | null =>
+  typeof v === "number" && isFinite(v) ? (v < 1e12 ? v * 1000 : v) : typeof v === "string" ? Date.parse(v) || null : null;
+
+function readUsage() {
+  let m = 0;
+  try {
+    m = statSync(USAGE).mtimeMs;
+  } catch {
+    if (usage) { usage = null; usageMtime = 0; version++; }
+    return;
+  }
+  if (m === usageMtime) return;
+  usageMtime = m;
+  try {
+    const j = JSON.parse(readFileSync(USAGE, "utf8"));
+    const win = (w: any): UsageWindow | null =>
+      w && typeof w.used_percentage === "number" && isFinite(w.used_percentage)
+        ? { pct: Math.max(0, Math.min(100, w.used_percentage)), resets: toMs(w.resets_at) }
+        : null;
+    usage = { at: toMs(j.at) ?? m, week: win(j.week), five: win(j.five_hour) };
+  } catch {
+    usage = null;
+  }
+  version++;
+}
+
+// The Claude app doesn't run status lines, so every 30 minutes the server opens Claude
+// Code in a hidden terminal for a few seconds: it runs our status line on start, which
+// saves the usage, and nothing is sent to Claude. It runs in its own empty folder,
+// without the user's settings, so no hook fires, nothing is saved and no card appears.
+// The folder must be trusted once by hand (README); until then the probe just quits.
+const PROBE_DIR = join(DIR, "probe");
+const PROBE_EVERY = 30 * 60_000;
+const PROBE_SCRIPT = `set timeout 25
+log_user 0
+spawn -noecho env COLUMNS=100 LINES=30 [lindex $argv 1] --setting-sources project --strict-mcp-config --settings [lindex $argv 0]
+set code 0
+expect {
+  -re "trust this folder" { set code 2 }
+  -re "Week|5h " { sleep 1 }
+  timeout { set code 1 }
+}
+send "\\003"
+sleep 1
+send "\\003"
+expect eof
+exit $code
+`;
+const claudeCli = () =>
+  [join(homedir(), ".local/bin/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].find((p) => existsSync(p));
+let probing = false;
+function probeUsage() {
+  // Only the real app: tests and the demo point CSM_DIR at a temp folder.
+  if (process.env.CSM_DIR || probing) return;
+  const status = join(import.meta.dir, "hooks", "statusline.sh");
+  const cli = claudeCli();
+  if (!cli || !existsSync("/usr/bin/expect") || !existsSync(status)) {
+    console.log(`Usage check skipped: ${!cli ? "no claude command" : !existsSync(status) ? "no status line" : "no expect"}.`);
+    return;
+  }
+  if (usage && Date.now() - usage.at < PROBE_EVERY - 5 * 60_000) return; // fresh from a terminal session
+  try {
+    mkdirSync(PROBE_DIR, { recursive: true, mode: 0o700 });
+    writeFileSync(join(DIR, "probe.exp"), PROBE_SCRIPT);
+  } catch {
+    return;
+  }
+  probing = true;
+  // Claude Code runs it through a shell, and the app's path has spaces.
+  const settings = JSON.stringify({ statusLine: { type: "command", command: `'${status.replace(/'/g, "'\\''")}'` } });
+  const p = Bun.spawn(["/usr/bin/expect", join(DIR, "probe.exp"), settings, cli], { cwd: PROBE_DIR, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+  const kill = setTimeout(() => p.kill(), 45_000);
+  p.exited.then((code) => {
+    clearTimeout(kill);
+    probing = false;
+    readUsage();
+    if (code === 2) console.log(`Usage check: Claude Code asks to trust ${PROBE_DIR} first (see the README).`);
+    else if (code !== 0) console.log(`Usage check: no usage from Claude Code (exit ${code}).`);
+  });
+}
+
+function usageView(now: number) {
+  if (!usage) return null;
+  // Past its reset a window's number no longer holds, so it goes until the next reply.
+  const live = (w: UsageWindow | null) => (w && (w.resets == null || w.resets > now) ? w : null);
+  const week = live(usage.week);
+  const five = live(usage.five);
+  return week || five ? { at: usage.at, week, five } : null;
+}
+
 function snapshot() {
   const now = Date.now();
   const list = [...sessions.values()]
@@ -1508,7 +1607,7 @@ function snapshot() {
     });
   // A scheduled task the app can't start needs you too, like a session that stopped on an error.
   const taskViews = taskList(now);
-  return { now, needs: list.filter((x) => x.needsYou).length + taskViews.filter((t) => t.blocked && !t.blocked.queued).length, sessions: list, tasks: taskViews };
+  return { now, needs: list.filter((x) => x.needsYou).length + taskViews.filter((t) => t.blocked && !t.blocked.queued).length, sessions: list, tasks: taskViews, usage: usageView(now) };
 }
 
 // ---------------------------------------------------------------- web server
@@ -1626,6 +1725,7 @@ function schedulePump() {
 try {
   watch(DIR, (_, name) => {
     if (!name || name === "events.jsonl") schedulePump();
+    if (!name || name === "usage.json") readUsage();
   });
 } catch {}
 
@@ -1644,6 +1744,19 @@ setInterval(() => {
     version++;
   }
 }, 30_000);
+// The usage file is read when it changes, and a window leaves the header when it resets.
+readUsage();
+let usageClock = "";
+setInterval(() => {
+  readUsage();
+  const sig = JSON.stringify(usageView(Date.now()));
+  if (sig !== usageClock) {
+    usageClock = sig;
+    version++;
+  }
+}, 5000);
+setTimeout(probeUsage, 20_000);
+setInterval(probeUsage, PROBE_EVERY);
 setInterval(forgetOld, 60_000);
 // Lesson from agents-observe: throttle what goes to the page, at most every 250 ms.
 setInterval(() => {
