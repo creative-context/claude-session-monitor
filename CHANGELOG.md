@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.4
 
 - Weekly usage, at the right of Active: a narrow column with how much of your plan's weekly limit you've used, the week as seven day blocks filled up to it, a blue line for where an even week would be by now, and how you're doing against it (Plenty left, On pace, A little fast, Running hot, Almost at the limit) with the day it resets. Only the part ahead of the line takes a color; the fill turns red at 90%. Its tip adds the last 5 hours. In a narrow window and the other views, a small version sits in the header. A status line saves the numbers (the hook installer adds it when you have none), and every 30 minutes the app opens Claude Code in a hidden terminal for a few seconds to run it, sending nothing to Claude. Its folder needs to be allowed once; the README says how.
 - The menu bar menu starts with what needs you: each session's title and why (its question, the permission it waits for, or its error), with a dot in its color. Pick one to open it in the Claude app. Up to eight show; the rest are a click away in the window.
