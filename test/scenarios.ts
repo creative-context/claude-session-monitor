@@ -199,7 +199,15 @@ const appDir = join(dir, "app", "account", "org");
 mkdirSync(appDir, { recursive: true });
 const HOUR = 3_600_000;
 const DAY = 24 * HOUR;
-const midnight = new Date(new Date().setHours(0, 0, 0, 0)).getTime();
+// The daily tasks below (34–38) are due at an hour that started at least 15 minutes ago,
+// so the scenario holds at any time of day, just after dueAt too.
+const dueAt = (() => {
+  const d = new Date();
+  d.setMinutes(0, 0, 0);
+  if (Date.now() - d.getTime() < 15 * 60_000) d.setHours(d.getHours() - 1);
+  return d.getTime();
+})();
+const daily = `0 ${new Date(dueAt).getHours()} * * *`;
 const iso = (ms: number) => new Date(ms).toISOString();
 writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: [
   { id: "t-digest", displayName: "Weekday digest", cronExpression: "0 7 * * 1-5", enabled: true, cwd: "/tmp/demo",
@@ -215,50 +223,50 @@ writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTa
     createdAt: Date.now() - 24 * HOUR, lastRunAt: iso(Date.now() - 5 * HOUR + 60_000) },
   { id: "t-once-on", displayName: "Left on after it ran", fireAt: iso(Date.now() - 6 * HOUR), enabled: true,
     createdAt: Date.now() - 24 * HOUR, lastRunAt: iso(Date.now() - 6 * HOUR + 30_000) },
-  // 34. Due at midnight and blocked: the app keeps skipping it because yesterday's run is
+  // 34. Due today and blocked: the app keeps skipping it because yesterday's run is
   // still open. 35. Skipped at first, then it started.
-  { id: "t-blocked", displayName: "Midnight cleanup", cronExpression: "0 0 * * *", enabled: true, cwd: "/tmp/demo",
-    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 6 * 60_000), lastScheduledFor: iso(midnight - DAY) },
+  { id: "t-blocked", displayName: "Midnight cleanup", cronExpression: daily, enabled: true, cwd: "/tmp/demo",
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(dueAt - DAY + 6 * 60_000), lastScheduledFor: iso(dueAt - DAY) },
   // 37. Held up by a run that's busy and moving: it just waits. 38. By one that says it's
   // working but hasn't done anything since yesterday: stuck, so it needs you.
-  { id: "t-queued", displayName: "Midnight sync", cronExpression: "0 0 * * *", enabled: true,
-    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 6 * 60_000), lastScheduledFor: iso(midnight - DAY) },
-  { id: "t-stuck", displayName: "Midnight export", cronExpression: "0 0 * * *", enabled: true,
-    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 6 * 60_000), lastScheduledFor: iso(midnight - DAY) },
-  { id: "t-stale", displayName: "Midnight report", cronExpression: "0 0 * * *", enabled: true,
-    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 60_000), lastScheduledFor: iso(midnight - DAY) },
-  { id: "t-unblocked", displayName: "Midnight backup", cronExpression: "0 0 * * *", enabled: true,
-    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(midnight - DAY + 60_000), lastScheduledFor: iso(midnight - DAY) },
+  { id: "t-queued", displayName: "Midnight sync", cronExpression: daily, enabled: true,
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(dueAt - DAY + 6 * 60_000), lastScheduledFor: iso(dueAt - DAY) },
+  { id: "t-stuck", displayName: "Midnight export", cronExpression: daily, enabled: true,
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(dueAt - DAY + 6 * 60_000), lastScheduledFor: iso(dueAt - DAY) },
+  { id: "t-stale", displayName: "Midnight report", cronExpression: daily, enabled: true,
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(dueAt - DAY + 60_000), lastScheduledFor: iso(dueAt - DAY) },
+  { id: "t-unblocked", displayName: "Midnight backup", cronExpression: daily, enabled: true,
+    createdAt: Date.now() - 30 * 24 * HOUR, lastRunAt: iso(dueAt - DAY + 60_000), lastScheduledFor: iso(dueAt - DAY) },
 ], recordedSkips: {
-  // Skipped since just after midnight, and still trying now.
-  "t-blocked": [midnight + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" }))
-    .concat([{ at: midnight - DAY - HOUR, reason: "per_task_limit" }]), // before its last run: old news
-  "t-queued": [midnight + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" })),
-  "t-stuck": [midnight + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" })),
+  // Skipped since just after it was due, and still trying now.
+  "t-blocked": [dueAt + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" }))
+    .concat([{ at: dueAt - DAY - HOUR, reason: "per_task_limit" }]), // before its last run: old news
+  "t-queued": [dueAt + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" })),
+  "t-stuck": [dueAt + 53_000, Date.now() - 2 * 60_000, Date.now() - 60_000].map((at) => ({ at, reason: "per_task_limit" })),
   // 36. Skipped for a while, then the app stopped trying (it was closed): no longer blocked.
-  "t-stale": [midnight + 53_000, midnight + 113_000].map((at) => ({ at, reason: "per_task_limit" })),
-  "t-unblocked": [{ at: midnight + 53_000, reason: "per_task_limit" }],
+  "t-stale": [dueAt + 53_000, dueAt + 113_000].map((at) => ({ at, reason: "per_task_limit" })),
+  "t-unblocked": [{ at: dueAt + 53_000, reason: "per_task_limit" }],
 } }));
 // Yesterday's run of the blocked task, still open; today's run of the other one.
 writeFileSync(join(appDir, "local_run34.json"), JSON.stringify({
   cliSessionId: id(34), scheduledTaskId: "t-blocked", title: "Midnight cleanup", originCwd: "/tmp/demo",
-  createdAt: midnight - DAY + 6 * 60_000, lastActivityAt: midnight - DAY + 9 * 60_000,
+  createdAt: dueAt - DAY + 6 * 60_000, lastActivityAt: dueAt - DAY + 9 * 60_000,
 }));
 writeFileSync(join(appDir, "local_run35.json"), JSON.stringify({
   cliSessionId: id(35), scheduledTaskId: "t-unblocked", title: "Midnight backup", originCwd: "/tmp/demo",
-  createdAt: midnight + 2 * 60_000, lastActivityAt: midnight + 4 * 60_000,
+  createdAt: dueAt + 2 * 60_000, lastActivityAt: dueAt + 4 * 60_000,
 }));
-ev(id(34), { ev: "UserPromptSubmit", prompt: "Midnight cleanup", t: midnight - DAY + 6 * 60_000 });
-ev(id(34), { ev: "Stop", t: midnight - DAY + 9 * 60_000 });
+ev(id(34), { ev: "UserPromptSubmit", prompt: "Midnight cleanup", t: dueAt - DAY + 6 * 60_000 });
+ev(id(34), { ev: "Stop", t: dueAt - DAY + 9 * 60_000 });
 for (const [n, task, name] of [[37, "t-queued", "Midnight sync"], [38, "t-stuck", "Midnight export"]] as const) {
   writeFileSync(join(appDir, `local_run${n}.json`), JSON.stringify({
     cliSessionId: id(n), scheduledTaskId: task, title: name, originCwd: "/tmp/demo",
-    createdAt: midnight - DAY + 6 * 60_000, lastActivityAt: midnight - DAY + 7 * 60_000,
+    createdAt: dueAt - DAY + 6 * 60_000, lastActivityAt: dueAt - DAY + 7 * 60_000,
   }));
-  ev(id(n), { ev: "UserPromptSubmit", prompt: name, t: midnight - DAY + 6 * 60_000 });
+  ev(id(n), { ev: "UserPromptSubmit", prompt: name, t: dueAt - DAY + 6 * 60_000 });
 }
 ev(id(37), { ev: "PreToolUse", tool: "Bash", d: "Sync the files", t: Date.now() - 60_000 });
-ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: midnight - DAY + 7 * 60_000 });
+ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: dueAt - DAY + 7 * 60_000 });
 // 39–41. The Claude app's own summary of the last turn. 39: it names something you need to
 // do, though the closing has no question. 40: the same, but about an earlier turn. 41: done.
 for (const [n, cat, action, about] of [
@@ -293,8 +301,8 @@ for (const [n, file, extra] of [
     cliSessionId: id(n), title: `Pricing page ${n}`, originCwd: "/tmp/demo", createdAt: at, lastActivityAt: at + 60_000, ...extra,
   }));
 }
-ev(id(35), { ev: "UserPromptSubmit", prompt: "Midnight backup", t: midnight + 2 * 60_000 });
-ev(id(35), { ev: "Stop", t: midnight + 4 * 60_000 });
+ev(id(35), { ev: "UserPromptSubmit", prompt: "Midnight backup", t: dueAt + 2 * 60_000 });
+ev(id(35), { ev: "Stop", t: dueAt + 4 * 60_000 });
 writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
   cliSessionId: id(19), scheduledTaskId: "t-digest", title: "Weekday digest", originCwd: "/tmp/demo",
   createdAt: Date.now() - 60_000, lastActivityAt: Date.now(),
@@ -451,8 +459,8 @@ try {
   check("34 a task the app keeps skipping is blocked, not missed, with the run that holds it up",
     blk?.blocked?.reason === "per_task_limit" && blk?.blocked?.tries === 3 && blk?.blocked?.run?.sid === id(34) && blk?.missed === null && blk?.rank === 0, blk);
   check("35 a task that started after a skip isn't blocked", task("t-unblocked")?.blocked === null, task("t-unblocked")?.blocked);
-  check("36 once the app stops trying, it isn't blocked anymore", task("t-stale")?.blocked === null || Date.now() - midnight < 5 * 60_000, task("t-stale")?.blocked);
-  check("34 blocked since the first skip after its last run", blk?.blocked?.since === midnight + 53_000, blk?.blocked?.since);
+  check("36 once the app stops trying, it isn't blocked anymore", task("t-stale")?.blocked === null, task("t-stale")?.blocked);
+  check("34 blocked since the first skip after its last run", blk?.blocked?.since === dueAt + 53_000, blk?.blocked?.since);
   check("a task's schedule in words", digest?.schedule === "Weekdays at 7:00 AM", digest?.schedule);
   check("its next run is the next weekday at 7:00", Boolean(next && digest.next > Date.now() && next.getHours() === 7 && next.getMinutes() === 0 && next.getDay() >= 1 && next.getDay() <= 5), digest?.next);
   check("19 its last run is linked, asks you, and nothing was missed", digest?.lastRun?.sid === id(19) && digest?.lastRun?.status === "asks" && digest?.missed === null, digest);
