@@ -1686,7 +1686,8 @@
 
   // The app drives these from its toolbar.
   window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); },
-    endFamily: () => endFamily() }; // the app calls it when the pointer leaves the window, active or not
+    endFamily: () => endFamily(), // the app calls these when the pointer enters or leaves the window, active or not
+    pointer: (inside) => { pointerIn = Boolean(inside); if (!inside) endFamily(); } };
 
   // In the app the header row sits in the title bar, and the app drags the window by it.
   // It needs to know where the things you can click are, so it leaves those alone.
@@ -1751,8 +1752,18 @@
     if (now) apply();
     else litTimer = setTimeout(apply, FAMILY_DELAY);
   }
-  $content.addEventListener("pointerover", (e) => lightRelatives(e.target.closest?.(".card, .hrow")));
-  $content.addEventListener("pointerleave", () => lightRelatives(null, true));
+  // Only a pointer that's really in the window lights it up. WebKit replays the last
+  // pointer position when the layout changes, even after the pointer left for another
+  // window, and those replays don't move. In the app, the app also says when the pointer
+  // comes and goes (window.csm.pointer).
+  let pointerIn = !embed;
+  $content.addEventListener("pointerover", (e) => { if (pointerIn) lightRelatives(e.target.closest?.(".card, .hrow")); });
+  $content.addEventListener("pointermove", (e) => {
+    if (pointerIn || !(e.movementX || e.movementY)) return;
+    pointerIn = true;
+    lightRelatives(e.target.closest?.(".card, .hrow"));
+  });
+  $content.addEventListener("pointerleave", () => { if (embed) pointerIn = false; lightRelatives(null, true); });
   // WebKit doesn't always say the pointer left when it leaves the window or the app goes to
   // the back, so the spotlight also goes then.
   const endFamily = () => lightRelatives(null, true);

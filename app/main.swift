@@ -36,9 +36,10 @@ final class PageView: WKWebView {
     var holes: [CGRect] = [] // in the page's CSS pixels
     var titlebarHeight: CGFloat = 0 // in points, from the top
 
-    // WebKit doesn't tell the page when the pointer leaves an inactive window, so the
-    // related-sessions spotlight could stay on. This tracking area works in any window
-    // state and tells the page itself.
+    // WebKit doesn't tell the page when the pointer leaves an inactive window, and it
+    // replays the last pointer position on layout changes, so the related-sessions
+    // spotlight could stay on or turn on by itself. This tracking area works in any
+    // window state and tells the page when the pointer comes and goes.
     private var exitArea: NSTrackingArea?
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
@@ -47,10 +48,16 @@ final class PageView: WKWebView {
         addTrackingArea(area)
         exitArea = area
     }
+    override func mouseEntered(with event: NSEvent) {
+        super.mouseEntered(with: event)
+        if event.trackingArea === exitArea {
+            evaluateJavaScript("window.csm?.pointer?.(true)", completionHandler: nil)
+        }
+    }
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
         if event.trackingArea === exitArea {
-            evaluateJavaScript("window.csm?.endFamily?.()", completionHandler: nil)
+            evaluateJavaScript("window.csm?.pointer?.(false)", completionHandler: nil)
         }
     }
 
