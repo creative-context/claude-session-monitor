@@ -4,7 +4,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 
 ## Layout
 
-- `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`. `hooks/statusline.sh`: the status line that saves the plan's weekly and 5-hour usage to `usage.json`; the server runs Claude Code in a hidden terminal every 30 minutes so it runs (`probeUsage`).
+- `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`. `hooks/statusline.sh`: the status line that saves the plan's weekly and 5-hour usage to `usage.json`; the server runs Claude Code in a hidden terminal every 10 minutes so it runs (`probeUsage`).
 - `install-hooks.ts`: adds or removes the hook's entries in `~/.claude/settings.json`, after a dated backup.
 - `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page.
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.

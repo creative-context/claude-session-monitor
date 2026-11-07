@@ -1468,13 +1468,13 @@ function readUsage() {
   version++;
 }
 
-// The Claude app doesn't run status lines, so every 30 minutes the server opens Claude
+// The Claude app doesn't run status lines, so every 10 minutes the server opens Claude
 // Code in a hidden terminal for a few seconds: it runs our status line on start, which
 // saves the usage, and nothing is sent to Claude. It runs in its own empty folder,
 // without the user's settings, so no hook fires, nothing is saved and no card appears.
 // The folder must be trusted once by hand (README); until then the probe just quits.
 const PROBE_DIR = join(DIR, "probe");
-const PROBE_EVERY = 30 * 60_000;
+const PROBE_EVERY = 10 * 60_000;
 const PROBE_SCRIPT = `set timeout 25
 log_user 0
 spawn -noecho env COLUMNS=100 LINES=30 [lindex $argv 1] --setting-sources project --strict-mcp-config --settings [lindex $argv 0]
@@ -1509,7 +1509,7 @@ function probeUsage() {
     console.log(`Usage check skipped: ${!cli ? "no claude command" : !existsSync(status) ? "no status line" : "no expect"}.`);
     return;
   }
-  if (usage && Date.now() - usage.at < PROBE_EVERY - 5 * 60_000) return; // fresh from a terminal session
+  if (usage && Date.now() - usage.at < PROBE_EVERY - 2 * 60_000) return; // fresh from a terminal session
   try {
     mkdirSync(PROBE_DIR, { recursive: true, mode: 0o700 });
     writeFileSync(join(DIR, "probe.exp"), PROBE_SCRIPT);
