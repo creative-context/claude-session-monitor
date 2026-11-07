@@ -1685,7 +1685,8 @@
   }
 
   // The app drives these from its toolbar.
-  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); } };
+  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); },
+    endFamily: () => endFamily() }; // the app calls it when the pointer leaves the window, active or not
 
   // In the app the header row sits in the title bar, and the app drags the window by it.
   // It needs to know where the things you can click are, so it leaves those alone.
