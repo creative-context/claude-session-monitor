@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: the related-sessions spotlight no longer turns on by itself when you come back to the window. A card keeps focus after a click opens its session, and the window gave it back on return; now only keyboard navigation lights it up.
+
 ## 0.4.5
 
 - The weekly usage refreshes every 10 minutes instead of every 30.

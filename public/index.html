@@ -1761,7 +1761,13 @@
   document.addEventListener("visibilitychange", () => { if (document.hidden) endFamily(); });
   // A redraw can take away the card that lit it, under a pointer that didn't move.
   function checkFamily() { if (litFor && !litFor.isConnected) endFamily(); }
-  $content.addEventListener("focusin", (e) => lightRelatives(e.target.closest?.(".card, .hrow"), true));
+  // From the keyboard only: a card keeps focus after a click opens its session, and the
+  // window gives it back on return, which mustn't light anything up by itself.
+  let keyAt = -Infinity;
+  document.addEventListener("keydown", () => { keyAt = performance.now(); }, true);
+  $content.addEventListener("focusin", (e) => {
+    if (performance.now() - keyAt < 1000) lightRelatives(e.target.closest?.(".card, .hrow"), true);
+  });
   $content.addEventListener("focusout", (e) => { if (!$content.contains(e.relatedTarget)) lightRelatives(null, true); });
   document.addEventListener("contextmenu", (e) => {
     if (!embed) return;
