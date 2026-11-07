@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.4.5
 
 - The weekly usage refreshes every 10 minutes instead of every 30.
 - Fix: the related-sessions spotlight ends when the pointer leaves the window, even when the window isn't the active one.
