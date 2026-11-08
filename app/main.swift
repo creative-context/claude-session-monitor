@@ -309,7 +309,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     static let viewNames = ["Last 7 Days", "All Sessions", "Scheduled"]
     func fitViewSwitch() {
         guard let seg = viewSwitch, let window else { return }
-        let narrow = window.frame.width < 640
+        let narrow = window.frame.width / zoom < 640 // the page turns compact at the same width
         for (i, name) in Self.viewNames.enumerated() {
             let want = narrow ? "" : name
             if seg.label(forSegment: i) != want { seg.setLabel(want, forSegment: i) }
@@ -339,11 +339,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let onePixel = 1 / (window.screen?.backingScaleFactor ?? 1)
         let top = max(4, (center - onePixel) / z - 12)
         let slot = max(0, (lightsEnd + 12) / z - 16) // the header starts 16 px in
-        // The toolbar items sit on the right; the header stops short of the first one.
-        var firstItemX = content.bounds.width - 150
-        if let seg = viewSwitch, seg.window != nil {
-            firstItemX = min(firstItemX, seg.convert(seg.bounds, to: content).minX)
+        // The toolbar items sit on the right; the header stops short of the first one that's
+        // visible. In a narrow window they go into the toolbar's » menu, which leaves only
+        // that button. Whatever the toolbar takes, the header keeps room for its first count.
+        var firstItemX = content.bounds.width - 40
+        for item in window.toolbar?.visibleItems ?? [] {
+            if let v = item.view, v.window != nil { firstItemX = min(firstItemX, v.convert(v.bounds, to: content).minX) }
         }
+        firstItemX = max(firstItemX, lightsEnd + 44 * z)
         let right = max(0, content.bounds.width - firstItemX + 12) / z
         let js = """
         (() => { const s = document.documentElement.style;
@@ -627,6 +630,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
     func applyZoom() {
         web.pageZoom = zoom
+        // The page's breakpoints are in its own pixels: the narrowest window keeps 171 of them.
+        window.minSize = NSSize(width: 171 * zoom, height: 260)
+        fitViewSwitch()
         syncPageChrome()
         rebuildSizeMenus()
         refreshSettings()
