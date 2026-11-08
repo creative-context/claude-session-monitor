@@ -694,6 +694,65 @@
     .card { transition: --tint 450ms var(--ease-standard), opacity 220ms var(--ease-standard); }
     .card:active { transform: none; }
   }
+
+  /* ---------- compact: a narrow window (a laptop on its own) ----------
+     Under 640 pt the cards become rows of free height with the same tints: a dot for the
+     state, the title and time, the question or what it's doing, then the card's tags as
+     one quiet line of facts, and the plan's bar. The week's usage moves to one line
+     under the header. The constraint is the width, so rows can grow down. */
+  .wstrip { display: none; }
+  @media (max-width: 639px) {
+    /* In a browser, the page's own view switch keeps its icons and drops its words (they stay as tips). */
+    .seg button > span { display: none; }
+    .group.active { display: flex; flex-direction: column; }
+    .group.active > .wstrip { order: -1; } /* above Active: the usage isn't one of its sessions */
+    .meter { display: none; }
+    .wstrip:not([hidden]) { --fill: #C4C8CF; --over: var(--fill); --say: var(--color-text-secondary);
+      display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; column-gap: 14px;
+      margin: 2px 2px 16px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); cursor: default; }
+    .wstrip.on-pace, .wstrip.plenty { --say: var(--color-text-green); }
+    .wstrip.fast { --over: var(--color-text-orange); --say: var(--color-text-orange); }
+    .wstrip.hot { --over: var(--color-warning); --say: var(--color-text-orange); }
+    .wstrip.limit { --fill: var(--color-error); --over: var(--color-error); --say: var(--color-text-red); }
+    .wstrip .ws-fig { font-family: ui-rounded, var(--font-family-body); font-size: 26px; line-height: 28px; font-weight: var(--font-weight-heading); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+    .wstrip .ws-fig small { font-size: 14px; letter-spacing: 0; color: var(--color-text-secondary); margin-left: 1px; }
+    .wstrip .ws-days { display: flex; gap: 3px; min-width: 0; }
+    .wstrip .ws-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+    .wstrip .ws-seg { position: relative; display: block; width: 100%; height: 10px; border-radius: 2px; background: #FFFFFF0D; }
+    .wstrip .ws-day.past .ws-seg, .wstrip .ws-day.today .ws-seg { background: #FFFFFF1C; }
+    .wstrip .ws-seg b, .wstrip .ws-seg i { position: absolute; top: 0; bottom: 0; border-radius: inherit; }
+    .wstrip .ws-seg b { left: 0; background: var(--fill); }
+    .wstrip .ws-seg i { background: var(--over); }
+    .wstrip .ws-now { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1px var(--color-background-body); z-index: 1; }
+    .wstrip .ws-dl { font-size: 10px; line-height: 10px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
+    .wstrip .ws-day.today .ws-dl { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+    .wstrip .ws-say { display: flex; flex-direction: column; align-items: flex-end; line-height: 15px; white-space: nowrap; }
+    .wstrip .ws-pace { font-size: var(--csm-text-body); font-weight: var(--font-weight-heading); color: var(--say); }
+
+    .grid { grid-auto-rows: auto; gap: 6px; }
+    .card { --dot: var(--color-text-disabled);
+      height: auto; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; column-gap: 10px; align-items: start; padding: 10px 12px; }
+    .card.waiting, .card.asks { --dot: var(--color-text-orange); }
+    .card.error { --dot: var(--color-text-red); }
+    .card.working { --dot: var(--color-text-accent); }
+    .card.done { --dot: var(--color-text-green); }
+    .group:not(.active) .card.done, .card.stale { --dot: var(--color-text-disabled); }
+    .card::before { content: ""; grid-column: 1; grid-row: 1; width: 8px; height: 8px; margin-top: 5px; border-radius: 50%; background: var(--dot); }
+    .card > .top { display: contents; }
+    .card > .top > .tag { display: none; } /* the state reads in the row's tint and dot, and VoiceOver says it */
+    .card > .top > .time { grid-column: 3; grid-row: 1; line-height: 17px; }
+    .card > .title { grid-column: 2; grid-row: 1; margin: 0; font-size: 13px; line-height: 17px; -webkit-line-clamp: 2; }
+    .card > .detail { grid-column: 2 / 4; grid-row: 2; margin-top: 2px; font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
+    .card > .tags { grid-column: 2 / 4; grid-row: 3; margin-top: 7px; gap: 12px; padding: 0; white-space: nowrap; }
+    .card > .bar { grid-column: 2 / 4; grid-row: 4; margin-top: 9px; padding: 0; }
+    .card:has(.bar) .tags { display: flex; }
+    /* The tags as one line of facts: icon and text, no boxes; the last one takes what's left. */
+    .card .tags .tag, .card .tags .tag.name, .card .tags .tag.rel { background: none; padding: 0; height: auto; flex: none; gap: 5px; min-width: 0; }
+    .card .tags .tag:last-child { flex: 0 1 auto; }
+    .card .tags .tag > span { overflow: hidden; text-overflow: ellipsis; }
+    .card .tags .tag svg { opacity: 0.75; }
+    .card .tags .tag[data-show-task]:hover { background: none; }
+  }
 </style>
 </head>
 <body>
@@ -810,8 +869,11 @@
   const $sound = document.getElementById("sound");
   const $q = document.getElementById("q");
   const $announce = document.getElementById("announce");
+  document.querySelector('[data-view="week"]').title = "Last 7 Days";
   document.querySelector('[data-view="week"]').innerHTML = `${ICON.grid}<span>Last 7 Days</span>`;
+  document.querySelector('[data-view="history"]').title = "All Sessions";
   document.querySelector('[data-view="history"]').innerHTML = `${ICON.history}<span>All Sessions</span>`;
+  document.querySelector('[data-view="scheduled"]').title = "Scheduled";
   document.querySelector('[data-view="scheduled"]').innerHTML = `${ICON.calendarClock}<span>Scheduled</span>`;
   document.querySelector(".search .sr").outerHTML = ICON.search;
 
@@ -1295,7 +1357,7 @@
     const keep = new Set();
     // Active stays even when it's empty, and then says so: a calm line instead of a gap.
     let sec = groups.get("active");
-    if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="abody"><div class="grid"></div><aside class="meter" hidden role="meter" aria-valuemin="0" aria-valuemax="100"></aside></div>`));
+    if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="wstrip" hidden role="meter" aria-valuemin="0" aria-valuemax="100"></div><div class="abody"><div class="grid"></div><aside class="meter" hidden role="meter" aria-valuemin="0" aria-valuemax="100"></aside></div>`));
     const quiet = sec.querySelector(".quiet");
     if (!active.length) {
       sec.querySelector(".count").textContent = "";
@@ -1874,7 +1936,13 @@
     const $m = document.querySelector("#week .meter");
     if (!$m) return;
     const w = state.usage?.week;
-    if (!w) { $m.hidden = true; $m._html = ""; renderUsage(); return; }
+    if (!w) {
+      $m.hidden = true; $m._html = "";
+      const $s = document.querySelector("#week .wstrip");
+      if ($s) { $s.hidden = true; $s._html = ""; }
+      renderUsage();
+      return;
+    }
     const p = pace(w);
     const pct = Math.floor(w.pct);
     // The week's 7 days from the reset, bottom up, filled up to what you've used. Past the
@@ -1890,6 +1958,7 @@
       setTimeout(() => { $m._intro = false; $m.classList.remove("intro"); }, 1500);
     }
     const share = (x, d) => Math.max(0, Math.min(1, x - d)) * 100;
+    const strip = []; // the same days, left to right, for the compact view's one-line strip
     const days = Array.from({ length: 7 }, (_, d) => {
       const today = start && now() >= start + d * DAY && now() < start + (d + 1) * DAY;
       const past = start && now() >= start + (d + 1) * DAY;
@@ -1900,6 +1969,7 @@
       const at = today ? ((now() - start - d * DAY) / DAY) * 100 : null;
       const delay = `--d:${lighting ? d * 90 : 0}ms`;
       const letter = start ? new Date(start + d * DAY + 1).toLocaleDateString("en-US", { weekday: "narrow" }) : "";
+      strip.push(`<span class="ws-day${today ? " today" : past ? " past" : ""}"><span class="ws-seg"><b style="width:${fill.toFixed(1)}%"></b>${over > 0 ? `<i style="left:${overFrom.toFixed(1)}%;width:${over.toFixed(1)}%"></i>` : ""}${at != null ? `<span class="ws-now" style="left:${Math.round(at)}%"></span>` : ""}</span><span class="ws-dl">${letter}</span></span>`);
       return `<span class="m-row${today ? " today" : past ? " past" : ""}"><span class="m-dl">${letter}</span><span class="m-seg"><b style="height:${fill.toFixed(1)}%;${delay}"></b>${over > 0 ? `<i style="bottom:${overFrom.toFixed(1)}%;height:${over.toFixed(1)}%;${delay}"></i>` : ""}${at != null ? `<span class="m-now" style="bottom:${Math.round(at)}%"></span>` : ""}</span></span>`;
     }).join("");
     const five = state.usage.five;
@@ -1918,14 +1988,25 @@
       $m._html = html;
     }
     $m.title = usageTip(state.usage);
+    // The compact view's strip: the figure, the seven days, how it's going.
+    const $s = document.querySelector("#week .wstrip");
+    if ($s) {
+      const shtml = `<span class="ws-fig">${pct}<small>%</small></span><span class="ws-days" aria-hidden="true">${strip.join("")}</span><span class="ws-say">${p.say ? `<span class="ws-pace">${p.say}</span>` : ""}${w.resets ? `<span>Resets ${resetWords(w.resets)}</span>` : ""}</span>`;
+      $s.hidden = false;
+      $s.className = `wstrip ${p.key}`;
+      $s.setAttribute("aria-valuenow", String(pct));
+      $s.setAttribute("aria-label", $m.getAttribute("aria-label"));
+      if ($s._html !== shtml) { $s.innerHTML = shtml; $s._html = shtml; }
+      $s.title = $m.title;
+    }
     renderUsage();
   }
 
   function renderUsage() {
     const u = state.usage;
     // The tile in Active says it better; the header carries it only when the tile is off screen.
-    const tile = document.querySelector("#week .meter");
-    const tileShown = tile && !tile.hidden && view === "week" && tile.offsetParent !== null;
+    const onScreen = (el) => el && !el.hidden && el.offsetParent !== null;
+    const tileShown = view === "week" && (onScreen(document.querySelector("#week .meter")) || onScreen(document.querySelector("#week .wstrip")));
     if (!u || tileShown) { $usage.hidden = true; $usage._html = ""; return; }
     // The week leads; without it, the 5-hour window stands in.
     const [name, w] = u.week ? ["This week", u.week] : ["Last 5 hours", u.five];

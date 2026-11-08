@@ -248,7 +248,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         window.appearance = NSAppearance(named: .darkAqua) // the Obsidian theme is dark only
         window.backgroundColor = obsidianBody
         window.isReleasedWhenClosed = false
-        window.minSize = NSSize(width: 640, height: 260) // room for the header and the toolbar
+        // Narrow enough for a laptop on its own: under 640 the page turns compact and the
+        // view switch shows only its icons.
+        window.minSize = NSSize(width: 380, height: 260)
         window.delegate = self
         window.tabbingMode = .disallowed
 
@@ -297,7 +299,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         return false
     }
 
-    func windowDidResize(_ notification: Notification) { syncPageChrome() }
+    func windowDidResize(_ notification: Notification) {
+        fitViewSwitch()
+        syncPageChrome()
+    }
+
+    // The view switch drops its words in a narrow window and keeps them as tooltips.
+    static let viewNames = ["Last 7 Days", "All Sessions", "Scheduled"]
+    func fitViewSwitch() {
+        guard let seg = viewSwitch, let window else { return }
+        let narrow = window.frame.width < 640
+        for (i, name) in Self.viewNames.enumerated() {
+            let want = narrow ? "" : name
+            if seg.label(forSegment: i) != want { seg.setLabel(want, forSegment: i) }
+            seg.setToolTip(name, forSegment: i)
+        }
+    }
     func windowDidChangeScreen(_ notification: Notification) { applyZoom() }
     func windowDidEnterFullScreen(_ notification: Notification) { syncPageChrome() }
     func windowDidExitFullScreen(_ notification: Notification) { syncPageChrome() }
@@ -352,14 +369,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         switch id {
         case .view:
             // Last 7 Days, All Sessions and Scheduled, like the view switch in Mail or Finder.
-            let seg = NSSegmentedControl(labels: ["Last 7 Days", "All Sessions", "Scheduled"], trackingMode: .selectOne,
+            let seg = NSSegmentedControl(labels: Self.viewNames, trackingMode: .selectOne,
                                          target: self, action: #selector(viewChanged(_:)))
             for (i, symbol) in ["square.grid.2x2", "clock.arrow.circlepath", "calendar.badge.clock"].enumerated() {
-                seg.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: nil), forSegment: i)
+                seg.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: Self.viewNames[i]), forSegment: i)
                 seg.setImageScaling(.scaleProportionallyDown, forSegment: i)
             }
             seg.selectedSegment = 0
             viewSwitch = seg
+            DispatchQueue.main.async { [weak self] in self?.fitViewSwitch() } // once the window has its size
             let item = NSToolbarItem(itemIdentifier: id)
             item.view = seg
             item.label = "View"

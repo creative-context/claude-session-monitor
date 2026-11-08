@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The weekly usage column is always two cards tall, so its day blocks keep their size when Active has a single row of cards.
+- A compact view for a narrow window, such as a laptop screen on its own: under 640 points, Active shows rows instead of cards, with the same tints, the question in up to two lines, the folder and relations on one line and the plan's bar; the weekly usage becomes one line above it with the days under their blocks; and the view switch keeps only its icons. The window now goes down to 380 points wide, from 640.
 
 ## 0.4.6
 
