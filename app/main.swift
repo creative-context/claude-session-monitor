@@ -109,6 +109,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var soundItem: NSToolbarItem?
     var soundButton: NSButton?
     var viewSwitch: NSSegmentedControl?
+    var toolbarStripped = false // the strip: the toolbar's buttons step aside
     var searchItem: NSSearchToolbarItem?
     var statusSoundItem: NSMenuItem!
     var loginItem: NSMenuItem!
@@ -313,11 +314,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     func fitViewSwitch() {
         guard let window, let toolbar = window.toolbar else { return }
         let width = window.frame.width / zoom
-        if width < 300, !toolbar.items.isEmpty {
+        let strip = width < 300
+        if #available(macOS 15.0, *) {
+            // Hidden, not removed: an empty toolbar turns into an opaque bar over the page.
+            for item in toolbar.items where item.isHidden != strip { item.isHidden = strip }
+        } else if strip, !toolbar.items.isEmpty {
             while !toolbar.items.isEmpty { toolbar.removeItem(at: 0) }
-        } else if width >= 300, toolbar.items.isEmpty {
+        } else if !strip, toolbar.items.isEmpty {
             for (i, id) in toolbarDefaultItemIdentifiers(toolbar).enumerated() { toolbar.insertItem(withItemIdentifier: id, at: i) }
         }
+        toolbarStripped = strip
         guard let seg = viewSwitch, seg.window != nil else { return }
         let narrow = width < 640 // the page turns compact at the same width
         for (i, name) in Self.viewNames.enumerated() {
@@ -352,10 +358,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         // The toolbar items sit on the right; the header stops short of the first one that's
         // visible. In a narrow window they go into the toolbar's » menu, which leaves only
         // that button. Whatever the toolbar takes, the header keeps room for its first count.
-        let toolbarEmpty = window.toolbar?.items.isEmpty ?? true
-        var firstItemX = content.bounds.width - (toolbarEmpty ? 8 : 40)
+        var firstItemX = content.bounds.width - (toolbarStripped ? 8 : 40)
         for item in window.toolbar?.visibleItems ?? [] {
-            if let v = item.view, v.window != nil { firstItemX = min(firstItemX, v.convert(v.bounds, to: content).minX) }
+            if let v = item.view, v.window != nil, !v.isHiddenOrHasHiddenAncestor { firstItemX = min(firstItemX, v.convert(v.bounds, to: content).minX) }
         }
         firstItemX = max(firstItemX, lightsEnd + 44 * z)
         let right = max(0, content.bounds.width - firstItemX + 12) / z
