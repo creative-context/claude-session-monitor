@@ -259,7 +259,7 @@
   .group.active .group-head { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   .group.active .group-head svg.i { width: 14px; height: 14px; }
   .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); font-weight: 400; }
-  /* The week's usage, a narrow tile at the right of Active, two cards tall. The week
+  /* The week's usage, a narrow tile at the right of Active, always two cards tall. The week
      reads bottom up as its seven days; the fill is what you've used, the blue mark is
      where an even week would be today. Gray while you're on pace, orange when you run
      hot, red near the limit. */
@@ -268,7 +268,8 @@
   .abody > .grid:empty { display: none; }
   .abody > .quiet { flex: 1; align-self: flex-start; }
   .meter { --fill: #C4C8CF; --over: var(--fill); --say: var(--color-text-secondary);
-    flex: none; width: 96px; box-sizing: border-box; min-height: var(--csm-card-h); max-height: calc(2 * var(--csm-card-h) + 8px);
+    /* Always two cards tall, whether Active has one row or more, so the day blocks keep their size. */
+    flex: none; align-self: flex-start; width: 96px; box-sizing: border-box; height: calc(2 * var(--csm-card-h) + 8px);
     display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 4px 10px; cursor: default; }
   .meter[hidden] { display: none; }
   .meter.on-pace, .meter.plenty { --say: var(--color-text-green); }

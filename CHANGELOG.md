@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The weekly usage column is always two cards tall, so its day blocks keep their size when Active has a single row of cards.
+
 ## 0.4.6
 
 - Fix: the related-sessions spotlight no longer turns on by itself while you're in another window. WebKit replays the last pointer position when cards move, and a card also keeps focus after a click opens its session; now only a pointer that's really in the window, or keyboard navigation, lights it up.
