@@ -967,10 +967,18 @@ function pointsElsewhere(s: Session, text: string): boolean {
   const own = titleOf(s.sid);
   const known = new Set([...[...sessions.values()].map((x) => x.title), ...appTitles.values()].filter(Boolean));
   if ([...text.matchAll(/\[([^\]]{1,120})\]/g)].some((m) => m[1] !== own && known.has(m[1]))) return true;
-  const rel = relativesOf(s.sid);
-  const kin = [rel.from?.title, ...(rel.sides ?? []).map((x) => x.title)].filter((t): t is string => Boolean(t));
   const said = fold(text);
   const mine = fold(own);
+  // "Answer in the Draft review session: …", "Contesta en la sesión de Draft review": every
+  // word of the name it gives is in another session's title, and not all in this one's.
+  const words = (name: string) => fold(name).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3);
+  for (const m of said.matchAll(/\bin the ([^,.:;]{3,60}?) session\b|\ben la sesion (?:de |del )?([^,.:;]{3,60})/g)) {
+    const ws = words(m[1] ?? m[2] ?? "");
+    if (!ws.length || ws.every((w) => mine.includes(w))) continue;
+    if ([...known].some((t) => t !== own && ws.every((w) => fold(t).includes(w)))) return true;
+  }
+  const rel = relativesOf(s.sid);
+  const kin = [rel.from?.title, ...(rel.sides ?? []).map((x) => x.title)].filter((t): t is string => Boolean(t));
   return kin.some((t) => [t, t.split(/\s+/).slice(0, 2).join(" ")].some((c) => {
     const f = fold(c);
     return f.length >= 6 && !mine.includes(f) && said.includes(f);

@@ -277,7 +277,7 @@ ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: dueAt - DA
 // 39–41. The Claude app's own summary of the last turn. 39: it names something you need to
 // do, though the closing has no question. 40: the same, but about an earlier turn. 41: done.
 // 54: what it names is to be done in another session, named in brackets. 56: it only
-// invites the next piece of work.
+// invites the next piece of work. 61: it says to answer in another session, by name.
 for (const [n, cat, action, about] of [
   [39, "blocked", "In Routines, set Permissions to Bypass for the three tasks", "u-last"],
   [40, "blocked", "Approve the old plan", "u-older"],
@@ -285,6 +285,7 @@ for (const [n, cat, action, about] of [
   [42, "completed", "", "u-last"],
   [54, "blocked", "Give the OK to [Routines 39] in its own session so it sends the report", "u-last"],
   [56, "blocked", "Paste the next text so it can be rewritten in your voice", "u-last"],
+  [61, "blocked", "Answer in the weekday digest session: which day works best", "u-last"],
 ] as const) {
   // 42: a request with no question mark ("dime cuál") that the app read as done.
   const close = n === 42 ? "Revisé el buzón. Dime cuál carpeta limpio primero." : "Listo, quedó arreglado.";
@@ -542,6 +543,7 @@ try {
   check("56 an app note that only invites the next text is an open offer: done", find(s, 56)?.status === "done", find(s, 56));
   check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
   check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
+  check("61 an app note that says to answer in another session, named in words, is that session's", find(s, 61)?.status === "done", find(s, 61));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",
