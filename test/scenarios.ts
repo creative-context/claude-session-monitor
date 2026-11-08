@@ -276,13 +276,15 @@ ev(id(37), { ev: "PreToolUse", tool: "Bash", d: "Sync the files", t: Date.now() 
 ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: dueAt - DAY + 7 * 60_000 });
 // 39–41. The Claude app's own summary of the last turn. 39: it names something you need to
 // do, though the closing has no question. 40: the same, but about an earlier turn. 41: done.
-// 54: what it names is to be done in another session, named in brackets.
+// 54: what it names is to be done in another session, named in brackets. 56: it only
+// invites the next piece of work.
 for (const [n, cat, action, about] of [
   [39, "blocked", "In Routines, set Permissions to Bypass for the three tasks", "u-last"],
   [40, "blocked", "Approve the old plan", "u-older"],
   [41, "completed", "", "u-last"],
   [42, "completed", "", "u-last"],
   [54, "blocked", "Give the OK to [Routines 39] in its own session so it sends the report", "u-last"],
+  [56, "blocked", "Paste the next text so it can be rewritten in your voice", "u-last"],
 ] as const) {
   // 42: a request with no question mark ("dime cuál") that the app read as done.
   const close = n === 42 ? "Revisé el buzón. Dime cuál carpeta limpio primero." : "Listo, quedó arreglado.";
@@ -519,6 +521,7 @@ try {
   check("53 a question quoted in the closing message doesn't ask you", find(s, 53)?.status === "done", find(s, 53));
   check("54 when the app's note sends you to another session, this one doesn't need you", find(s, 54)?.status === "done" && find(s, 54)?.needsYou === false, find(s, 54));
   check("55 when the app's note names a related session in words, this one doesn't need you", find(s, 43)?.status === "done" && find(s, 43)?.needsYou === false, find(s, 43));
+  check("56 an app note that only invites the next text is an open offer: done", find(s, 56)?.status === "done", find(s, 56));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",

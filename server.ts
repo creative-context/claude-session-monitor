@@ -951,11 +951,15 @@ function pointsElsewhere(s: Session, text: string): boolean {
   }));
 }
 
+// A note that only invites the next piece of work ("Paste the next text so it can be…",
+// "Send another file…") is an open offer, like one in the closing message: nothing waits.
+const OPEN_NOTE = /^(paste|send|share|give|provide|drop|bring|upload|tell)\b[^.]*\b(the next|another|any other|any more|more)\b/i;
+
 function applyAppAsk(s: Session) {
   const a = s.appAsk;
   if (!a || s.status !== "done" || !s.classified) return;
   if (a.edge < s.since - 10_000) return; // the summary is of an earlier turn
-  if (a.text && pointsElsewhere(s, a.text)) return;
+  if (a.text && (pointsElsewhere(s, a.text) || OPEN_NOTE.test(a.text))) return;
   if (a.text && s.outcome === "done") {
     s.outcome = "asks";
     s.askText = a.text;
