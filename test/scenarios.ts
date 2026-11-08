@@ -298,6 +298,24 @@ for (const [n, cat, action, about] of [
     postTurnSummary: { status_category: cat, status_detail: "Some detail", needs_action: action, summarizes_uuid: about },
   }));
 }
+// 57. A closing message that asks you on behalf of a session it links to; that session
+// gets a message afterwards (you answered there), so 57 no longer needs you. 59 links one
+// that got nothing since, so it still asks.
+for (const [n, other, answered] of [[57, 58, true], [59, 60, false]] as const) {
+  const close = `The [Draft review ${other}](#local_${id(other)}) session can't start until you answer: who is the image for?`;
+  const tp = transcript(`t${n}.jsonl`, [said(close)]);
+  const at = Date.now() - 5 * 60_000;
+  ev(id(n), { ev: "UserPromptSubmit", prompt: "Where are we?", tp, t: at });
+  ev(id(n), { ev: "Stop", tp, t: at + 1000 });
+  ev(id(other), { ev: "UserPromptSubmit", prompt: "Draft review", t: at - 60_000 });
+  ev(id(other), { ev: "Stop", t: at - 30_000 });
+  if (answered) ev(id(other), { ev: "UserPromptSubmit", prompt: "It's for the board", t: at + 60_000 });
+  const local = `local_${id(other)}`;
+  writeFileSync(join(appDir, `${local}.json`), JSON.stringify({
+    sessionId: local, cliSessionId: id(other), title: `Draft review ${other}`, originCwd: "/tmp/demo", createdAt: at - 60_000, lastActivityAt: at + 60_000,
+  }));
+}
+
 // 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
 // in the file name); 45 names a session the app no longer has.
 for (const [n, file, extra] of [
@@ -522,6 +540,8 @@ try {
   check("54 when the app's note sends you to another session, this one doesn't need you", find(s, 54)?.status === "done" && find(s, 54)?.needsYou === false, find(s, 54));
   check("55 when the app's note names a related session in words, this one doesn't need you", find(s, 43)?.status === "done" && find(s, 43)?.needsYou === false, find(s, 43));
   check("56 an app note that only invites the next text is an open offer: done", find(s, 56)?.status === "done", find(s, 56));
+  check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
+  check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",

@@ -72,6 +72,8 @@ type Session = {
   first: number; // when we first saw it
   last: number; // last event, from Claude or a subagent
   lastMain: number; // last event from the main agent
+  lastPrompt?: number; // when it last got a message (yours, or another session's)
+  linked?: string[]; // sessions its closing message links to (Claude Code IDs)
   inFlight: number; // main-agent tools started and not finished
   tool?: string;
   detail?: string;
@@ -370,6 +372,7 @@ function apply(e: Ev) {
 
     case "UserPromptSubmit":
       setStatus(s, "working", e.t);
+      s.lastPrompt = e.t;
       s.prompt = e.prompt ?? s.prompt;
       // A plan with every step done belongs to the last request, not to this one.
       if (s.plan?.length && s.plan.every((st) => st.s === "completed")) s.plan = undefined;
@@ -678,9 +681,32 @@ function closingRequest(text: string): string | undefined {
 
 // Once a turn has ended, tell apart "done", "asks you" and "error". Waits a moment
 // after Stop so the closing message is in the transcript.
+// The Claude app's own session IDs (as in its "#local_…" links) → Claude Code's.
+const localToCli = new Map<string, string>();
+
+// Sessions a closing message links to, as the Claude app writes them: [title](#local_…).
+function linkedSessions(text: string): string[] {
+  return [...text.matchAll(/#(local_[0-9a-f-]{36})/g)].map((m) => localToCli.get(m[1])).filter((x): x is string => Boolean(x));
+}
+
+// A turn that asks you something on behalf of a session it links to ("The Draft review
+// session can't start until you answer…") is answered once that session gets a message
+// after the turn ended: you went there and answered.
+function checkRelayed() {
+  for (const s of sessions.values()) {
+    if (s.status !== "done" || s.outcome !== "asks" || !s.linked?.length) continue;
+    if (s.linked.some((sid) => (sessions.get(sid)?.lastPrompt ?? 0) > s.since)) {
+      s.outcome = "done";
+      s.askText = undefined;
+      version++;
+    }
+  }
+}
+
 function classifyTurn(s: Session) {
   s.classified = true;
   const last: LastTurn = s.tp && existsSync(s.tp) ? readLastTurn(s.tp) : { kind: "none" };
+  s.linked = last.kind === "text" ? linkedSessions(last.text!) : undefined;
   if (last.kind === "error") {
     s.outcome = "error";
     s.errorText = last.text?.slice(0, 160);
@@ -998,7 +1024,8 @@ function readDesktopSessions() {
     ask?: { text: string; edge: number };
   }>();
   const found = new Map<string, Task>();
-  const cliOf = new Map<string, string>(); // the app's own session ID → Claude Code's
+  const cliOf = localToCli; // the app's own session ID → Claude Code's
+  cliOf.clear();
   const spawned = new Map<string, string>(); // a side session (Claude Code ID) → the app ID it came from
   try {
     for (const account of readdirSync(APP_SESSIONS)) {
@@ -1773,6 +1800,7 @@ try {
 
 setInterval(pump, 1000); // safety net in case a file event is missed
 setInterval(checkQuietTurns, 3000);
+setInterval(checkRelayed, 3000);
 setInterval(checkTurns, 500);
 setInterval(scanAllAgents, 3000);
 setInterval(checkProcesses, 10_000);
