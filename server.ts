@@ -612,7 +612,9 @@ function readLastTurn(tp: string): LastTurn {
 
 // The last sentences of a closing message's last paragraph.
 function closingSentences(text: string, count: number): string[] {
-  const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/[*_`#>]/g, "").trim();
+  // Quoted lines ("> …") are what the session quotes, such as a message it sent for you;
+  // a question in them isn't one for you.
+  const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "").replace(/[*_`#>]/g, "").trim();
   const last = clean.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).at(-1) ?? "";
   const sentences = (last.match(/[^.!?\n]+[.!?]+|[^.!?\n]+$/g) ?? []).map((s) => s.trim()).filter(Boolean);
   return sentences.slice(-count);

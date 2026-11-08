@@ -50,6 +50,13 @@ ev(id(51), { ev: "PreCompact" });
   ev(id(52), { ev: "UserPromptSubmit", prompt: "Tidy more notes", tp, t: Date.now() - 5 * 60_000 });
 }
 
+// 53. A closing message that quotes a question it sent to someone else doesn't ask you
+{
+  const tp = transcript("t53.jsonl", [said("Yes, it went out at 3:54 PM. I checked it in the chat after sending it:\n\n> @Sam, what can you share from the tool? Screens or an example would work.")]);
+  ev(id(53), { ev: "UserPromptSubmit", prompt: "Did you send it?", tp });
+  ev(id(53), { ev: "Stop", tp });
+}
+
 // 2. Subagent events do not change the session's status (Vibe Notch #36),
 //    and each agent is tracked by id until its SubagentStop
 ev(id(2), { ev: "UserPromptSubmit", prompt: "Review everything" });
@@ -505,6 +512,7 @@ try {
   check("0 SubagentStop ends the agent, session back to done", find(s, 0)?.status === "done" && find(s, 0)?.agentCount === 0, find(s, 0));
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("52 a quiet turn whose transcript ended is done", find(s, 52)?.status === "done", find(s, 52));
+  check("53 a question quoted in the closing message doesn't ask you", find(s, 53)?.status === "done", find(s, 53));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",
