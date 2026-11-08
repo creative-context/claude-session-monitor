@@ -248,9 +248,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         window.appearance = NSAppearance(named: .darkAqua) // the Obsidian theme is dark only
         window.backgroundColor = obsidianBody
         window.isReleasedWhenClosed = false
-        // Narrow enough for a laptop on its own: under 640 the page turns compact and the
-        // view switch shows only its icons.
-        window.minSize = NSSize(width: 380, height: 260)
+        // Down to a sliver of the screen: under 640 the page turns compact and the view
+        // switch shows only its icons; under 300 it's a strip of just the essentials, and
+        // the toolbar's items that don't fit go to its overflow menu.
+        window.minSize = NSSize(width: 171, height: 260)
         window.delegate = self
         window.tabbingMode = .disallowed
 

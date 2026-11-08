@@ -753,6 +753,27 @@
     .card .tags .tag svg { opacity: 0.75; }
     .card .tags .tag[data-show-task]:hover { background: none; }
   }
+
+  /* ---------- strip: a sliver of the screen (under 300 pt, down to 171) ----------
+     Only what a glance needs: how many need you, the week in two lines, and each session
+     as its dot, title, time and question. Folders, relations and earlier rows' details go. */
+  @media (max-width: 299px) {
+    header .name, .link span, .group-head .hint { display: none; }
+    .wstrip:not([hidden]) { grid-template-columns: auto minmax(0, 1fr); row-gap: 8px; margin-bottom: 14px; }
+    .wstrip .ws-days { grid-column: 1 / -1; grid-row: 2; }
+    .wstrip .ws-say { grid-column: 2; grid-row: 1; }
+    .wstrip .ws-fig { font-size: 22px; line-height: 24px; }
+    .card { padding: 9px 10px; column-gap: 8px; }
+    .card > .tags, .card:has(.bar) > .tags { display: none; }
+    .card > .top > .time { grid-column: 2; grid-row: 2; margin: 2px 0 0; justify-self: start; }
+    .card > .title { grid-column: 2 / 4; }
+    .card > .detail { grid-column: 2 / 4; grid-row: 3; }
+    .card > .bar { grid-row: 4; }
+    .hrow { grid-template-columns: 16px minmax(0, 1fr); padding: 8px 10px; }
+    .hrow > .tag, .hrow .hsnip { display: none; }
+    .hrow .htime { grid-column: 2; grid-row: 2; }
+    .nav .search { display: none; } /* in a browser; the app's own search stays in its toolbar */
+  }
 </style>
 </head>
 <body>
