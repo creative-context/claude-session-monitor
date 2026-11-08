@@ -324,6 +324,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             for (i, id) in toolbarDefaultItemIdentifiers(toolbar).enumerated() { toolbar.insertItem(withItemIdentifier: id, at: i) }
         }
         toolbarStripped = strip
+        // In full screen or Split View, an empty toolbar would stay on as a bare bar above the
+        // header: the strip goes without it.
+        let wantBar = !(strip && window.styleMask.contains(.fullScreen))
+        if toolbar.isVisible != wantBar { toolbar.isVisible = wantBar }
         guard let seg = viewSwitch, seg.window != nil else { return }
         let narrow = width < 640 // the page turns compact at the same width
         for (i, name) in Self.viewNames.enumerated() {
@@ -333,8 +337,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         }
     }
     func windowDidChangeScreen(_ notification: Notification) { applyZoom() }
-    func windowDidEnterFullScreen(_ notification: Notification) { syncPageChrome() }
-    func windowDidExitFullScreen(_ notification: Notification) { syncPageChrome() }
+    func windowDidEnterFullScreen(_ notification: Notification) { fitViewSwitch(); syncPageChrome() }
+    func windowDidExitFullScreen(_ notification: Notification) { fitViewSwitch(); syncPageChrome() }
 
     // Tells the page where the window buttons are, so its header lines up with them and
     // leaves room on the left (buttons) and right (toolbar items).

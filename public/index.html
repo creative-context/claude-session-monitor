@@ -764,6 +764,7 @@
      as its dot, title, time and question. Folders, relations and earlier rows' details go. */
   @media (max-width: 299px) {
     header .name, .link span, .group-head .hint { display: none; }
+    #counts .tag:not(.s-waiting) { display: none; } /* only what needs you */
     .wstrip:not([hidden]) { grid-template-columns: auto minmax(0, 1fr); row-gap: 8px; margin-bottom: 14px; }
     .wstrip .ws-days { grid-column: 1 / -1; grid-row: 2; }
     .wstrip .ws-say { grid-column: 2; grid-row: 1; }
