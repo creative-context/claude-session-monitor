@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a Claude app note that names a related session in words ("In the … session, choose…") no longer marks this session as needing you; the question belongs to that one.
+
 ## 0.4.7
 
 - Fix: a session whose closing message quotes a question it sent to someone else no longer shows as asking you.

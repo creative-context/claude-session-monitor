@@ -299,7 +299,9 @@ for (const [n, cat, action, about] of [
 // 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
 // in the file name); 45 names a session the app no longer has.
 for (const [n, file, extra] of [
-  [43, "local_par43", {}],
+  // 55: the app's note on 43 sends you to its side session 44, named in words.
+  [43, "local_par43", { lastAssistantUuid: "u-last", lastTurnEdgeAt: Date.now() - 20 * 60_000 + 43 + 60_000,
+    postTurnSummary: { status_category: "blocked", needs_action: "In the Pricing page 44 session, choose one of the two prices", summarizes_uuid: "u-last" } }],
   [44, "local_kid44", { sessionId: "local_kid44", spawnedFrom: { sessionId: "local_par43", title: "Side work", name: "side-work" } }],
   [45, "local_kid45", { spawnedFrom: { sessionId: "local_gone" } }],
 ] as const) {
@@ -516,6 +518,7 @@ try {
   check("52 a quiet turn whose transcript ended is done", find(s, 52)?.status === "done", find(s, 52));
   check("53 a question quoted in the closing message doesn't ask you", find(s, 53)?.status === "done", find(s, 53));
   check("54 when the app's note sends you to another session, this one doesn't need you", find(s, 54)?.status === "done" && find(s, 54)?.needsYou === false, find(s, 54));
+  check("55 when the app's note names a related session in words, this one doesn't need you", find(s, 43)?.status === "done" && find(s, 43)?.needsYou === false, find(s, 43));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",

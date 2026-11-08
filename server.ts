@@ -933,12 +933,22 @@ function appAskOf(j: any): { text: string; edge: number } | undefined {
 }
 
 // A turn we read as done that the app says needs you: it asks you, with the app's words.
-// The app's note names another session in brackets ("Give the OK to [Org] in …"): what
+// The app's note names another session in brackets ("Give the OK to [Billing] in …"): what
 // needs doing is there, not in this session.
+// Or it names one of its related sessions in words ("In the Draft review session, choose…"): its
+// whole title or the title's first two words, when those aren't this session's own.
 function pointsElsewhere(s: Session, text: string): boolean {
   const own = titleOf(s.sid);
   const known = new Set([...[...sessions.values()].map((x) => x.title), ...appTitles.values()].filter(Boolean));
-  return [...text.matchAll(/\[([^\]]{1,120})\]/g)].some((m) => m[1] !== own && known.has(m[1]));
+  if ([...text.matchAll(/\[([^\]]{1,120})\]/g)].some((m) => m[1] !== own && known.has(m[1]))) return true;
+  const rel = relativesOf(s.sid);
+  const kin = [rel.from?.title, ...(rel.sides ?? []).map((x) => x.title)].filter((t): t is string => Boolean(t));
+  const said = fold(text);
+  const mine = fold(own);
+  return kin.some((t) => [t, t.split(/\s+/).slice(0, 2).join(" ")].some((c) => {
+    const f = fold(c);
+    return f.length >= 6 && !mine.includes(f) && said.includes(f);
+  }));
 }
 
 function applyAppAsk(s: Session) {
