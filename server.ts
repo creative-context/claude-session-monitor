@@ -933,10 +933,19 @@ function appAskOf(j: any): { text: string; edge: number } | undefined {
 }
 
 // A turn we read as done that the app says needs you: it asks you, with the app's words.
+// The app's note names another session in brackets ("Give the OK to [Org] in …"): what
+// needs doing is there, not in this session.
+function pointsElsewhere(s: Session, text: string): boolean {
+  const own = titleOf(s.sid);
+  const known = new Set([...[...sessions.values()].map((x) => x.title), ...appTitles.values()].filter(Boolean));
+  return [...text.matchAll(/\[([^\]]{1,120})\]/g)].some((m) => m[1] !== own && known.has(m[1]));
+}
+
 function applyAppAsk(s: Session) {
   const a = s.appAsk;
   if (!a || s.status !== "done" || !s.classified) return;
   if (a.edge < s.since - 10_000) return; // the summary is of an earlier turn
+  if (a.text && pointsElsewhere(s, a.text)) return;
   if (a.text && s.outcome === "done") {
     s.outcome = "asks";
     s.askText = a.text;
