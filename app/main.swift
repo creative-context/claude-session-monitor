@@ -353,8 +353,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         // the page's row rendered one device pixel below the native controls, so it goes
         // up by exactly one (half a point on a Retina screen).
         let onePixel = 1 / (window.screen?.backingScaleFactor ?? 1)
-        let top = max(4, (center - onePixel) / z - 12)
+        var top = max(4, (center - onePixel) / z - 12)
         let slot = max(0, (lightsEnd + 12) / z - 16) // the header starts 16 px in
+        // In full screen, and in Split View beside another app, the toolbar can stay on as an
+        // opaque bar with no window buttons: the header goes below whatever it covers.
+        let covered = max(0, content.bounds.height - window.contentLayoutRect.maxY)
+        if fullScreen { top = max(top, covered / z + 8) }
         // The toolbar items sit on the right; the header stops short of the first one that's
         // visible. In a narrow window they go into the toolbar's » menu, which leaves only
         // that button. Whatever the toolbar takes, the header keeps room for its first count.
@@ -363,7 +367,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             if let v = item.view, v.window != nil, !v.isHiddenOrHasHiddenAncestor { firstItemX = min(firstItemX, v.convert(v.bounds, to: content).minX) }
         }
         firstItemX = max(firstItemX, lightsEnd + 44 * z)
-        let right = max(0, content.bounds.width - firstItemX + 12) / z
+        // In full screen the toolbar sits in its own bar, not beside the header.
+        let right = fullScreen ? 0 : max(0, content.bounds.width - firstItemX + 12) / z
         let js = """
         (() => { const s = document.documentElement.style;
           s.setProperty('--csm-chrome-top', '\(top)px');
