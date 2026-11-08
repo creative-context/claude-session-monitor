@@ -305,11 +305,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         syncPageChrome()
     }
 
-    // The view switch drops its words in a narrow window and keeps them as tooltips.
+    // The view switch drops its words in a narrow window and keeps them as tooltips. In the
+    // strip (under 300 of the page's pixels) the toolbar gives up its items, so the title bar
+    // keeps the needs-you count and the window can get that narrow; the views stay on ⌘1–⌘3
+    // and in the View menu. They come back, on the same view, when the window widens.
     static let viewNames = ["Last 7 Days", "All Sessions", "Scheduled"]
     func fitViewSwitch() {
-        guard let seg = viewSwitch, let window else { return }
-        let narrow = window.frame.width / zoom < 640 // the page turns compact at the same width
+        guard let window, let toolbar = window.toolbar else { return }
+        let width = window.frame.width / zoom
+        if width < 300, !toolbar.items.isEmpty {
+            while !toolbar.items.isEmpty { toolbar.removeItem(at: 0) }
+        } else if width >= 300, toolbar.items.isEmpty {
+            for (i, id) in toolbarDefaultItemIdentifiers(toolbar).enumerated() { toolbar.insertItem(withItemIdentifier: id, at: i) }
+        }
+        guard let seg = viewSwitch, seg.window != nil else { return }
+        let narrow = width < 640 // the page turns compact at the same width
         for (i, name) in Self.viewNames.enumerated() {
             let want = narrow ? "" : name
             if seg.label(forSegment: i) != want { seg.setLabel(want, forSegment: i) }
@@ -342,7 +352,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         // The toolbar items sit on the right; the header stops short of the first one that's
         // visible. In a narrow window they go into the toolbar's » menu, which leaves only
         // that button. Whatever the toolbar takes, the header keeps room for its first count.
-        var firstItemX = content.bounds.width - 40
+        let toolbarEmpty = window.toolbar?.items.isEmpty ?? true
+        var firstItemX = content.bounds.width - (toolbarEmpty ? 8 : 40)
         for item in window.toolbar?.visibleItems ?? [] {
             if let v = item.view, v.window != nil { firstItemX = min(firstItemX, v.convert(v.bounds, to: content).minX) }
         }
@@ -379,7 +390,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
                 seg.setImage(NSImage(systemSymbolName: symbol, accessibilityDescription: Self.viewNames[i]), forSegment: i)
                 seg.setImageScaling(.scaleProportionallyDown, forSegment: i)
             }
-            seg.selectedSegment = 0
+            seg.selectedSegment = viewSwitch?.selectedSegment ?? 0 // the same view, when it comes back after the strip
             viewSwitch = seg
             DispatchQueue.main.async { [weak self] in self?.fitViewSwitch() } // once the window has its size
             let item = NSToolbarItem(itemIdentifier: id)
