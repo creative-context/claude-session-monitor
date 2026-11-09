@@ -288,6 +288,9 @@
      by a step lighter than the ones to come; now is the blue line across today. */
   .meter .m-week { flex: 1; min-height: 40px; display: flex; flex-direction: column-reverse; gap: 2px; margin: 12px 0 10px; }
   .meter .m-row { flex: 1; min-height: 0; display: flex; align-items: center; gap: 7px; }
+  /* Sized by the script in whole screen pixels, so every day and every gap is the same. */
+  .meter .m-week.snap { gap: var(--gap); justify-content: center; }
+  .meter .m-week.snap .m-row { flex: none; height: var(--row); }
   .meter .m-row::after { content: ""; width: 9px; flex: none; } /* balances the letter, so the days sit on the axis */
   .meter .m-dl { width: 9px; flex: none; font-size: 10px; line-height: 10px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); text-align: center; }
   .meter .m-row.today .m-dl { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
@@ -722,6 +725,8 @@
     .wstrip .ws-fig small { font-size: 14px; letter-spacing: 0; color: var(--color-text-secondary); margin-left: 1px; }
     .wstrip .ws-days { display: flex; gap: 3px; min-width: 0; }
     .wstrip .ws-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
+    .wstrip .ws-days.snap { gap: var(--gap); justify-content: center; }
+    .wstrip .ws-days.snap .ws-day { flex: none; width: var(--col); }
     .wstrip .ws-seg { position: relative; display: block; width: 100%; height: 10px; border-radius: 2px; background: #FFFFFF0D; }
     .wstrip .ws-day.past .ws-seg, .wstrip .ws-day.today .ws-seg { background: #FFFFFF1C; }
     .wstrip .ws-seg b, .wstrip .ws-seg i { position: absolute; top: 0; bottom: 0; border-radius: inherit; }
@@ -1781,7 +1786,7 @@
   }
 
   // The app drives these from its toolbar.
-  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); },
+  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); snapWeek(); },
     endFamily: () => endFamily(), // the app calls these when the pointer enters or leaves the window, active or not
     pointer: (inside) => { pointerIn = Boolean(inside); if (!inside) endFamily(); } };
 
@@ -2005,8 +2010,8 @@
       const at = today ? ((now() - start - d * DAY) / DAY) * 100 : null;
       const delay = `--d:${lighting ? d * 90 : 0}ms`;
       const letter = start ? new Date(start + d * DAY + 1).toLocaleDateString("en-US", { weekday: "narrow" }) : "";
-      strip.push(`<span class="ws-day${today ? " today" : past ? " past" : ""}"><span class="ws-seg"><b${seam} style="width:${fill.toFixed(1)}%"></b>${over > 0 ? `<i${seam} style="left:${overFrom.toFixed(1)}%;width:${over.toFixed(1)}%"></i>` : ""}${at != null ? `<span class="ws-now" style="left:${Math.round(at)}%"></span>` : ""}</span><span class="ws-dl">${letter}</span></span>`);
-      return `<span class="m-row${today ? " today" : past ? " past" : ""}"><span class="m-dl">${letter}</span><span class="m-seg"><b${seam} style="height:${fill.toFixed(1)}%;${delay}"></b>${over > 0 ? `<i${seam} style="bottom:${overFrom.toFixed(1)}%;height:${over.toFixed(1)}%;${delay}"></i>` : ""}${at != null ? `<span class="m-now" style="bottom:${Math.round(at)}%"></span>` : ""}</span></span>`;
+      strip.push(`<span class="ws-day${today ? " today" : past ? " past" : ""}"><span class="ws-seg"><b${seam} style="width:${fill.toFixed(1)}%"></b>${over > 0 ? `<i${seam} style="left:${overFrom.toFixed(1)}%;width:${over.toFixed(1)}%"></i>` : ""}${at != null ? `<span class="ws-now" data-at="${Math.round(at)}" style="left:${Math.round(at)}%"></span>` : ""}</span><span class="ws-dl">${letter}</span></span>`);
+      return `<span class="m-row${today ? " today" : past ? " past" : ""}"><span class="m-dl">${letter}</span><span class="m-seg"><b${seam} style="height:${fill.toFixed(1)}%;${delay}"></b>${over > 0 ? `<i${seam} style="bottom:${overFrom.toFixed(1)}%;height:${over.toFixed(1)}%;${delay}"></i>` : ""}${at != null ? `<span class="m-now" data-at="${Math.round(at)}" style="bottom:${Math.round(at)}%"></span>` : ""}</span></span>`;
     }).join("");
     const five = state.usage.five;
     const html = `<span class="m-lbl">This week</span>
@@ -2035,7 +2040,49 @@
       if ($s._html !== shtml) { $s.innerHTML = shtml; $s._html = shtml; }
       $s.title = $m.title;
     }
+    // A size change, or showing the tile again, lays the days out anew.
+    if (!$m._sizes && "ResizeObserver" in window) {
+      $m._sizes = new ResizeObserver(() => snapWeek());
+      $m._sizes.observe($m);
+      if ($s) $m._sizes.observe($s);
+    }
+    snapWeek();
     renderUsage();
+  }
+
+  // The week's days, the gaps between them and the blue line, in whole screen pixels. At 125%
+  // a 2 px gap is 2.5 screen pixels, which the screen rounds to 2 or 3 depending on where it
+  // falls, and the days look uneven. The app says how many screen pixels a page pixel is (its
+  // zoom isn't in devicePixelRatio); in a browser, devicePixelRatio has it.
+  function snapWeek() {
+    const k = parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--csm-scale")) || devicePixelRatio || 1;
+    const dev = (n) => Math.max(1, Math.round(n * k)); // a length, in whole screen pixels
+    // Seven days and six gaps across the box's length; what's left over splits at both ends.
+    const lay = ($box, length, gap, size) => {
+      if (!$box || !$box.offsetParent) return 0;
+      const g = dev(gap);
+      const day = Math.floor((Math.floor(length($box.getBoundingClientRect()) * k) - 6 * g) / 7);
+      if (day < 1) return 0;
+      $box.style.setProperty("--gap", `${g / k}px`);
+      $box.style.setProperty(size, `${day / k}px`);
+      $box.classList.add("snap");
+      return day;
+    };
+    // The blue line, centered on its spot in today's day, with its contour.
+    const place = (el, day, side) => {
+      if (!el || !day) return;
+      const t = dev(2);
+      const start = Math.round((day * Number(el.dataset.at)) / 100 - t / 2);
+      const across = side === "bottom" ? "height" : "width";
+      el.style.setProperty(side, `${start / k}px`);
+      el.style.setProperty(across, `${t / k}px`);
+      el.style.setProperty(side === "bottom" ? "margin-bottom" : "margin-left", "0");
+      el.style.boxShadow = `0 0 0 ${dev(1.6) / k}px var(--color-background-body)`;
+    };
+    const $w = document.querySelector("#week .meter .m-week");
+    place($w?.querySelector(".m-now"), lay($w, (r) => r.height, 2, "--row"), "bottom");
+    const $d = document.querySelector("#week .wstrip .ws-days");
+    place($d?.querySelector(".ws-now"), lay($d, (r) => r.width, 3, "--col"), "left");
   }
 
   function renderUsage() {

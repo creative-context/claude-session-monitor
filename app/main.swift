@@ -337,6 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         }
     }
     func windowDidChangeScreen(_ notification: Notification) { applyZoom() }
+    func windowDidChangeBackingProperties(_ notification: Notification) { syncPageChrome() }
     func windowDidEnterFullScreen(_ notification: Notification) { fitViewSwitch(); syncPageChrome() }
     func windowDidExitFullScreen(_ notification: Notification) { fitViewSwitch(); syncPageChrome() }
 
@@ -373,8 +374,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         firstItemX = max(firstItemX, lightsEnd + 44 * z)
         // In full screen the toolbar sits in its own bar, not beside the header.
         let right = fullScreen ? 0 : max(0, content.bounds.width - firstItemX + 12) / z
+        // Screen pixels per page pixel: the page sizes the week's days in whole ones. Its own
+        // devicePixelRatio leaves the zoom out.
+        let scale = z * window.backingScaleFactor
         let js = """
         (() => { const s = document.documentElement.style;
+          s.setProperty('--csm-scale', '\(scale)');
           s.setProperty('--csm-chrome-top', '\(top)px');
           s.setProperty('--csm-lights-w', '\(slot)px');
           s.setProperty('--csm-chrome-right', '\(right)px');

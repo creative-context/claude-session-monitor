@@ -4,6 +4,7 @@
 
 - Fix: a closing message that ends on a list of what's left now needs you when one of its points asks you something ("1. **La segunda parte.** … ¿La arranco?") or waits for your OK ("…esperan tu visto bueno"), not only when the question is in its last two sentences. The card shows the point's bold lead with the question ("La segunda parte, el menú. ¿La arranco?"). A point that only adds an option ("Si prefieres el otro, lo cambio") still doesn't count.
 - The blue line in the weekly usage stands out more from the fill: its dark contour is 2 screen pixels at 125% instead of 1. When the fill is all one color (on pace, plenty left, near the limit), it stays one piece under the line; when the part ahead of pace takes a color, the two parts meet with straight corners.
+- Fix: the weekly usage's seven days sit evenly at any zoom. Their size, the gaps between them and the blue line are whole screen pixels, so at 125% every gap is 3 pixels instead of 2 or 3 depending on where it fell. The app tells the page how many screen pixels a page pixel is.
 
 ## 0.4.8
 
