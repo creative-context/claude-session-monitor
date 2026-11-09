@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Fix: a closing message that ends on a list of what's left now needs you when one of its points asks you something ("1. **La segunda parte.** … ¿La arranco?") or waits for your OK ("…esperan tu visto bueno"), not only when the question is in its last two sentences. The card shows the point's bold lead with the question ("La segunda parte, el menú. ¿La arranco?"). A point that only adds an option ("Si prefieres el otro, lo cambio") still doesn't count.
+
 ## 0.4.8
 
 - Fix: a Claude app note that names a related session ("In the … session, choose…", or its whole title) no longer marks this session as needing you; the question belongs to that one. A note that only starts with the same words as a related session's title still asks you here.

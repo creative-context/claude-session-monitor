@@ -389,6 +389,14 @@ closing(24, "El banner ya está arriba. ¿Algo más?");
 closing(25, "Dejé el borrador listo. Si quieres que lo suba, dime.");
 closing(26, "Done. Let me know if you want me to make any other changes.");
 closing(27, "The draft is ready. Let me know if you want me to push it.");
+// 72–76. A closing that ends on a list: a point that asks you, or waits for your OK, needs
+// you even when it isn't in the last two sentences. A point that only adds an option, or a
+// question a point answers itself, doesn't.
+closing(72, "Quedó terminada la primera parte.\n\n**Lo que queda:**\n1. **La segunda parte, el menú.** Es grande: de 6 a 10 rondas. ¿La arranco?\n2. **Los textos de la portada** siguen siendo propuesta mía.\n3. **Los zips son de la versión 2.0.** Si vas a mandar algo, los saco con un comando.");
+closing(73, "Here's where it stands:\n\n- The build passes.\n\n- The icons need your approval before I export them.\n\n- The zips are still on 2.0. Nothing else changed. No new commits.");
+closing(74, "Listo el cambio.\n\nPendientes:\n- Los textos nuevos esperan tu visto bueno.\n- La versión es la 2.1. El zip sigue igual. No hay commits nuevos.");
+closing(75, "**A tener en cuenta:**\n- **Colores:** en la portada el azul es más oscuro que en el menú. Si prefieres que coincidan, los igualo.\n- **Otras versiones:** siguen en la liga de antes.\n- **Sin commit:** no exporté nada. Estos cambios no están en commit.");
+closing(76, "**Qué cambió:**\n1. **¿Por qué fallaba?** La regla estaba en otra hoja de estilos.\n2. **Pruebas:** 17 de 17, en desarrollo y en build.");
 
 // 28–33. Reminders a session sets for itself, and scheduled tasks it sets up.
 const later = Date.now() + 2 * HOUR;
@@ -590,6 +598,11 @@ try {
   const made33 = find(s, 33)?.made ?? [];
   check("33 the tasks it set up, by the app's IDs, and not one that was never made",
     made33.length === 2 && made33[0]?.name === "Weekday digest" && made33[1]?.id === "noon-check-2" && made33[1]?.next != null, made33);
+  check("72 a question in a point of the closing list asks you, with the point's lead", find(s, 72)?.status === "asks" && find(s, 72)?.ask === "La segunda parte, el menú. ¿La arranco?", find(s, 72));
+  check("73 a point that needs your approval, in a list with blank lines, asks you", find(s, 73)?.status === "asks" && /need your approval/.test(find(s, 73)?.ask ?? ""), find(s, 73));
+  check("74 a point that waits for your OK asks you", find(s, 74)?.status === "asks" && /visto bueno/.test(find(s, 74)?.ask ?? ""), find(s, 74));
+  check("75 a point that only adds an option is done", find(s, 75)?.status === "done", find(s, 75));
+  check("76 a question a point answers itself is done", find(s, 76)?.status === "done", find(s, 76));
   check("27 an offer of one thing in English asks you", find(s, 27)?.status === "asks" && /push it/.test(find(s, 27)?.ask ?? ""), find(s, 27));
 
   // Last 7 Days and All Sessions

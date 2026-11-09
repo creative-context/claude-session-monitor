@@ -128,7 +128,7 @@ Most urgent first. The whole card takes its state's color, strongest for what ne
 
 | State | Color | When |
 |---|---|---|
-| Needs you | Orange, strong | Blocked mid-turn: it asks for permission, asks a question, waits for a plan approval or needs input. Or its turn ended asking you something: the app's next-step question, a question in the last two sentences of its closing message, a request without a question mark, or the Claude app's own summary of the turn saying you need to do something. Questions count for a day |
+| Needs you | Orange, strong | Blocked mid-turn: it asks for permission, asks a question, waits for a plan approval or needs input. Or its turn ended asking you something: the app's next-step question, a question in the last two sentences of its closing message or at the end of a point in the list it ends on, a request without a question mark, or the Claude app's own summary of the turn saying you need to do something. Questions count for a day |
 | Error | Red, strong | An API error ended the turn, such as a server error or a usage limit. Caught with or without a `Stop` event. Errors count for a day |
 | Working | Blue | Thinking or using a tool |
 | Agents working | Light blue | Its own turn ended, but subagents or a workflow are still running |

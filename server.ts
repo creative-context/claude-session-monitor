@@ -627,9 +627,50 @@ function closingSentences(text: string, count: number): string[] {
 // The question a closing message ends on: one of the last two sentences of its last
 // paragraph ("¿…?" works too). A question earlier in the text doesn't count, and neither
 // does a short courtesy one ("¿Algo más?", "Anything else I can help with?").
+// When the message ends on a list ("Lo que queda:" and its points), a question that ends
+// one of its items counts too: "1. **La segunda parte.** … ¿La arranco?".
 function closingQuestion(text: string): string | undefined {
-  const q = closingSentences(text, 2).reverse().find((s) => s.endsWith("?") && !courtesyQuestion(s));
+  const open = (s: string) => s.endsWith("?") && !courtesyQuestion(s);
+  const q = closingSentences(text, 2).reverse().find(open) ?? closingItems(text).map(lastSentence).find(open);
   return q && q.length > 3 ? q.slice(0, 160) : undefined;
+}
+
+// The items of the list a closing message ends on, each with its lines joined. Its items may
+// sit apart, with blank lines between them; the list starts after its lead-in.
+function closingItems(text: string): string[] {
+  const lines = closingLines(text);
+  const inList = (l: string) => LIST_ITEM.test(l) || /^\s+\S/.test(l);
+  let i = lines.length - 1;
+  while (i >= 0 && !lines[i].trim()) i--;
+  const items: string[] = [];
+  let cur: string[] = [];
+  for (; i >= 0; i--) {
+    const l = lines[i];
+    if (!l.trim()) {
+      let j = i - 1;
+      while (j >= 0 && !lines[j].trim()) j--;
+      if (j < 0 || !inList(lines[j])) break;
+      continue;
+    }
+    if (!inList(l)) break;
+    cur.unshift(l.trim());
+    if (LIST_ITEM.test(l) && !/^\s{2}/.test(l)) {
+      items.unshift(cur.join(" ")); // a top-level item; indented lines above it are its own
+      cur = [];
+    }
+  }
+  return items;
+}
+const lastSentence = (item: string) =>
+  (markless(item).replace(LIST_ITEM, "").match(/[^.!?\n]+[.!?]+|[^.!?\n]+$/g) ?? []).map((s) => s.trim()).filter(Boolean).at(-1) ?? "";
+
+// A question from a list item reads better with the item's bold lead: "La segunda parte,
+// el menú. ¿La arranco?".
+function askWithLead(text: string, ask: string): string {
+  const item = closingItems(text).find((it) => markless(it).includes(ask));
+  const lead = item?.match(/^\s*(?:\d+[.)]|[-•+*])\s+\*\*([^*]{3,80})\*\*/)?.[1].trim();
+  if (!lead || lead.includes(ask) || ask.includes(lead)) return ask;
+  return `${/[.!?:]$/.test(lead) ? lead : `${lead}.`} ${ask}`.slice(0, 160);
 }
 function courtesyQuestion(s: string): boolean {
   return COURTESY.test(fold(s)) && s.split(/\s+/).length <= 6;
@@ -646,6 +687,8 @@ const REQUEST = [
   /\b(dime|dimelo|confirmame|avisame|decide|elige|escoge|aprueba|indicame|me dices|me confirmas|me avisas)\b/,
   /\b(quieres que|prefieres|te parece (bien )?que|lo hago yo|lo mando yo|lo envio yo)\b/,
   /\bcon (un|una) ["'“‘][^"'”’]{1,40}["'”’] (lo|la|los|las|te|me|sigo|arranco)\b/,
+  /\b(espera|esperan|falta|faltan|necesito|pendientes? de) tu (visto bueno|aprobacion|ok|decision)\b/,
+  /\b(awaits?|awaiting|needs?|pending) your (approval|ok|okay|sign-off|go-ahead|decision)\b/,
   /\b(let me know|tell me|should i|do you want|would you like|want me to|shall i|please confirm|your call|say the word|which (one|option|do you)|approve|i need (you|your|to know)|waiting (for|on) (you|your))\b/,
 ];
 const COURTESY = new RegExp(String.raw`\b(${[
@@ -673,7 +716,10 @@ const COURTESY = new RegExp(String.raw`\b(${[
 function closingRequest(text: string): string | undefined {
   // The first request in the closing lines says the most ("which of the two"); the
   // ones after it tend to be the how ("say 'send it' and I send it").
-  const hit = closingSentences(text, 3).find((s) => {
+  // The last sentence of each point of a closing list too ("…esperan tu visto bueno."), unless
+  // it starts with a condition: "Si prefieres el otro, lo cambio" is a note beside the point.
+  const items = closingItems(text).map(lastSentence).filter((s) => !/^(si|if)\b/i.test(s));
+  const hit = [...closingSentences(text, 3), ...items].find((s) => {
     const f = fold(s);
     return !COURTESY.test(f) && REQUEST.some((re) => re.test(f));
   });
@@ -706,7 +752,7 @@ const RELAY = new RegExp(String.raw`\b(${[
   String.raw`until you (answer|reply|decide|confirm|choose)`,
   String.raw`(answer|reply) (it |them )?there`,
 ].join("|")})\b`);
-const LIST_ITEM = /^\s*(\d+[.)]|[-•+])\s/;
+const LIST_ITEM = /^\s*(\d+[.)]|[-•+*])\s/;
 const markless = (line: string) => line.replace(/[*_`#>]/g, "");
 const closingLines = (text: string) => text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "").split("\n");
 // The links nearest above line i, from line i itself up.
@@ -779,9 +825,10 @@ function classifyTurn(s: Session) {
   } else if (s.ask) {
     s.outcome = "asks"; // the question in the app's next-step box
   } else if (last.kind === "text" && (closingQuestion(last.text!) ?? closingRequest(last.text!))) {
+    const q = (closingQuestion(last.text!) ?? closingRequest(last.text!))!;
     s.outcome = "asks";
-    s.askText = closingQuestion(last.text!) ?? closingRequest(last.text!);
-    s.relayed = relayedTo(last.text!, s.askText!);
+    s.askText = askWithLead(last.text!, q);
+    s.relayed = relayedTo(last.text!, q);
   } else {
     s.outcome = "done";
   }
