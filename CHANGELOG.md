@@ -1,11 +1,11 @@
 # Changelog
 
-## Unreleased
+## 0.4.8
 
-- Fix: a Claude app note that names a related session in words ("In the … session, choose…") no longer marks this session as needing you; the question belongs to that one.
-- Fix: a Claude app note that only invites the next piece of work ("Paste the next text…") is an open offer and no longer marks the session as needing you.
-- A session that asks you something on behalf of a session it links to stops needing you once that session gets a message: you answered there.
-- A Claude app note that says to answer in another session by name ("Answer in the … session: …") leaves the question to that session, which already shows it.
+- Fix: a Claude app note that names a related session ("In the … session, choose…", or its whole title) no longer marks this session as needing you; the question belongs to that one. A note that only starts with the same words as a related session's title still asks you here.
+- Fix: a Claude app note that only invites the next piece of work ("Paste the next text…") is an open offer and no longer marks the session as needing you. A note that asks for something and mentions more or another ("Give the OK to push, or ask for more changes") still does.
+- A session that passes on another session's question stops needing you once that session gets a message: you answered there. It counts only when the message says the question is that session's ("… te hace dos preguntas; contéstalas en esa sesión:", "can't start until you answer"); a question of its own, beside a link to another session, still asks you.
+- A Claude app note that says to answer in another session by name ("Answer in the … session: …") leaves the question to that session, which already shows it. Names that point to no session in particular ("in the next session") don't count.
 
 ## 0.4.7
 
