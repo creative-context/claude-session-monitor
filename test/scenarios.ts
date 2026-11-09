@@ -278,6 +278,7 @@ ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: dueAt - DA
 // do, though the closing has no question. 40: the same, but about an earlier turn. 41: done.
 // 54: what it names is to be done in another session, named in brackets. 56: it only
 // invites the next piece of work. 61: it says to answer in another session, by name.
+// 62–63: they mention more or another, but ask you here.
 for (const [n, cat, action, about] of [
   [39, "blocked", "In Routines, set Permissions to Bypass for the three tasks", "u-last"],
   [40, "blocked", "Approve the old plan", "u-older"],
@@ -286,6 +287,8 @@ for (const [n, cat, action, about] of [
   [54, "blocked", "Give the OK to [Routines 39] in its own session so it sends the report", "u-last"],
   [56, "blocked", "Paste the next text so it can be rewritten in your voice", "u-last"],
   [61, "blocked", "Answer in the weekday digest session: which day works best", "u-last"],
+  [62, "blocked", "Give the OK to push, or ask for more changes", "u-last"],
+  [63, "blocked", "Tell it which option you want, or pick another", "u-last"],
 ] as const) {
   // 42: a request with no question mark ("dime cuál") that the app read as done.
   const close = n === 42 ? "Revisé el buzón. Dime cuál carpeta limpio primero." : "Listo, quedó arreglado.";
@@ -301,9 +304,17 @@ for (const [n, cat, action, about] of [
 }
 // 57. A closing message that asks you on behalf of a session it links to; that session
 // gets a message afterwards (you answered there), so 57 no longer needs you. 59 links one
-// that got nothing since, so it still asks.
-for (const [n, other, answered] of [[57, 58, true], [59, 60, false]] as const) {
-  const close = `The [Draft review ${other}](#local_${id(other)}) session can't start until you answer: who is the image for?`;
+// that got nothing since, so it still asks. 68: the questions are in a list whose lead-in
+// says they're the linked session's. 66 and 70 link a session that then gets a message,
+// but their question is their own: they still ask.
+const link = (n: number) => `[Draft review ${n}](#local_${id(n)})`;
+for (const [n, other, answered, close] of [
+  [57, 58, true, `The ${link(58)} session can't start until you answer: who is the image for?`],
+  [59, 60, false, `The ${link(60)} session can't start until you answer: who is the image for?`],
+  [66, 67, true, `I started ${link(67)} for the icons. Should I also push the branch?`],
+  [68, 69, true, `La sesión ${link(69)} te hace dos preguntas; contéstalas en esa sesión:\n\n1. ¿Quién la va a ver?\n2. ¿Qué tamaños?`],
+  [70, 71, true, `Aparte, ${link(71)} te espera en esa sesión.\n\n¿Subo los cambios?`],
+] as const) {
   const tp = transcript(`t${n}.jsonl`, [said(close)]);
   const at = Date.now() - 5 * 60_000;
   ev(id(n), { ev: "UserPromptSubmit", prompt: "Where are we?", tp, t: at });
@@ -325,6 +336,10 @@ for (const [n, file, extra] of [
     postTurnSummary: { status_category: "blocked", needs_action: "In the Pricing page 44 session, choose one of the two prices", summarizes_uuid: "u-last" } }],
   [44, "local_kid44", { sessionId: "local_kid44", spawnedFrom: { sessionId: "local_par43", title: "Side work", name: "side-work" } }],
   [45, "local_kid45", { spawnedFrom: { sessionId: "local_gone" } }],
+  // 64: its note starts with the same words as its side session 65's title, but asks you here.
+  [64, "local_par64", { title: "Login fixes 64", lastAssistantUuid: "u-last", lastTurnEdgeAt: Date.now() - 20 * 60_000 + 64 + 60_000,
+    postTurnSummary: { status_category: "blocked", needs_action: "Review the diff and approve the push", summarizes_uuid: "u-last" } }],
+  [65, "local_kid65", { title: "Review the login 65", sessionId: "local_kid65", spawnedFrom: { sessionId: "local_par64" } }],
 ] as const) {
   const at = Date.now() - 20 * 60_000 + n;
   ev(id(n), { ev: "UserPromptSubmit", prompt: `Pricing page ${n}`, t: at });
@@ -427,7 +442,7 @@ const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")],
 let server = start();
 
 async function history(q = ""): Promise<any> {
-  return (await fetch(`http://127.0.0.1:${PORT}/api/history?q=${encodeURIComponent(q)}`)).json();
+  return (await fetch(`http://127.0.0.1:${PORT}/api/history?limit=200&q=${encodeURIComponent(q)}`)).json();
 }
 
 let snap: any = null; // the whole last answer, for its counts
@@ -544,6 +559,12 @@ try {
   check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
   check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
   check("61 an app note that says to answer in another session, named in words, is that session's", find(s, 61)?.status === "done", find(s, 61));
+  check("62 an app note that asks for the OK, or for more changes, still asks", find(s, 62)?.status === "asks", find(s, 62));
+  check("63 an app note that asks which option, or another, still asks", find(s, 63)?.status === "asks", find(s, 63));
+  check("64 an app note that starts like a side session's title still asks here", find(s, 64)?.status === "asks", find(s, 64));
+  check("66 its own question, beside a link to a session you answered, still asks", find(s, 66)?.status === "asks", find(s, 66));
+  check("68 questions listed under a lead-in that relays them are answered there", find(s, 68)?.status === "done", find(s, 68));
+  check("70 its own question after a relayed one still asks", find(s, 70)?.status === "asks", find(s, 70));
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",

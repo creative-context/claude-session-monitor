@@ -73,7 +73,8 @@ type Session = {
   last: number; // last event, from Claude or a subagent
   lastMain: number; // last event from the main agent
   lastPrompt?: number; // when it last got a message (yours, or another session's)
-  linked?: string[]; // sessions its closing message links to (Claude Code IDs)
+  relays?: string[]; // sessions its closing message says are waiting for you (Claude Code IDs)
+  relayed?: string[]; // the ones whose question it asks you now
   inFlight: number; // main-agent tools started and not finished
   tool?: string;
   detail?: string;
@@ -684,20 +685,84 @@ function closingRequest(text: string): string | undefined {
 // The Claude app's own session IDs (as in its "#local_…" links) → Claude Code's.
 const localToCli = new Map<string, string>();
 
-// Sessions a closing message links to, as the Claude app writes them: [title](#local_…).
+// Sessions a text links to, as the Claude app writes them: [title](#local_…). The cleaned
+// text of a closing message has lost the "_" too.
 function linkedSessions(text: string): string[] {
-  return [...text.matchAll(/#(local_[0-9a-f-]{36})/g)].map((m) => localToCli.get(m[1])).filter((x): x is string => Boolean(x));
+  return [...text.matchAll(/local_?([0-9a-f-]{36})/g)].map((m) => localToCli.get(`local_${m[1]}`)).filter((x): x is string => Boolean(x));
 }
 
-// A turn that asks you something on behalf of a session it links to ("The Draft review
-// session can't start until you answer…") is answered once that session gets a message
-// after the turn ended: you went there and answered.
+// Words that say another session is the one waiting for you: "La sesión [X] te hace tres
+// preguntas:", "Contéstale en esa sesión.", "can't start until you answer", "is waiting for you".
+const RELAY = new RegExp(String.raw`\b(${[
+  String.raw`en esa sesion`,
+  String.raw`contesta(le|les|la|las|lo|los)|responde(le|les)`,
+  String.raw`te (espera|esta esperando|pregunta|hace \S+ preguntas?|necesita)`,
+  String.raw`(esta|estan|sigue|siguen) esperando`,
+  String.raw`espera tu respuesta`,
+  String.raw`necesita que (decidas|contestes|respondas|elijas|apruebes|confirmes)`,
+  String.raw`in (that|its|their) session`,
+  String.raw`(is|are) (still )?waiting (for|on) (you|your)`,
+  String.raw`waits for you`,
+  String.raw`until you (answer|reply|decide|confirm|choose)`,
+  String.raw`(answer|reply) (it |them )?there`,
+].join("|")})\b`);
+const LIST_ITEM = /^\s*(\d+[.)]|[-•+])\s/;
+const markless = (line: string) => line.replace(/[*_`#>]/g, "");
+const closingLines = (text: string) => text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "").split("\n");
+// The links nearest above line i, from line i itself up.
+function linksAbove(lines: string[], i: number): string[] {
+  for (let j = i; j >= 0; j--) {
+    const ids = linkedSessions(lines[j]);
+    if (ids.length) return ids;
+  }
+  return [];
+}
+
+// The linked sessions whose question a closing message passes on to you, when its question
+// (`ask`, from the last paragraph) is theirs: its own sentence links one ("The [Draft review]
+// session can't start until you answer: …?") or says so, a later sentence of the paragraph
+// says so without naming another session ("…? Contéstale en esa sesión."), or the question
+// is in a list whose lead-in says so ("La sesión [X] te hace tres preguntas:"). Otherwise
+// the question is this session's own, even when the message links another one elsewhere.
+function relayedTo(text: string, ask: string): string[] {
+  const lines = closingLines(text);
+  const at = lines.findLastIndex((l) => markless(l).includes(ask));
+  if (at < 0) return [];
+  const sentences = markless(lines[at]).match(/[^.!?\n]+[.!?]+|[^.!?\n]+$/g) ?? [];
+  const k = sentences.findIndex((x) => x.trim().startsWith(ask));
+  const own = sentences[k] ?? "";
+  if (linkedSessions(own).length) return linkedSessions(own);
+  if (RELAY.test(fold(own))) return linksAbove(lines, at);
+  const rest: string[] = sentences.slice(k + 1);
+  for (let j = at + 1; j < lines.length && lines[j].trim(); j++) rest.push(markless(lines[j]));
+  for (const x of rest) {
+    if (linkedSessions(x).length) break; // that names something else
+    if (RELAY.test(fold(x))) return linksAbove(lines, at);
+  }
+  if (!LIST_ITEM.test(lines[at]) && !/^\s+\S/.test(lines[at])) return [];
+  let j = at - 1;
+  while (j >= 0 && (LIST_ITEM.test(lines[j]) || /^\s+\S/.test(lines[j]))) j--;
+  while (j >= 0 && !lines[j].trim()) j--; // a lead-in paragraph right before the list
+  if (j < 0 || LIST_ITEM.test(lines[j])) return [];
+  const lead = markless(lines[j]);
+  return RELAY.test(fold(lead)) || (lead.trim().endsWith(":") && linkedSessions(lead).length) ? linksAbove(lines, j) : [];
+}
+
+// Every linked session a closing message says is waiting for you, anywhere in it.
+function relaysIn(text: string): string[] {
+  const lines = closingLines(text);
+  return [...new Set(lines.flatMap((l, i) => (RELAY.test(fold(markless(l))) ? linksAbove(lines, i) : [])))];
+}
+
+// A turn that asks you something on behalf of a session it links to is answered once that
+// session gets a message after the turn ended: you went there and answered.
 function checkRelayed() {
   for (const s of sessions.values()) {
-    if (s.status !== "done" || s.outcome !== "asks" || !s.linked?.length) continue;
-    if (s.linked.some((sid) => (sessions.get(sid)?.lastPrompt ?? 0) > s.since)) {
+    if (s.status !== "done" || s.outcome !== "asks" || !s.relayed?.length) continue;
+    if (s.relayed.some((sid) => (sessions.get(sid)?.lastPrompt ?? 0) > s.since)) {
       s.outcome = "done";
       s.askText = undefined;
+      s.relayed = undefined;
       version++;
     }
   }
@@ -706,7 +771,8 @@ function checkRelayed() {
 function classifyTurn(s: Session) {
   s.classified = true;
   const last: LastTurn = s.tp && existsSync(s.tp) ? readLastTurn(s.tp) : { kind: "none" };
-  s.linked = last.kind === "text" ? linkedSessions(last.text!) : undefined;
+  s.relays = last.kind === "text" ? relaysIn(last.text!) : undefined;
+  s.relayed = undefined;
   if (last.kind === "error") {
     s.outcome = "error";
     s.errorText = last.text?.slice(0, 160);
@@ -715,6 +781,7 @@ function classifyTurn(s: Session) {
   } else if (last.kind === "text" && (closingQuestion(last.text!) ?? closingRequest(last.text!))) {
     s.outcome = "asks";
     s.askText = closingQuestion(last.text!) ?? closingRequest(last.text!);
+    s.relayed = relayedTo(last.text!, s.askText!);
   } else {
     s.outcome = "done";
   }
@@ -961,33 +1028,48 @@ function appAskOf(j: any): { text: string; edge: number } | undefined {
 // A turn we read as done that the app says needs you: it asks you, with the app's words.
 // The app's note names another session in brackets ("Give the OK to [Billing] in …"): what
 // needs doing is there, not in this session.
-// Or it names one of its related sessions in words ("In the Draft review session, choose…"): its
-// whole title or the title's first two words, when those aren't this session's own.
+// Or it says where in words: "Answer in the Draft review session: …", "Contesta en la sesión
+// de Draft review", when every word of that name is in another session's title and not all
+// in this one's; or it says a related session's whole title ("Review the Pricing page …").
 function pointsElsewhere(s: Session, text: string): boolean {
   const own = titleOf(s.sid);
   const known = new Set([...[...sessions.values()].map((x) => x.title), ...appTitles.values()].filter(Boolean));
   if ([...text.matchAll(/\[([^\]]{1,120})\]/g)].some((m) => m[1] !== own && known.has(m[1]))) return true;
-  const said = fold(text);
-  const mine = fold(own);
-  // "Answer in the Draft review session: …", "Contesta en la sesión de Draft review": every
-  // word of the name it gives is in another session's title, and not all in this one's.
-  const words = (name: string) => fold(name).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3);
-  for (const m of said.matchAll(/\bin the ([^,.:;]{3,60}?) session\b|\ben la sesion (?:de |del )?([^,.:;]{3,60})/g)) {
-    const ws = words(m[1] ?? m[2] ?? "");
-    if (!ws.length || ws.every((w) => mine.includes(w))) continue;
-    if ([...known].some((t) => t !== own && ws.every((w) => fold(t).includes(w)))) return true;
+  for (const ws of sessionNames(text)) {
+    if (hasWords(own, ws)) continue;
+    if ([...known].some((t) => t !== own && hasWords(t, ws))) return true;
   }
   const rel = relativesOf(s.sid);
   const kin = [rel.from?.title, ...(rel.sides ?? []).map((x) => x.title)].filter((t): t is string => Boolean(t));
-  return kin.some((t) => [t, t.split(/\s+/).slice(0, 2).join(" ")].some((c) => {
-    const f = fold(c);
-    return f.length >= 6 && !mine.includes(f) && said.includes(f);
-  }));
+  return kin.some((t) => !saysTitle(own, t) && saysTitle(text, t));
+}
+
+// Session names in so many words: "in the Draft review session", "en la sesión de Draft
+// review". Each as its words, whole, without the ones that name no session ("in the next
+// session", "en la misma sesión").
+const GENERIC = new Set(["this", "that", "next", "same", "other", "another", "previous", "last", "new", "main", "current",
+  "first", "original", "parent", "side", "esta", "este", "esa", "ese", "siguiente", "misma", "mismo", "otra", "otro",
+  "nueva", "nuevo", "anterior", "principal", "actual", "primera", "lateral"]);
+const nameWords = (name: string) => fold(name).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 || /^\d+$/.test(w));
+function sessionNames(text: string): string[][] {
+  return [...fold(text).matchAll(/\bin the ([^,.:;]{3,60}?) session\b|\ben la sesion (?:de |del )?([^,.:;]{3,60})/g)]
+    .map((m) => nameWords(m[1] ?? m[2] ?? "").filter((w) => !GENERIC.has(w)))
+    .filter((ws) => ws.length > 0);
+}
+function hasWords(title: string, ws: string[]): boolean {
+  const tw = new Set(nameWords(title));
+  return ws.every((w) => tw.has(w));
+}
+// Whether a text says a whole title, word for word.
+function saysTitle(text: string, title: string): boolean {
+  const t = nameWords(title).join(" ");
+  return t.length >= 6 && ` ${nameWords(text).join(" ")} `.includes(` ${t} `);
 }
 
 // A note that only invites the next piece of work ("Paste the next text so it can be…",
 // "Send another file…") is an open offer, like one in the closing message: nothing waits.
-const OPEN_NOTE = /^(paste|send|share|give|provide|drop|bring|upload|tell)\b[^.]*\b(the next|another|any other|any more|more)\b/i;
+// Only when it starts that way: "Give the OK to push, or ask for more changes" still asks.
+const OPEN_NOTE = /^(paste|send|share|drop|upload)( me| us| it)? (the next|your next|another|any other)\b/i;
 
 function applyAppAsk(s: Session) {
   const a = s.appAsk;
@@ -997,6 +1079,12 @@ function applyAppAsk(s: Session) {
   if (a.text && s.outcome === "done") {
     s.outcome = "asks";
     s.askText = a.text;
+    // It passes on a linked session's question when the closing says that session waits
+    // for you and the note names it.
+    s.relayed = (s.relays ?? []).filter((sid) => {
+      const t = titleOf(sid);
+      return saysTitle(a.text!, t) || sessionNames(a.text!).some((ws) => hasWords(t, ws));
+    });
     version++;
   } else if (!a.text && s.outcome === "asks" && !s.ask && !(s.askText ?? "").includes("?")) {
     // The app read the whole turn as done; a request without a question mark was a guess.
