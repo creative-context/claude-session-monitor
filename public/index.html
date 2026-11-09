@@ -297,7 +297,11 @@
     transition: height 380ms var(--ease-standard) var(--d, 0ms), background-color 450ms var(--ease-standard); }
   .meter .m-seg i { position: absolute; left: 0; right: 0; height: 0; border-radius: inherit; background: var(--over);
     transition: height 380ms var(--ease-standard) var(--d, 0ms), background-color 450ms var(--ease-standard); }
-  .meter .m-now { position: absolute; left: -5px; right: -5px; height: 2px; margin-bottom: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1px var(--color-background-body); z-index: 1; }
+  /* Where the used part meets the part ahead of pace, under the blue line, the corners are straight. */
+  .meter .m-seg b.seam { border-top-left-radius: 0; border-top-right-radius: 0; }
+  .meter .m-seg i.seam { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+  /* The dark contour sets the line off the fill: 1.6 px, 2 screen pixels at 125%. */
+  .meter .m-now { position: absolute; left: -5px; right: -5px; height: 2px; margin-bottom: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1.6px var(--color-background-body); z-index: 1; }
   .meter .m-say { font-size: var(--csm-text-body); line-height: var(--csm-lh-body); font-weight: var(--font-weight-heading); color: var(--say); }
   .meter .m-reset { margin-top: 1px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
   .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; box-shadow: 0 -1px 0 #FFFFFF0F; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
@@ -723,7 +727,9 @@
     .wstrip .ws-seg b, .wstrip .ws-seg i { position: absolute; top: 0; bottom: 0; border-radius: inherit; }
     .wstrip .ws-seg b { left: 0; background: var(--fill); }
     .wstrip .ws-seg i { background: var(--over); }
-    .wstrip .ws-now { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1px var(--color-background-body); z-index: 1; }
+    .wstrip .ws-seg b.seam { border-top-right-radius: 0; border-bottom-right-radius: 0; }
+    .wstrip .ws-seg i.seam { border-top-left-radius: 0; border-bottom-left-radius: 0; }
+    .wstrip .ws-now { position: absolute; top: -3px; bottom: -3px; width: 2px; margin-left: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1.6px var(--color-background-body); z-index: 1; }
     .wstrip .ws-dl { font-size: 10px; line-height: 10px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
     .wstrip .ws-day.today .ws-dl { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
     .wstrip .ws-say { display: flex; flex-direction: column; align-items: flex-end; line-height: 15px; white-space: nowrap; }
@@ -1973,11 +1979,13 @@
     const p = pace(w);
     const pct = Math.floor(w.pct);
     // The week's 7 days from the reset, bottom up, filled up to what you've used. Past the
-    // blue line (an even week by now), the fill is the overshoot, in the pace's color.
+    // blue line (an even week by now), the fill is the overshoot, in the pace's color. When
+    // that color is the fill's own (on pace, plenty left, near the limit), it's one piece.
     const start = w.resets ? w.resets - WEEK : null;
     const used = (Math.min(100, w.pct) / 100) * 7; // in days
     const even = p.gone != null ? (p.gone / 100) * 7 : used;
-    const base = Math.min(used, even);
+    const oneColor = !["fast", "hot"].includes(p.key);
+    const base = oneColor ? used : Math.min(used, even);
     const lighting = !$m._lit && !matchMedia("(prefers-reduced-motion: reduce)").matches; // the first time, they fill in turn
     if (lighting) {
       $m._lit = true;
@@ -1992,12 +2000,13 @@
       const fill = share(base, d);
       const overFrom = share(even, d);
       const overTo = used > even ? share(used, d) : 0;
-      const over = Math.max(0, overTo - overFrom);
+      const over = oneColor ? 0 : Math.max(0, overTo - overFrom);
+      const seam = over > 0 && fill > 0 ? ` class="seam"` : ""; // the two parts meet in this day
       const at = today ? ((now() - start - d * DAY) / DAY) * 100 : null;
       const delay = `--d:${lighting ? d * 90 : 0}ms`;
       const letter = start ? new Date(start + d * DAY + 1).toLocaleDateString("en-US", { weekday: "narrow" }) : "";
-      strip.push(`<span class="ws-day${today ? " today" : past ? " past" : ""}"><span class="ws-seg"><b style="width:${fill.toFixed(1)}%"></b>${over > 0 ? `<i style="left:${overFrom.toFixed(1)}%;width:${over.toFixed(1)}%"></i>` : ""}${at != null ? `<span class="ws-now" style="left:${Math.round(at)}%"></span>` : ""}</span><span class="ws-dl">${letter}</span></span>`);
-      return `<span class="m-row${today ? " today" : past ? " past" : ""}"><span class="m-dl">${letter}</span><span class="m-seg"><b style="height:${fill.toFixed(1)}%;${delay}"></b>${over > 0 ? `<i style="bottom:${overFrom.toFixed(1)}%;height:${over.toFixed(1)}%;${delay}"></i>` : ""}${at != null ? `<span class="m-now" style="bottom:${Math.round(at)}%"></span>` : ""}</span></span>`;
+      strip.push(`<span class="ws-day${today ? " today" : past ? " past" : ""}"><span class="ws-seg"><b${seam} style="width:${fill.toFixed(1)}%"></b>${over > 0 ? `<i${seam} style="left:${overFrom.toFixed(1)}%;width:${over.toFixed(1)}%"></i>` : ""}${at != null ? `<span class="ws-now" style="left:${Math.round(at)}%"></span>` : ""}</span><span class="ws-dl">${letter}</span></span>`);
+      return `<span class="m-row${today ? " today" : past ? " past" : ""}"><span class="m-dl">${letter}</span><span class="m-seg"><b${seam} style="height:${fill.toFixed(1)}%;${delay}"></b>${over > 0 ? `<i${seam} style="bottom:${overFrom.toFixed(1)}%;height:${over.toFixed(1)}%;${delay}"></i>` : ""}${at != null ? `<span class="m-now" style="bottom:${Math.round(at)}%"></span>` : ""}</span></span>`;
     }).join("");
     const five = state.usage.five;
     const html = `<span class="m-lbl">This week</span>
