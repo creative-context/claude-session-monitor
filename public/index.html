@@ -405,7 +405,11 @@
   .detail { margin-top: 4px; color: var(--color-text-secondary); }
   .detail .line { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
   .detail .line .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  .detail .line svg.i { width: 13px; height: 13px; }
+  /* A block, so an icon inside a span (for its tip) centers on the line instead of sitting on
+     the text's baseline, 2 px high. Centered on the line it matches the capitals and still
+     looks high beside mostly lowercase text, so it goes one screen pixel lower. */
+  .detail .line svg.i { display: block; width: 13px; height: 13px;
+    translate: 0 calc(round(nearest, calc(var(--csm-scale, 1) * 1px), 1px) / var(--csm-scale, 1)); }
   .detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   .detail b { color: var(--color-text-primary); font-weight: 400; }
   /* A short window (yours is about 430 px tall at 125%) gets lower cards: the title
@@ -853,7 +857,7 @@
     unplug: svg('<path d="M9 3v5"/><path d="M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/><path d="m3 3 18 18"/>'),
     browser: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M6.5 6.5h.01"/><path d="M9 6.5h.01"/>'),
     bulb: svg('<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
-    listChecks: svg('<path d="m4 7 2 2 3.5-3.5"/><path d="m4 15 2 2 3.5-3.5"/><path d="M13 7.5h7"/><path d="M13 15.5h7"/>'),
+    listChecks: svg('<path d="m4 7.75 2 2 3.5-3.5"/><path d="m4 15.75 2 2 3.5-3.5"/><path d="M13 8.25h7"/><path d="M13 16.25h7"/>'), // ink centered on 12
     compress: svg('<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/><path d="m3 21 7-7"/>'),
     clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
     sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'),
@@ -992,7 +996,9 @@
   // The server calls a workflow it can't name "Workflow"; that name says nothing.
   const wfNamed = (wf) => Boolean(wf?.name) && wf.name !== "Workflow";
   const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s);
-  const label = (s) => (s.kind === "task" ? "Can't run" : s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
+  // Its own turn is over and something it started goes on: agents, or only a shell command.
+  const onlyCommands = (s) => s.background && !s.agentCount && !s.workflows?.length && s.commandCount > 0;
+  const label = (s) => (s.kind === "task" ? "Can't run" : onlyCommands(s) ? "In the background" : s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
 
   // A scheduled task the Claude app tried to start and couldn't. It needs you like an error
   // does, so it also gets a card in Active, next to what else needs you.
@@ -1058,6 +1064,13 @@
     if (s.status === "waiting") return wrap(esc(s.wait || "Waiting for your answer"));
     if (s.status === "asks") return wrap(`<b>${esc(s.ask || "It asked you something")}</b>`);
     if (s.status === "error") return wrap(esc(s.error || "The turn ended with an error"));
+    if (onlyCommands(s)) {
+      // The newest command, by its description; Claude Code wakes the session when it ends.
+      const c = [...s.commands].sort((a, b) => (b.startedAt || 0) - (a.startedAt || 0))[0];
+      const head = `<span title="Running in the background">${ICON.terminal}</span><span class="txt">${c?.detail ? `<b>${esc(c.detail)}</b>` : "A command"}</span>`;
+      const more = `${ICON.clock}<span class="txt">${s.commandCount > 1 ? `${s.commandCount} commands` : "Running"} in the background${c?.startedAt ? ` · ${span2(c.startedAt)}` : ""}</span>`;
+      return lines(head, plan || more);
+    }
     if (s.background) {
       const wf = s.workflows?.[0];
       const head = wf
@@ -2164,6 +2177,7 @@
   function doing(s) {
     if (s.background) {
       const wf = s.workflows?.[0];
+      if (onlyCommands(s)) return s.commands?.[0]?.detail || `${plural(s.commandCount, "command", "commands")} in the background`;
       return wf ? `${wfNamed(wf) ? `Workflow ${wf.name}` : "A workflow"}${wf.phase ? ` · ${wf.phase}` : ""}` : `${plural(s.agentCount, "agent", "agents")} in the background`;
     }
     return s.tool ? act(s.tool, s.detail) : "Thinking…";
@@ -2201,9 +2215,9 @@
       return popHead(ICON.agents, plural(total, "agent", "agents")) + rows + popMore(total - Math.min(pairs.length, POP_MAX));
     }
     // In the last 7 days: how many in each state, most urgent first.
-    const order = ["Needs you", "Error", "Asked you", "Working", "Agents working", "Done", "Idle", "Closed"];
+    const order = ["Needs you", "Error", "Asked you", "Working", "Agents working", "In the background", "Done", "Idle", "Closed"];
     const color = { "Needs you": "var(--color-warning)", Error: "var(--color-error)", "Asked you": "var(--color-warning-muted)",
-      Working: "var(--color-accent)", "Agents working": "var(--color-text-accent)", Done: "var(--color-success)" };
+      Working: "var(--color-accent)", "Agents working": "var(--color-text-accent)", "In the background": "var(--color-text-accent)", Done: "var(--color-success)" };
     const by = new Map();
     for (const s of list) by.set(label(s), (by.get(label(s)) || 0) + 1);
     const rows = order.filter((l) => by.get(l)).map((l) => `<button type="button" class="prow count" data-state="${l}" title="Show these cards">

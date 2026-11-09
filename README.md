@@ -132,6 +132,7 @@ Most urgent first. The whole card takes its state's color, strongest for what ne
 | Error | Red, strong | An API error ended the turn, such as a server error or a usage limit. Caught with or without a `Stop` event. Errors count for a day |
 | Working | Blue | Thinking or using a tool |
 | Agents working | Light blue | Its own turn ended, but subagents or a workflow are still running |
+| In the background | Light blue | Its own turn ended, but a shell command it started is still running; Claude Code wakes the session when it ends. The card shows the command's description. It counts until Claude Code says the command ended or it's stopped, for two hours at most |
 | Done | Green in Active, plain after that | Finished its turn, or you stopped it |
 | Idle | None | Open, with no turn yet |
 | Closed | None | Its process is gone |
@@ -154,7 +155,7 @@ It never stores whole conversations.
 
 **What it reads and never writes:**
 
-- The end of each session's transcript in `~/.claude/projects`, to tell how a turn ended and to find its subagents and workflows.
+- The end of each session's transcript in `~/.claude/projects`, to tell how a turn ended, to find its subagents and workflows, and to see whether a shell command it moved to the background is still running: the command's ID, when it started and its short description, never the command itself.
 - The Claude desktop app's session files in `~/Library/Application Support/Claude`, for titles, the archived flag, which scheduled task a session is a run of, which session a side session was started from (by the app's own session ID), and the app's one-line note of what a finished turn needs from you, if anything.
 - The app's `scheduled-tasks.json` in the same folder, for each task's name, schedule, folder and run times, and when the app skipped a run and why. It never reads what a task does.
 

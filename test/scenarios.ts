@@ -398,6 +398,28 @@ closing(74, "Listo el cambio.\n\nPendientes:\n- Los textos nuevos esperan tu vis
 closing(75, "**A tener en cuenta:**\n- **Colores:** en la portada el azul es más oscuro que en el menú. Si prefieres que coincidan, los igualo.\n- **Otras versiones:** siguen en la liga de antes.\n- **Sin commit:** no exporté nada. Estos cambios no están en commit.");
 closing(76, "**Qué cambió:**\n1. **¿Por qué fallaba?** La regla estaba en otra hoja de estilos.\n2. **Pruebas:** 17 de 17, en desarrollo y en build.");
 
+// 77–80. A turn that ends with a command still running in the background stays active until
+// Claude Code's notice that it ended, a TaskStop, or two hours. 77 gets its notice later on.
+const background = (n: number, extra: object[] = [], ago = 60_000) => {
+  const tp = transcript(`t${n}.jsonl`, [
+    { type: "user", message: { content: "Compare the frames" } },
+    { type: "assistant", message: { content: [{ type: "tool_use", id: `toolu_${n}`, name: "Bash", input: { command: "python3 compare.py", description: "Compare the frames one by one" } }] } },
+    { type: "user", timestamp: new Date(Date.now() - ago).toISOString(), toolUseResult: { backgroundTaskId: `bg${n}`, timedOutAfterMs: 180000 },
+      message: { content: [{ type: "tool_result", tool_use_id: `toolu_${n}`, content: "Command did not complete within its 180s timeout and was moved to the background." }] } },
+    said("The comparison is still running. I'll tell you what it finds when it ends."),
+    { type: "system", subtype: "stop_hook_summary" },
+    ...extra,
+  ]);
+  ev(id(n), { ev: "UserPromptSubmit", prompt: "Compare the frames", tp });
+  ev(id(n), { ev: "Stop", tp });
+  return tp;
+};
+const notice = (n: number) => ({ type: "queue-operation", operation: "enqueue", content: `<task-notification>\n<task-id>bg${n}</task-id>\n<status>completed</status>\n</task-notification>` });
+const tp77 = background(77);
+background(78, [notice(78)]);
+background(79, [{ type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_s79", name: "TaskStop", input: { task_id: "bg79" } }] } }]);
+background(80, [], 3 * 60 * 60_000);
+
 // 28–33. Reminders a session sets for itself, and scheduled tasks it sets up.
 const later = Date.now() + 2 * HOUR;
 // 28. A wakeup: the session shows when it picks up again.
@@ -495,6 +517,12 @@ try {
   check("11 a closing question asks you", find(s, 11)?.status === "asks" && find(s, 11)?.ask === "¿Lo publico en el blog?", find(s, 11));
   check("12 a question mid-text is not the ending: done", find(s, 12)?.status === "done", find(s, 12));
   check("13 an API error is an error", find(s, 13)?.status === "error" && find(s, 13)?.error === "You've hit your session limit", find(s, 13));
+  const s77 = find(s, 77);
+  check("77 a command left running in the background keeps the session working", s77?.status === "working" && s77?.background === true && s77?.commandCount === 1 && s77?.commands?.[0]?.detail === "Compare the frames one by one", s77);
+  check("78 once Claude Code says the command ended, it's done", find(s, 78)?.status === "done" && find(s, 78)?.commandCount === 0, find(s, 78));
+  check("79 a command it stopped doesn't count", find(s, 79)?.status === "done", find(s, 79));
+  check("80 a command started over two hours ago doesn't count", find(s, 80)?.status === "done", find(s, 80));
+  appendFileSync(tp77, JSON.stringify(notice(77)) + "\n"); // its notice arrives; checked after the wait below
   check("asks and errors come right after waiting", s.findIndex((x) => x.status === "asks") < s.findIndex((x) => x.status === "working"), s.map((x) => x.status));
   check("5 plan fully checked off", find(s, 5)?.plan?.done === 2, find(s, 5)?.plan);
   check("6 dead process is closed", !find(s, 6) || find(s, 6).status === "ended", find(s, 6));
@@ -558,6 +586,7 @@ try {
   check("14 an API error with no Stop is caught once it goes quiet", find(s, 14)?.status === "error" && /API Error/.test(find(s, 14)?.error ?? ""), find(s, 14));
   check("9 journal result ends the agent, session back to done", find(s, 9)?.status === "done" && find(s, 9)?.agentCount === 0, find(s, 9));
   check("0 SubagentStop ends the agent, session back to done", find(s, 0)?.status === "done" && find(s, 0)?.agentCount === 0, find(s, 0));
+  check("77 the notice that its command ended brings it back to done", find(s, 77)?.status === "done" && find(s, 77)?.commandCount === 0, find(s, 77));
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("52 a quiet turn whose transcript ended is done", find(s, 52)?.status === "done", find(s, 52));
   check("53 a question quoted in the closing message doesn't ask you", find(s, 53)?.status === "done", find(s, 53));

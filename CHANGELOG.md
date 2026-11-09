@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- A session whose turn ended with a shell command still running in the background, which Claude Code wakes it up from when the command ends, stays in Active as In the background, in light blue, with the command's description and how long it has run. It used to show as Done. It counts until Claude Code says the command ended or it's stopped, for two hours at most.
+- In full screen the toolbar no longer sits in a gray bar above the page: it hides with the menu bar, as in Safari, and comes down when the pointer reaches the top of the screen. The page fills the screen, and the views stay on Command-1 to 3 and in the View menu.
+- Fix: the icon of what a session is doing sat 2 px above its text, and the plan step's icon was drawn a little high; both now center on the text, one screen pixel lower than its capitals' middle, as lowercase text reads.
 - Fix: a closing message that ends on a list of what's left now needs you when one of its points asks you something ("1. **La segunda parte.** … ¿La arranco?") or waits for your OK ("…esperan tu visto bueno"), not only when the question is in its last two sentences. The card shows the point's bold lead with the question ("La segunda parte, el menú. ¿La arranco?"). A point that only adds an option ("Si prefieres el otro, lo cambio") still doesn't count.
 - The blue line in the weekly usage stands out more from the fill: its dark contour is 2 screen pixels at 125% instead of 1. When the fill is all one color (on pace, plenty left, near the limit), it stays one piece under the line; when the part ahead of pace takes a color, the two parts meet with straight corners.
 - Fix: the weekly usage's seven days sit evenly at any zoom. Their size, the gaps between them and the blue line are whole screen pixels, so at 125% every gap is 3 pixels instead of 2 or 3 depending on where it fell. The app tells the page how many screen pixels a page pixel is.

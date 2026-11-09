@@ -28,6 +28,7 @@ const WEEK_MS = 7 * DAY_MS; // sessions live in the main view this long, then on
 const FORGET_MS = WEEK_MS + DAY_MS; // and leave memory a day later (the database keeps them)
 const MAX_SESSIONS = 2000; // hard cap so memory stays flat
 const AGENT_QUIET_MS = 15 * 60 * 1000; // a subagent with no sign of life this long is not shown
+const COMMAND_MAX_MS = 2 * 60 * 60 * 1000; // a background command counts this long at most: past it, it's a server or lost
 const RUN_DIR_MS = 6 * 60 * 60 * 1000; // workflow folders older than this are not scanned
 
 type Status = "working" | "waiting" | "done" | "idle" | "ended";
@@ -104,7 +105,13 @@ type Session = {
   appAsk?: { text: string; edge: number }; // what the Claude app says its last turn needs from you ("" = nothing)
   reminders?: Reminder[]; // what it set to wake itself up: a /loop wakeup or a cron job
   made?: { id: string; t: number }[]; // scheduled tasks of the Claude app it set up, as asked
+  commands?: Command[]; // commands it moved to the background that haven't said they finished
+  commandsRead?: number; // the transcript's size when they were read
 };
+
+// A shell command running in the background: Claude Code wakes the session up when it ends.
+// Its ID, when it started and its short description, never the command itself.
+type Command = { id: string; at: number; detail?: string };
 
 // A reminder a session set for itself (ScheduleWakeup, CronCreate). Only when and how
 // often, never what it will do. They live in the session's process, so they go when it
@@ -817,6 +824,9 @@ function checkRelayed() {
 function classifyTurn(s: Session) {
   s.classified = true;
   const last: LastTurn = s.tp && existsSync(s.tp) ? readLastTurn(s.tp) : { kind: "none" };
+  try {
+    scanCommands(s); // now, so a command that ended during the turn doesn't show for a moment
+  } catch {}
   s.relays = last.kind === "text" ? relaysIn(last.text!) : undefined;
   s.relayed = undefined;
   if (last.kind === "error") {
@@ -1467,6 +1477,55 @@ function activeAgents(s: Session): Agent[] {
     .sort((a, b) => a.startedAt - b.startedAt);
 }
 
+// Background commands, from the end of the transcript. A Bash call that ran past its timeout,
+// or was started in the background, returns a task ID; when the command ends, Claude Code
+// queues a <task-notification> with that ID to wake the session up. TaskStop ends one too.
+function scanCommands(s: Session) {
+  if (!s.tp || !existsSync(s.tp)) return;
+  const size = statSync(s.tp).size;
+  if (s.commandsRead === size) return;
+  const from = Math.max(0, size - 262144);
+  const lines = readRange(s.tp, from, size).split("\n");
+  const described = new Map<string, string | undefined>(); // Bash calls, by tool-use ID
+  const started = new Map<string, Command>();
+  const ended = new Set<string>();
+  // The first line is only cut short when we started reading mid-file.
+  for (let i = from > 0 ? 1 : 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.includes("tool_use") && !line.includes("task-notification")) continue;
+    let row: any;
+    try {
+      row = JSON.parse(line);
+    } catch {
+      continue;
+    }
+    if (row.isSidechain) continue;
+    if (row.type === "queue-operation") {
+      for (const m of line.matchAll(/<task-id>([^<]+)<\/task-id>/g)) ended.add(m[1]);
+      continue;
+    }
+    const content = Array.isArray(row.message?.content) ? row.message.content : [];
+    for (const b of content) {
+      if (b?.type === "tool_use" && b.name === "Bash") described.set(b.id, b.input?.description);
+      if (b?.type === "tool_use" && (b.name === "TaskStop" || b.name === "KillShell")) ended.add(b.input?.task_id ?? b.input?.shell_id);
+      const task = row.toolUseResult?.backgroundTaskId;
+      if (b?.type === "tool_result" && typeof task === "string") {
+        const at = Date.parse(row.timestamp);
+        started.set(task, { id: task, at: Number.isFinite(at) ? at : Date.now(), detail: described.get(b.tool_use_id) });
+      }
+    }
+  }
+  s.commands = [...started.values()].filter((c) => !ended.has(c.id));
+  s.commandsRead = size;
+}
+
+// Background commands the card should show right now.
+function activeCommands(s: Session): Command[] {
+  if (s.status === "ended") return [];
+  const now = Date.now();
+  return (s.commands ?? []).filter((c) => now - c.at < COMMAND_MAX_MS);
+}
+
 let agentSig = "";
 function scanAllAgents() {
   const now = Date.now();
@@ -1475,12 +1534,18 @@ function scanAllAgents() {
     try {
       scanAgents(s);
     } catch {}
+    // A finished turn may have left a command running; one still at work shows anyway.
+    if ((s.status === "done" || s.status === "idle") && now - s.last < COMMAND_MAX_MS) {
+      try {
+        scanCommands(s);
+      } catch {}
+    }
     // Keep memory flat: finished agents and runs go after a while.
     for (const [id, a] of s.agents) if ((a.finished || now - a.lastAt > AGENT_QUIET_MS) && now - a.lastAt > 600_000) s.agents.delete(id);
     for (const [id, r] of s.runs) if (r.finished && now - r.startedAt > RUN_DIR_MS) s.runs.delete(id);
   }
   const sig = JSON.stringify([...sessions.values()].map((s) =>
-    [s.sid, activeAgents(s).map((a) => [a.id, a.tool, a.detail, a.tokens, a.phase])]));
+    [s.sid, activeAgents(s).map((a) => [a.id, a.tool, a.detail, a.tokens, a.phase]), activeCommands(s).map((c) => c.id)]));
   if (sig !== agentSig) {
     agentSig = sig;
     version++;
@@ -1520,7 +1585,7 @@ const needsYou = (shown: Shown, last: number, now: number) =>
 function shownStatus(s: Session, agents: Agent[]): Shown {
   if (s.status === "done" && s.outcome === "asks") return "asks";
   if (s.status === "done" && s.outcome === "error") return "error";
-  return (s.status === "done" || s.status === "idle") && agents.length ? "working" : s.status;
+  return (s.status === "done" || s.status === "idle") && (agents.length || activeCommands(s).length) ? "working" : s.status;
 }
 
 // ---------------------------------------------------------------- scheduled tasks
@@ -1811,6 +1876,8 @@ function snapshot() {
           lastAt: a.lastAt,
         })),
         agentCount: agents.length,
+        commands: activeCommands(s).slice(0, 6).map((c) => ({ detail: c.detail, startedAt: c.at })),
+        commandCount: activeCommands(s).length,
         workflows,
         plan: total ? { done, total, current: current?.c, index: s.plan!.indexOf(current!) + 1 } : null,
         reminder: reminderView(s, now),

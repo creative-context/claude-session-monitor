@@ -338,6 +338,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     }
     func windowDidChangeScreen(_ notification: Notification) { applyZoom() }
     func windowDidChangeBackingProperties(_ notification: Notification) { syncPageChrome() }
+    // In full screen the toolbar would sit in its own gray bar above the page. It hides with
+    // the menu bar instead, as in Safari, and comes down when the pointer reaches the top;
+    // the views stay on ⌘1–⌘3 and in the View menu.
+    func window(_ window: NSWindow, willUseFullScreenPresentationOptions proposedOptions: NSApplication.PresentationOptions = []) -> NSApplication.PresentationOptions {
+        proposedOptions.union([.autoHideMenuBar, .autoHideToolbar])
+    }
     func windowDidEnterFullScreen(_ notification: Notification) { fitViewSwitch(); syncPageChrome() }
     func windowDidExitFullScreen(_ notification: Notification) { fitViewSwitch(); syncPageChrome() }
 
