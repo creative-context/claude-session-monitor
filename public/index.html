@@ -307,6 +307,47 @@
   .meter .m-now { position: absolute; left: -5px; right: -5px; height: 2px; margin-bottom: -1px; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1.6px var(--color-background-body); z-index: 1; }
   .meter .m-say { font-size: var(--csm-text-body); line-height: var(--csm-lh-body); font-weight: var(--font-weight-heading); color: var(--say); }
   .meter .m-reset { margin-top: 1px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+  /* Ahead of pace, when it runs out takes the reset's place, in the pace's color. */
+  .meter .m-out, .wstrip .ws-out { color: var(--say); font-weight: var(--font-weight-heading); }
+  .meter:focus-visible, .wstrip:focus-visible, .usage:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; border-radius: var(--radius-inner); }
+
+  /* The usage card, on hover or focus of the week's usage: a raised surface, lifted by a
+     shadow, not a line; groups set apart by space; one left edge for all its text. */
+  .ucard { position: fixed; z-index: 30; width: 248px; box-sizing: border-box; padding: 6px; border-radius: 12px;
+    background: #16171A; box-shadow: 0 16px 40px #000000A0; color: var(--color-text-primary);
+    font-size: var(--csm-text-body); line-height: var(--csm-lh-body); font-variant-numeric: tabular-nums; pointer-events: none;
+    opacity: 0; visibility: hidden; transform: translateX(6px) scale(0.98); transform-origin: right top;
+    transition: opacity 120ms var(--ease-standard), transform 120ms var(--ease-standard), visibility 0s linear 120ms; } /* out quickly */
+  .ucard.below { transform: translateY(-6px) scale(0.98); transform-origin: left top; }
+  /* In gently, from the side of what it explains: a slower fade while it settles. */
+  .ucard.open { opacity: 1; visibility: visible; transform: none;
+    transition: opacity 220ms var(--ease-standard), transform 320ms cubic-bezier(0.16, 1, 0.3, 1), visibility 0s; }
+  @media (prefers-reduced-motion: reduce) {
+    .ucard, .ucard.below { transform: none; transition: opacity 120ms linear, visibility 0s linear 120ms; }
+    .ucard.open { transform: none; transition: opacity 220ms linear, visibility 0s; }
+  }
+  /* When it runs out: the one solid block, in the color of the state's tag (5.6:1 and 5.8:1). */
+  .uc-out { border-radius: 6px; padding: 10px 10px 11px; background: var(--color-warning); color: var(--color-on-light); }
+  .uc-out.limit { background: #B5383C; color: var(--color-on-accent); }
+  .uc-out .l { font-size: 11.5px; line-height: 15px; }
+  .uc-out .t { margin: 1px 0 2px; font-size: 17px; line-height: 22px; font-weight: var(--font-weight-heading); letter-spacing: -0.01em; }
+  .uc-chart { padding: 10px 10px 0; }
+  .uc-out + .uc-chart { padding-top: 12px; }
+  .uc-chart svg { display: block; overflow: visible; }
+  .uc-chart text { font: var(--font-weight-medium) 10px var(--font-family-body); fill: var(--color-text-secondary); }
+  .uc-chart text.today { fill: var(--color-text-primary); font-weight: 700; }
+  .uc-chart text.lim { font-size: 9.5px; }
+  .uc-rows { padding: 8px 10px 0; }
+  .uc-rows + .uc-rows { padding-top: 10px; }
+  .uc-row { display: flex; align-items: center; gap: 8px; height: 20px; }
+  .uc-row .k { flex: 1; color: var(--color-text-secondary); }
+  .uc-row .v { font-weight: 500; color: #E6E8EB; }
+  .uc-sw { width: 14px; height: 2px; border-radius: 1px; background: var(--color-text-accent); } /* the blue line it's measured against */
+  .uc-bar { width: 36px; height: 3px; border-radius: 2px; background: #FFFFFF1C; overflow: hidden; }
+  .uc-bar b { display: block; height: 100%; background: #C4C8CF; }
+  /* As the header strip writes it: the data in white, the words in gray. */
+  .uc-foot { padding: 10px 10px 6px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+  .uc-foot b { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; box-shadow: 0 -1px 0 #FFFFFF0F; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
   .meter .m-five i { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); position: relative; overflow: hidden; }
   .meter .m-five i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--color-text-secondary); }
@@ -1801,7 +1842,7 @@
   // The app drives these from its toolbar.
   window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); snapWeek(); },
     endFamily: () => endFamily(), // the app calls these when the pointer enters or leaves the window, active or not
-    pointer: (inside) => { pointerIn = Boolean(inside); if (!inside) endFamily(); } };
+    pointer: (inside) => { pointerIn = Boolean(inside); if (!inside) { endFamily(); hideUsageCard(); } } };
 
   // In the app the header row sits in the title bar, and the app drags the window by it.
   // It needs to know where the things you can click are, so it leaves those alone.
@@ -1964,12 +2005,6 @@
     const day = new Date(t).toLocaleDateString("en-US", { weekday: "short" });
     return t - now() < DAY ? clock(t) : full ? `${day} ${clock(t)}` : day;
   };
-  function usageTip(u) {
-    const line = (name, w) => w && `${name}: ${Math.floor(w.pct)}% used${w.resets ? `, resets ${resetWords(w.resets, true)}` : ""}`;
-    const p = u.week ? pace(u.week) : null;
-    const even = p?.gone != null ? `${p.say}: an even week would be at ${Math.round(p.gone)}% by now` : "";
-    return [line("This week", u.week), even, line("Last 5 hours", u.five), `Updated ${ago(u.at)}`].filter(Boolean).join("\n");
-  }
   // How the week is going: the share used against the share of the week gone by.
   const WEEK = 7 * DAY;
   function pace(w) {
@@ -1983,6 +2018,176 @@
     if (ahead < -15) return { key: "plenty", say: "Plenty left", gone };
     return { key: "on-pace", say: "On pace", gone };
   }
+
+  // When the week runs out at its pace so far: only ahead of pace or near the limit, only
+  // after its first day (before that the average overstates), and only before the reset.
+  const HOUR = 36e5;
+  function forecast(w, p = pace(w)) {
+    if (!w?.resets || w.pct <= 0 || w.pct >= 100 || !["fast", "hot", "limit"].includes(p.key)) return null;
+    const start = w.resets - WEEK, gone = now() - start;
+    if (gone <= 0 || (gone < DAY && p.key !== "limit")) return null;
+    const at = start + (100 / w.pct) * gone;
+    return at > now() && at < w.resets ? { at } : null;
+  }
+  // Times to the hour: it's an estimate, and "10:47 PM" would claim more than it knows.
+  const hourOf = (t) => { const d = new Date(t + 30 * 60_000); d.setMinutes(0, 0, 0); return d.getTime(); };
+  const hourWords = (t) => new Date(hourOf(t)).toLocaleTimeString("en-US", { hour: "numeric" });
+  const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
+  const dayName = (t, long) => new Date(t).toLocaleDateString("en-US", { weekday: long ? "long" : "short" });
+  // "11 PM" today, "Wed 1 PM" another day: short enough for the column.
+  const outWords = (t) => (sameDay(hourOf(t), now()) ? hourWords(t) : `${dayName(hourOf(t))} ${hourWords(t)}`);
+  // "Tonight 11 PM", "Tomorrow 2 PM", "Wednesday 8 AM": for the card.
+  function whenWords(t) {
+    const h = hourOf(t), d = new Date(h);
+    if (sameDay(h, now())) return `${d.getHours() >= 18 ? "Tonight" : "Today"} ${hourWords(t)}`;
+    if (sameDay(h, now() + DAY)) return `Tomorrow ${hourWords(t)}`;
+    return `${dayName(h, true)} ${hourWords(t)}`;
+  }
+  // "Thu 1 AM", with minutes only when it isn't on the hour.
+  const dayTime = (t) => {
+    const d = new Date(t);
+    return `${dayName(t)} ${d.toLocaleTimeString("en-US", d.getMinutes() ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" })}`;
+  };
+
+  // A curve through the readings that never dips or overshoots between them (Fritsch and
+  // Carlson's monotone cubic), so the week's share reads as the steady climb it is.
+  function smoothPath(pts) {
+    const n = pts.length;
+    if (n < 2) return "";
+    const d = pts.slice(1).map(([x, y], i) => (x === pts[i][0] ? 0 : (y - pts[i][1]) / (x - pts[i][0])));
+    const m = pts.map((_, i) => (i === 0 ? d[0] : i === n - 1 ? d[n - 2] : d[i - 1] * d[i] <= 0 ? 0 : (d[i - 1] + d[i]) / 2));
+    for (let i = 0; i < n - 1; i++) {
+      if (d[i] === 0) { m[i] = m[i + 1] = 0; continue; }
+      const a = m[i] / d[i], b = m[i + 1] / d[i], h = a * a + b * b;
+      if (h > 9) { const t = 3 / Math.sqrt(h); m[i] = t * a * d[i]; m[i + 1] = t * b * d[i]; }
+    }
+    let path = `M${pts[0][0].toFixed(1)},${pts[0][1].toFixed(1)}`;
+    for (let i = 0; i < n - 1; i++) {
+      const [x0, y0] = pts[i], [x1, y1] = pts[i + 1], h = (x1 - x0) / 3;
+      path += ` C${(x0 + h).toFixed(1)},${(y0 + m[i] * h).toFixed(1)} ${(x1 - h).toFixed(1)},${(y1 - m[i + 1] * h).toFixed(1)} ${x1.toFixed(1)},${y1.toFixed(1)}`;
+    }
+    return path;
+  }
+
+  // The week as a curve: the share used so far against the blue diagonal of an even week,
+  // the part ahead of it tinted, and a dashed line at the same pace to where it ends. Today
+  // has its band, its letter in white and a dot at now.
+  function weekChart(w, p, fc) {
+    const W = 216, H = 66, start = w.resets - WEEK, t = now();
+    const X = (at) => Math.max(0, Math.min(W, ((at - start) / WEEK) * W));
+    const Y = (pct) => H - (Math.min(100, Math.max(0, pct)) / 100) * H;
+    // From 0 at the reset to now, one reading every 6 hours or so, then the latest. A reading
+    // from the last hour is now itself: a second point that close would bend the curve.
+    const raw = [[start, 0], ...(w.samples || []).filter(([at]) => at > start && at < t - HOUR), [t, w.pct]];
+    const keep = [raw[0]];
+    for (const r of raw.slice(1, -1)) if (r[0] - keep.at(-1)[0] >= 6 * HOUR) keep.push(r);
+    keep.push(raw.at(-1));
+    const pts = keep.map(([at, pct]) => [X(at), Y(pct)]);
+    const line = smoothPath(pts);
+    const [nx, ny] = pts.at(-1);
+    const area = `${line} L${nx.toFixed(1)},${H} L0,${H} Z`;
+    const color = { fast: "var(--color-text-orange)", hot: "var(--color-text-orange)", limit: "var(--color-text-red)" }[p.key] || "var(--color-text-secondary)";
+    const days = (t - start) / DAY;
+    const rate = days > 0 ? w.pct / days : 0;
+    const [ex, ey] = fc ? [X(fc.at), Y(100)] : [W, Y(w.pct + rate * ((w.resets - t) / DAY))];
+    const today = Math.min(6, Math.floor(days));
+    const letters = Array.from({ length: 7 }, (_, d) => {
+      const l = new Date(start + d * DAY + 1).toLocaleDateString("en-US", { weekday: "narrow" });
+      return `<text x="${(((d + 0.5) / 7) * W).toFixed(1)}" y="${H + 14}" text-anchor="middle"${d === today ? ' class="today"' : ""}>${l}</text>`;
+    }).join("");
+    return `<svg viewBox="0 -8 ${W} ${H + 30}" width="${W}" height="${H + 30}" aria-hidden="true">
+      <defs><clipPath id="uc-ahead"><polygon points="0,${H} 0,-8 ${W},-8 ${W},0"/></clipPath></defs>
+      <rect x="${((today / 7) * W).toFixed(1)}" y="-6" width="${(W / 7).toFixed(1)}" height="${H + 26}" rx="5" fill="#FFFFFF0E"/>
+      <line x1="0" y1="0" x2="${W}" y2="0" stroke="#FFFFFF1C" stroke-dasharray="2 3"/>
+      <text x="2" y="10" class="lim">100%</text>
+      <line x1="0" y1="${H + 0.5}" x2="${W}" y2="${H + 0.5}" stroke="#FFFFFF24"/>
+      <path d="${area}" fill="#FFFFFF0B"/>
+      <path d="${area}" fill="${color}" fill-opacity="0.32" clip-path="url(#uc-ahead)"/>
+      <line x1="0" y1="${H}" x2="${W}" y2="0" stroke="var(--color-text-accent)" stroke-width="1.5"/>
+      <path d="${line}" fill="none" stroke="#E6E8EB" stroke-width="1.75" stroke-linecap="round"/>
+      <line x1="${nx.toFixed(1)}" y1="${ny.toFixed(1)}" x2="${ex.toFixed(1)}" y2="${ey.toFixed(1)}" stroke="${color}" stroke-width="1.75" stroke-dasharray="3 3" stroke-linecap="round"/>
+      <circle cx="${ex.toFixed(1)}" cy="${ey.toFixed(1)}" r="3.5" fill="${color}"/>
+      <line x1="${nx.toFixed(1)}" y1="${(ny + 5).toFixed(1)}" x2="${nx.toFixed(1)}" y2="${H}" stroke="#F7F8F859" stroke-width="1"/>
+      <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="4.5" fill="var(--color-text-primary)" stroke="#16171A" stroke-width="2"/>
+      ${letters}</svg>`;
+  }
+
+  // The card over the week's usage, in place of a plain tooltip: when it runs out, if it
+  // does; the week's curve; how far ahead or behind; and when it resets.
+  function usageCard(u) {
+    const w = u.week;
+    const row = (k, v, mark = "") => `<div class="uc-row"><span class="k">${k}</span>${mark}<span class="v">${v}</span></div>`;
+    let html = "";
+    if (w?.resets) {
+      const p = pace(w), fc = forecast(w, p);
+      if (fc) {
+        const h = Math.max(1, Math.round((w.resets - hourOf(fc.at)) / HOUR));
+        const before = h >= 48 ? `${Math.round(h / 24)} days` : `${h} ${h === 1 ? "hour" : "hours"}`;
+        html += `<div class="uc-out${p.key === "limit" ? " limit" : ""}"><div class="l">Runs out around</div><div class="t">${whenWords(fc.at)}</div><div class="l">${before} before the reset</div></div>`;
+      }
+      html += `<div class="uc-chart">${weekChart(w, p, fc)}</div>`;
+      const days = (now() - (w.resets - WEEK)) / DAY, left = Math.max(0, 100 - w.pct), daysLeft = (w.resets - now()) / DAY;
+      const ahead = Math.round(w.pct - (p.gone ?? 0));
+      html += `<div class="uc-rows">${row(ahead >= 0 ? "Ahead of pace" : "Behind pace", `${Math.abs(ahead)}%`, '<i class="uc-sw"></i>')}${
+        days >= 1 / 24 ? row("Your pace", `${Math.round(w.pct / days)}% a day`) : ""}${
+        daysLeft >= 1 ? row("Left per day", `${Math.round(left / daysLeft)}%`) : row("Left until the reset", `${Math.round(left)}%`)}</div>`;
+    }
+    // Plans that still have a 5-hour limit get it as its own group.
+    if (u.five) html += `<div class="uc-rows">${row("Last 5 hours", `${Math.floor(u.five.pct)}%`, `<i class="uc-bar"><b style="width:${Math.min(100, u.five.pct)}%"></b></i>`)}</div>`;
+    const resets = w?.resets ? `Resets <b>${dayTime(w.resets)}</b> · ` : "";
+    return `${html}<div class="uc-foot">${resets}Updated <b>${ago(u.at)}</b></div>`;
+  }
+  const $ucard = document.createElement("div");
+  $ucard.id = "ucard";
+  $ucard.className = "ucard";
+  $ucard.setAttribute("role", "tooltip");
+  document.body.appendChild($ucard);
+  let ucardFor = null;
+  // Beside the column, to its left; under the strip and the header's small version.
+  function showUsageCard(anchor) {
+    if (!state.usage) return;
+    $ucard.innerHTML = usageCard(state.usage);
+    ucardFor = anchor;
+    const r = anchor.getBoundingClientRect(), cw = $ucard.offsetWidth, ch = $ucard.offsetHeight;
+    const beside = anchor.classList.contains("meter");
+    const left = beside ? r.left - cw - 10 : r.left, top = beside ? r.top : r.bottom + 8;
+    $ucard.style.left = `${Math.max(8, Math.min(left, innerWidth - cw - 8))}px`;
+    $ucard.style.top = `${Math.max(8, Math.min(top, innerHeight - ch - 8))}px`;
+    $ucard.classList.toggle("below", !beside);
+    $ucard.classList.add("open");
+  }
+  // A pointer passing over shouldn't flash it: it opens after a short rest on the usage, at
+  // once if a card closed a moment ago (moving from the column to the strip, say), and at
+  // once for keyboard focus.
+  let ucardTimer = 0, ucardPending = null, ucardClosed = 0;
+  function openSoon(el) {
+    if (ucardFor === el || ucardPending === el) return;
+    clearTimeout(ucardTimer);
+    if (Date.now() - ucardClosed < 300) return showUsageCard(el);
+    ucardPending = el;
+    ucardTimer = setTimeout(() => { ucardPending = null; showUsageCard(el); }, 350);
+  }
+  function hideUsageCard() {
+    clearTimeout(ucardTimer);
+    ucardPending = null;
+    if (ucardFor) ucardClosed = Date.now();
+    $ucard.classList.remove("open");
+    ucardFor = null;
+  }
+  // On hover (a pointer that's really in the window, as for the spotlight) or keyboard focus.
+  function usageHover(el) {
+    if (!el || el._ucard) return;
+    el._ucard = true;
+    el.tabIndex = 0;
+    el.setAttribute("aria-describedby", "ucard");
+    el.addEventListener("pointerenter", () => { if (pointerIn) openSoon(el); });
+    el.addEventListener("pointermove", (e) => { if (e.movementX || e.movementY) { pointerIn = true; openSoon(el); } });
+    el.addEventListener("pointerleave", hideUsageCard);
+    el.addEventListener("focus", () => showUsageCard(el));
+    el.addEventListener("blur", hideUsageCard);
+  }
+  addEventListener("keydown", (e) => { if (e.key === "Escape" && ucardFor) hideUsageCard(); });
+
   function renderMeter() {
     const $m = document.querySelector("#week .meter");
     if (!$m) return;
@@ -1995,6 +2200,7 @@
       return;
     }
     const p = pace(w);
+    const fc = forecast(w, p);
     const pct = Math.floor(w.pct);
     // The week's 7 days from the reset, bottom up, filled up to what you've used. Past the
     // blue line (an even week by now), the fill is the overshoot, in the pace's color. When
@@ -2031,7 +2237,7 @@
       <span class="m-pct"><small class="ghost">%</small>${pct}<small>%</small></span>
       <span class="m-week" aria-hidden="true">${days}</span>
       ${p.say ? `<span class="m-say">${p.say}</span>` : ""}
-      ${w.resets ? `<span class="m-reset">Resets ${resetWords(w.resets)}</span>` : ""}
+      ${fc ? `<span class="m-reset m-out">Out ${outWords(fc.at)}</span>` : w.resets ? `<span class="m-reset">Resets ${resetWords(w.resets)}</span>` : ""}
       ${five ? `<span class="m-five">5 h<i><b style="width:${Math.min(100, five.pct)}%"></b></i><span>${Math.floor(five.pct)}%</span></span>` : ""}`;
     $m.hidden = false;
     $m.className = `meter ${p.key}${$m._intro ? " intro" : ""}`;
@@ -2041,17 +2247,17 @@
       $m.innerHTML = html;
       $m._html = html;
     }
-    $m.title = usageTip(state.usage);
+    usageHover($m);
     // The compact view's strip: the figure, the seven days, how it's going.
     const $s = document.querySelector("#week .wstrip");
     if ($s) {
-      const shtml = `<span class="ws-fig">${pct}<small>%</small></span><span class="ws-days" aria-hidden="true">${strip.join("")}</span><span class="ws-say">${p.say ? `<span class="ws-pace">${p.say}</span>` : ""}${w.resets ? `<span>Resets ${resetWords(w.resets)}</span>` : ""}</span>`;
+      const shtml = `<span class="ws-fig">${pct}<small>%</small></span><span class="ws-days" aria-hidden="true">${strip.join("")}</span><span class="ws-say">${p.say ? `<span class="ws-pace">${p.say}</span>` : ""}${fc ? `<span class="ws-out">Out ${outWords(fc.at)}</span>` : w.resets ? `<span>Resets ${resetWords(w.resets)}</span>` : ""}</span>`;
       $s.hidden = false;
       $s.className = `wstrip ${p.key}`;
       $s.setAttribute("aria-valuenow", String(pct));
       $s.setAttribute("aria-label", $m.getAttribute("aria-label"));
       if ($s._html !== shtml) { $s.innerHTML = shtml; $s._html = shtml; }
-      $s.title = $m.title;
+      usageHover($s);
     }
     // A size change, or showing the tile again, lays the days out anew.
     if (!$m._sizes && "ResizeObserver" in window) {
@@ -2060,6 +2266,7 @@
       if ($s) $m._sizes.observe($s);
     }
     snapWeek();
+    if (ucardFor) showUsageCard(ucardFor); // open: it follows the new numbers
     renderUsage();
   }
 
@@ -2107,7 +2314,7 @@
     // The week leads; without it, the 5-hour window stands in.
     const [name, w] = u.week ? ["This week", u.week] : ["Last 5 hours", u.five];
     const pct = Math.floor(w.pct);
-    const html = `<span class="u-lbl">${name}</span><span class="u-bar" role="meter" aria-label="${name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i></i></span><span class="u-pct">${pct}%</span>${w.resets ? `<span class="u-reset">· resets ${resetWords(w.resets)}</span>` : ""}`;
+    const html = `<span class="u-lbl">${name}</span><span class="u-bar" role="meter" aria-label="${name}" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${pct}"><i></i></span><span class="u-pct">${pct}%</span>${u.week && forecast(u.week) ? `<span class="u-reset">· runs out ${outWords(forecast(u.week).at)}</span>` : w.resets ? `<span class="u-reset">· resets ${resetWords(w.resets)}</span>` : ""}`;
     $usage.hidden = false;
     $usage.classList.toggle("high", u.week ? ["hot", "limit"].includes(pace(u.week).key) : w.pct >= USAGE_HIGH);
     if ($usage._html !== html) {
@@ -2116,10 +2323,9 @@
       requestAnimationFrame(() => { const bar = $usage.querySelector(".u-bar i"); if (bar) bar.style.width = `${Math.min(100, w.pct)}%`; });
       requestAnimationFrame(fitCounts);
     }
-    $usage.title = usageTip(u);
   }
   addEventListener("resize", () => requestAnimationFrame(renderUsage));
-  $usage.addEventListener("pointerenter", () => { if (state.usage) $usage.title = usageTip(state.usage); });
+  usageHover($usage);
 
   function renderHeader() {
     renderUsage();

@@ -6,7 +6,7 @@
 // Read-only toward Claude: it never writes to ~/.claude or to the desktop app's files.
 
 import {
-  closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync,
+  appendFileSync, closeSync, existsSync, mkdirSync, openSync, readFileSync, readSync, readdirSync,
   renameSync, statSync, watch, writeFileSync,
 } from "node:fs";
 import { Database } from "bun:sqlite";
@@ -1722,10 +1722,51 @@ function readUsage() {
         ? { pct: Math.max(0, Math.min(100, w.used_percentage)), resets: toMs(w.resets_at) }
         : null;
     usage = { at: toMs(j.at) ?? m, week: win(j.week), five: win(j.five_hour) };
+    remember(usage.at, usage.week);
   } catch {
     usage = null;
   }
   version++;
+}
+
+// The week's readings, so the page can draw how the week went: when, the share used and
+// the reset, one line each time the share changes. Only those numbers; a little more than
+// a week of them is kept.
+const HISTORY = join(DIR, "usage-history.jsonl");
+type Reading = { at: number; pct: number; resets: number };
+let readings: Reading[] = [];
+const sameWeek = (a: number, b: number) => Math.abs(a - b) < 60 * 60_000; // a reset time can drift by seconds
+function loadHistory() {
+  let lines: string[];
+  try {
+    lines = readFileSync(HISTORY, "utf8").split("\n").filter(Boolean);
+  } catch {
+    return;
+  }
+  const keep = Date.now() - WEEK_MS - DAY_MS;
+  readings = lines.flatMap((l) => {
+    try {
+      const r = JSON.parse(l);
+      return [r.at, r.pct, r.resets].every((n) => typeof n === "number" && isFinite(n)) && r.at > keep ? [r as Reading] : [];
+    } catch {
+      return [];
+    }
+  });
+  if (readings.length < lines.length) {
+    try {
+      writeFileSync(HISTORY, readings.map((r) => JSON.stringify(r) + "\n").join(""));
+    } catch {}
+  }
+}
+function remember(at: number, w: UsageWindow | null) {
+  if (!w?.resets) return;
+  const last = readings.at(-1);
+  if (last && (at <= last.at || (sameWeek(last.resets, w.resets) && last.pct === w.pct))) return;
+  const r: Reading = { at, pct: w.pct, resets: w.resets };
+  readings.push(r);
+  try {
+    appendFileSync(HISTORY, JSON.stringify(r) + "\n");
+  } catch {}
 }
 
 // The Claude app doesn't run status lines, so every 10 minutes the server opens Claude
@@ -1804,7 +1845,12 @@ function usageView(now: number) {
   // Past its reset a window's number no longer holds, so it goes until the next reply.
   // One with no reset time goes after a week.
   const live = (w: UsageWindow | null) => (w && (w.resets == null ? now - usage!.at < WEEK_MS : w.resets > now) ? w : null);
-  const week = live(usage.week);
+  const live7 = live(usage.week);
+  // This week's readings, oldest first, as [time, share]: the page draws the week's curve.
+  const week = live7 && {
+    ...live7,
+    samples: live7.resets ? readings.filter((r) => sameWeek(r.resets, live7.resets!)).map((r) => [r.at, r.pct]) : [],
+  };
   const five = live(usage.five);
   return week || five ? { at: usage.at, week, five } : null;
 }
@@ -2025,6 +2071,7 @@ setInterval(() => {
   }
 }, 30_000);
 // The usage file is read when it changes, and a window leaves the header when it resets.
+loadHistory();
 readUsage();
 let usageClock = "";
 setInterval(() => {

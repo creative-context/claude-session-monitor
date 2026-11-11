@@ -300,11 +300,29 @@ writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTa
 // The plan's usage, as the status line saves it: a week on pace (--hot: well
 // past an even pace), and the last 5 hours.
 const hot = process.argv.includes("--hot");
+const weekResets = Math.floor(now / 1000 + 3.25 * 86400);
+const weekUsed = hot ? 74 : 50;
 writeFileSync(join(dir, "usage.json"), JSON.stringify({
   at: now / 1000 - 4 * 60,
-  week: { used_percentage: hot ? 74 : 50, resets_at: Math.floor(now / 1000 + 3.25 * 86400) },
+  week: { used_percentage: weekUsed, resets_at: weekResets },
   five_hour: { used_percentage: hot ? 61 : 22, resets_at: Math.floor(now / 1000 + 2.4 * 3600) },
 }));
+// The week so far, as the server keeps it from the status line's readings: a climb in
+// working hours, flat at night, one line each time the share changes.
+{
+  const resets = weekResets * 1000, start = resets - 7 * 86400_000, end = now - 4 * 60_000, step = 15 * 60_000;
+  const busy = (t: number) => { const h = new Date(t).getHours(); return h >= 9 && h < 21 ? 1 + 0.6 * Math.sin(t / 5e6) : 0; };
+  let total = 0;
+  for (let t = start; t < end; t += step) total += busy(t);
+  const lines: string[] = [];
+  let sum = 0, last = 0;
+  for (let t = start; t < end; t += step) {
+    sum += busy(t);
+    const pct = Math.floor((weekUsed * sum) / total);
+    if (pct !== last) lines.push(JSON.stringify({ at: t + step, pct, resets })), (last = pct);
+  }
+  writeFileSync(join(dir, "usage-history.jsonl"), lines.join("\n") + "\n");
+}
 
 const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {

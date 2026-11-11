@@ -459,6 +459,12 @@ writeFileSync(join(dir, "usage.json"), JSON.stringify({
   week: { used_percentage: 42.6, resets_at: Math.floor(Date.now() / 1000) + 3 * 86400 },
   five_hour: { used_percentage: 90, resets_at: Math.floor(Date.now() / 1000) - 60 },
 }));
+// The week's readings kept so far: one from last week, which doesn't count, and one from this week.
+const weekResets = (Math.floor(Date.now() / 1000) + 3 * 86400) * 1000;
+writeFileSync(join(dir, "usage-history.jsonl"), [
+  { at: Date.now() - 2 * 86400_000, pct: 95, resets: Date.now() - 86400_000 },
+  { at: Date.now() - 86400_000, pct: 30, resets: weekResets },
+].map((r) => JSON.stringify(r)).join("\n") + "\n");
 
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
@@ -501,6 +507,10 @@ try {
   check("51 a compaction mid-turn shows as working", find(s, 51)?.status === "working" && find(s, 51)?.tool === "Compact", find(s, 51));
   check("usage: the week's share and reset, from the status line", snap.usage?.week?.pct === 42.6 && snap.usage.week.resets > Date.now(), snap.usage);
   check("usage: a window past its reset is dropped", snap.usage?.five === null, snap.usage);
+  const samples = snap.usage?.week?.samples ?? [];
+  check("usage: this week's readings, not last week's, with the latest one", samples.length === 2 && samples[0][1] === 30 && samples[1][1] === 42.6, samples);
+  // A new reading adds a line; the same share again doesn't.
+  writeFileSync(join(dir, "usage.json"), JSON.stringify({ at: Date.now() / 1000, week: { used_percentage: 45, resets_at: weekResets / 1000 }, five_hour: null }));
   check("2 subagents leave status working", find(s, 2)?.status === "working", find(s, 2));
   check("2 only the agent without SubagentStop counts", find(s, 2)?.agentCount === 1, find(s, 2)?.agents);
   const s9 = find(s, 9);
@@ -578,6 +588,8 @@ try {
   check("3 answering resumes work", find(s, 3)?.status === "working", find(s, 3));
   check("4 approving resumes work", find(s, 4)?.status === "working", find(s, 4));
   check("5 new prompt clears recap and ask", find(s, 5)?.status === "working" && !find(s, 5)?.ask && !find(s, 5)?.recap, find(s, 5));
+  const kept = readFileSync(join(dir, "usage-history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  check("usage: a new share is kept as one more reading", snap.usage?.week?.samples?.at(-1)?.[1] === 45 && kept.at(-1).pct === 45 && kept.filter((r) => r.pct === 42.6).length === 1, kept);
 
   // The interrupt check needs 8 s of quiet
   await Bun.sleep(10_000);
