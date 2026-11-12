@@ -48,7 +48,7 @@ jobs:
           APP="build/Claude Session Monitor.app"
           lipo -archs "$APP/Contents/MacOS/ClaudeSessionMonitor" | grep -q x86_64
           lipo -archs "$APP/Contents/MacOS/ClaudeSessionMonitor" | grep -q arm64
-          test -f "$APP/Contents/Resources/server/server.ts"
+          test -f "$APP/Contents/Resources/server/server.js"
           codesign --verify "$APP"
       - uses: actions/upload-artifact@v4
         with:

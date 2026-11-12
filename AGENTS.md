@@ -37,8 +37,8 @@ sh app/build.sh --release  # build and zip for a release
 - **Privacy is a contract.** Read and store only what the README's Privacy section lists, and update that section with any new read. Never read or store a scheduled task's text, its permissions or a whole conversation.
 - **One network request, and only one:** the app's update check in `app/main.swift`, to GitHub's releases API. The usage probe starts Claude Code itself, which connects as it always does; the app adds nothing to that and sends nothing of its own. It only ever opens this repository's release pages. To test it, serve a fake reply such as `{"tag_name": "v9.9.9", "html_url": "…/releases/tag/v9.9.9"}` and point the app at it with `defaults write com.creativecontext.ClaudeSessionMonitor updateFeedURL http://127.0.0.1:4760/latest` (delete the key afterwards).
 - **Tests and the demo never touch the user's data.** They point `CSM_DIR`, `CSM_APP_SESSIONS` and `CSM_PROJECTS` at temp folders.
-- **The app runs its own copy of the server.** After changing `server.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
-- **One rule for "needs you",** computed in `server.ts` and shared by the window, the Dock badge and the menu bar.
+- **The app runs its own copy of the server.** After changing `server.ts`, `src/`, `closing.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
+- **One rule for "needs you",** computed in `src/snapshot.ts` and shared by the window, the Dock badge and the menu bar.
 - **Interface copy in American English.** Text reaches 4.5:1 on its surface, motion stays calm, and Reduce Motion keeps only color fades.
 - **No product or personal names, and no other brands,** in code, comments, docs or demo content, beyond the credits in the README. Demo data is made up.
 
