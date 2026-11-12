@@ -6,7 +6,7 @@ import { classifyClosing, type Other } from "../closing.ts";
 import { type Session, sessions, bump, localToCli, appTitles } from "./state.ts";
 import { setStatus } from "./session.ts";
 import { readRange } from "./log.ts";
-import { applyAppAsk } from "./desktop.ts";
+import { APP_SUMMARY_WAIT_MS, applyAppAsk, hasAppFile } from "./desktop.ts";
 import { activeAgents, scanCommands } from "./agents.ts";
 import { pendingReminders } from "./tasks.ts";
 
@@ -127,12 +127,18 @@ export function checkRelayed() {
 // Once a turn has ended, tell apart "done", "asks you" and "error". Waits a moment
 // after Stop so the closing message is in the transcript.
 export function classifyTurn(s: Session) {
-  s.classified = true;
   const last: LastTurn = s.tp && existsSync(s.tp) ? readLastTurn(s.tp) : { kind: "none" };
+  const closing = last.kind === "text" ? classifyClosing(last.text!, ...closingContext(s)) : undefined;
+  // A request without a question mark is a guess, and the Claude app's summary of the turn
+  // can say it's done. For a session the app knows, wait a few seconds for that summary
+  // (desktop.ts watches its file), so a wrong guess never sounds or badges first.
+  const guess = !s.ask && closing?.ask && !(closing.askText ?? "").includes("?");
+  const summaryIn = s.appAsk && s.appAsk.edge >= s.since - 10_000;
+  if (guess && !summaryIn && hasAppFile(s.sid) && Date.now() - s.since < 800 + APP_SUMMARY_WAIT_MS) return;
+  s.classified = true;
   try {
     scanCommands(s); // now, so a command that ended during the turn doesn't show for a moment
   } catch {}
-  const closing = last.kind === "text" ? classifyClosing(last.text!, ...closingContext(s)) : undefined;
   s.relays = closing?.relays;
   s.relayed = undefined;
   if (last.kind === "error") {

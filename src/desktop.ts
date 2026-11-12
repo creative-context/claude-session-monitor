@@ -2,7 +2,7 @@
 // summary of a turn, and the sessions from before this app existed.
 
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fold, nameWords, relayTargets } from "../closing.ts";
 import { APP_SESSIONS, PROJECTS, WEEK_MS } from "./config.ts";
 import { type Session, type Task, tasks, taskChanged, sessions, bump, localToCli, appTitles } from "./state.ts";
@@ -137,20 +137,95 @@ export function relativesOf(sid: string) {
   };
 }
 
+// What one app session file says, as far as this app needs it.
+export type AppFile = {
+  local: string; cli: string; from?: string; title?: string; archived?: boolean; model?: string; cwd?: string;
+  created?: number; last?: number; task?: string; ask?: { text: string; edge: number };
+};
+export function parseAppFile(text: string, name: string): AppFile | undefined {
+  const j = JSON.parse(text);
+  if (typeof j?.cliSessionId !== "string") return undefined;
+  const cwd = j.originCwd ?? j.cwd;
+  return {
+    local: typeof j.sessionId === "string" ? j.sessionId : name.slice(0, -5), cli: j.cliSessionId,
+    from: typeof j.spawnedFrom?.sessionId === "string" ? j.spawnedFrom.sessionId : undefined,
+    title: typeof j.title === "string" ? j.title : undefined, archived: j.isArchived === true,
+    model: typeof j.model === "string" ? j.model : undefined, cwd: typeof cwd === "string" ? cwd : undefined,
+    created: typeof j.createdAt === "number" ? j.createdAt : undefined,
+    last: typeof j.lastActivityAt === "number" ? j.lastActivityAt : undefined,
+    task: typeof j.scheduledTaskId === "string" ? j.scheduledTaskId : undefined,
+    ask: appAskOf(j),
+  };
+}
+
+// A file is parsed again only when its time or size changes: most are weeks old, and
+// together they run to tens of megabytes.
+type Cached = { mtime: number; size: number; file?: AppFile; tasks?: Task[] };
+export const appFiles = new Map<string, Cached>();
+let fileOfCli = new Map<string, string>(); // a Claude Code session ID → its app file
+export let parses = 0; // files parsed since the start, for tests
+
+export function readCached(path: string, name: string): Cached | undefined {
+  let st;
+  try {
+    st = statSync(path);
+  } catch {
+    appFiles.delete(path);
+    return undefined;
+  }
+  const old = appFiles.get(path);
+  if (old && old.mtime === st.mtimeMs && old.size === st.size) return old;
+  const c: Cached = { mtime: st.mtimeMs, size: st.size };
+  parses++;
+  try {
+    if (name === "scheduled-tasks.json") c.tasks = readTasks(path);
+    else c.file = parseAppFile(readFileSync(path, "utf8"), name);
+  } catch {}
+  appFiles.set(path, c);
+  return c;
+}
+
+// When a turn of a desktop session ends, the app writes its summary of that turn to the
+// session's file within seconds. Watch that one file for a little while, so a request the
+// summary says is done never waits for the next full pass.
+const watching = new Map<string, ReturnType<typeof setInterval>>();
+export const APP_SUMMARY_WAIT_MS = 4000; // how long a guessed ask waits for the app's summary
+export const hasAppFile = (sid: string) => fileOfCli.has(sid);
+export function readAppFileSoon(sid: string, every = 1000, until = 20_000) {
+  const path = fileOfCli.get(sid);
+  if (!path) return;
+  clearInterval(watching.get(sid));
+  const started = Date.now();
+  const timer = setInterval(() => {
+    const s = sessions.get(sid);
+    const d = readCached(path, basename(path))?.file;
+    if (s && d?.cli === sid && JSON.stringify(d.ask) !== JSON.stringify(s.appAsk)) {
+      s.appAsk = d.ask;
+      applyAppAsk(s);
+      bump();
+    }
+    // Done once the summary of this turn is in, or after a while: the full pass takes over.
+    const fresh = s && d?.ask && d.ask.edge >= s.since - 10_000;
+    if (!s || fresh || s.status !== "done" || Date.now() - started >= until) {
+      clearInterval(timer);
+      watching.delete(sid);
+    }
+  }, every);
+  watching.set(sid, timer);
+}
+
 // Titles and archive flags come from the desktop app's own session files. Their
 // format is not documented, so every field is optional and errors are ignored.
 // The same files fill the history with sessions from before this app existed, and
 // bring this week's sessions to the main view even if they've been quiet since.
 export function readDesktopSessions() {
   if (!existsSync(APP_SESSIONS)) return;
-  const byCli = new Map<string, {
-    title?: string; archived?: boolean; model?: string; cwd?: string; created?: number; last?: number; task?: string;
-    ask?: { text: string; edge: number };
-  }>();
+  const byCli = new Map<string, AppFile>();
   const found = new Map<string, Task>();
   const cliOf = localToCli; // the app's own session ID → Claude Code's
-  cliOf.clear();
   const spawned = new Map<string, string>(); // a side session (Claude Code ID) → the app ID it came from
+  const seen = new Set<string>();
+  const files = new Map<string, string>();
   try {
     for (const account of readdirSync(APP_SESSIONS)) {
       const accDir = join(APP_SESSIONS, account);
@@ -159,31 +234,30 @@ export function readDesktopSessions() {
         const orgDir = join(accDir, org);
         if (!statSync(orgDir).isDirectory()) continue;
         for (const f of readdirSync(orgDir)) {
-          if (f === "scheduled-tasks.json") {
-            for (const t of readTasks(join(orgDir, f))) found.set(t.id, t);
-            continue;
-          }
-          if (!f.startsWith("local_") || !f.endsWith(".json")) continue;
-          try {
-            const j = JSON.parse(readFileSync(join(orgDir, f), "utf8"));
-            if (typeof j.cliSessionId === "string") {
-              cliOf.set(typeof j.sessionId === "string" ? j.sessionId : f.slice(0, -5), j.cliSessionId);
-              if (typeof j.spawnedFrom?.sessionId === "string") spawned.set(j.cliSessionId, j.spawnedFrom.sessionId);
-              byCli.set(j.cliSessionId, {
-                title: j.title, archived: j.isArchived === true, model: j.model, cwd: j.originCwd ?? j.cwd,
-                created: typeof j.createdAt === "number" ? j.createdAt : undefined,
-                last: typeof j.lastActivityAt === "number" ? j.lastActivityAt : undefined,
-                task: typeof j.scheduledTaskId === "string" ? j.scheduledTaskId : undefined,
-                ask: appAskOf(j),
-              });
-            }
-          } catch {}
+          if (f !== "scheduled-tasks.json" && (!f.startsWith("local_") || !f.endsWith(".json"))) continue;
+          const path = join(orgDir, f);
+          seen.add(path);
+          const c = readCached(path, f);
+          for (const t of c?.tasks ?? []) found.set(t.id, t);
+          const d = c?.file;
+          if (!d) continue;
+          files.set(d.cli, path);
+          byCli.set(d.cli, d);
         }
       }
     }
   } catch {
     return;
   }
+  for (const path of appFiles.keys()) if (!seen.has(path)) appFiles.delete(path);
+  cliOf.clear();
+  for (const path of seen) {
+    const d = appFiles.get(path)?.file;
+    if (!d) continue;
+    cliOf.set(d.local, d.cli);
+    if (d.from) spawned.set(d.cli, d.from);
+  }
+  fileOfCli = files;
   const links = new Map<string, string>();
   for (const [child, from] of spawned) {
     const parent = cliOf.get(from);
@@ -240,9 +314,12 @@ export function readDesktopSessions() {
       bump();
     }
   }
-  if (fromApp.length && db) {
+  // Only the rows that changed since the last pass, so a quiet Mac writes nothing.
+  const sigs = new Map(fromApp.map((s) => [s.sid, JSON.stringify(rowOf(s))]));
+  const changed = fromApp.filter((s) => appRows.get(s.sid) !== sigs.get(s.sid));
+  if (changed.length && db) {
     db.transaction(() => {
-      for (const s of fromApp) {
+      for (const s of changed) {
         const row = rowOf(s);
         // Keep what we already know about it (status, recap); only fill the gaps.
         db.query(`INSERT INTO sessions (sid, title, project, cwd, app_cwd, tp, first_at, last_at, status, model, archived, task)
@@ -256,5 +333,8 @@ export function readDesktopSessions() {
         });
       }
     })();
+    for (const s of changed) appRows.set(s.sid, sigs.get(s.sid)!);
   }
 }
+// What was last written for each older session.
+const appRows = new Map<string, string>();

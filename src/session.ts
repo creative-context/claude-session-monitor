@@ -4,7 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { nextRun, parseCron } from "../cron.ts";
 import { type Status, type Step, type Ev, type Session, sessions, bump } from "./state.ts";
 import { readRange } from "./log.ts";
-import { readDesktopSoon } from "./desktop.ts";
+import { readAppFileSoon, readDesktopSoon } from "./desktop.ts";
 import { timeOf } from "./tasks.ts";
 
 // A repeating reminder stops after 7 days, as Claude Code does.
@@ -279,6 +279,8 @@ export function apply(e: Ev) {
       s.inFlight = 0;
       s.tool = s.detail = undefined;
       s.classified = false; // checkTurns() reads how it ended
+      // And the app's summary of the turn, for a desktop session; not for old lines read at startup.
+      if (Date.now() - e.t < 30_000) readAppFileSoon(s.sid);
       s.outcome = s.askText = s.errorText = undefined;
       break;
 

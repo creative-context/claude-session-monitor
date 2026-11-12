@@ -23,10 +23,21 @@ export function readJson(file: string): any {
 }
 
 // Agent ids a workflow's journal already reports as finished.
+// Read again only when the journal grows.
+const journals = new Map<string, { size: number; done: Set<string> }>();
 export function finishedInJournal(runDir: string): Set<string> {
   const done = new Set<string>();
   const file = join(runDir, "journal.jsonl");
-  if (!existsSync(file)) return done;
+  let size;
+  try {
+    size = statSync(file).size;
+  } catch {
+    return done;
+  }
+  const cached = journals.get(file);
+  if (cached?.size === size) return cached.done;
+  if (journals.size > 500) journals.clear(); // runs come and go; keep memory flat
+  journals.set(file, { size, done });
   for (const line of readFileSync(file, "utf8").split("\n")) {
     if (!line.includes('"result"') && !line.includes('"failed"')) continue;
     try {
@@ -36,6 +47,9 @@ export function finishedInJournal(runDir: string): Set<string> {
   }
   return done;
 }
+
+// A detail is cut as the hook cuts it: one line, 160 characters at most.
+export const short = (v: unknown, n = 160) => (typeof v === "string" ? v.replace(/\s+/g, " ").slice(0, n) : undefined);
 
 // Reads the end of an agent's transcript: the size of its context (what the app's
 // panel calls tokens), its last tool when no hook told us, and whether its last
@@ -70,7 +84,7 @@ export function readAgentTail(a: Agent, mtime: number) {
     if (use && !a.tool) {
       a.tool = use.name;
       const i2 = use.input ?? {};
-      a.detail = i2.description ?? i2.file_path ?? i2.command ?? i2.pattern ?? i2.url;
+      a.detail = short(i2.description ?? i2.file_path ?? i2.command ?? i2.pattern ?? i2.url);
     }
     if (!midTurn && row.message?.stop_reason === "end_turn" && !use) a.finished = true;
     return;
@@ -102,7 +116,7 @@ export function scanAgents(s: Session) {
       a.metaRead = true;
       const meta = readJson(join(dirname(file), `agent-${id}.meta.json`));
       if (meta) {
-        a.label = meta.description;
+        a.label = short(meta.description);
         a.phase = meta.workflowPhase;
         a.model = meta.model;
         a.background = meta.requestShape === "background";
@@ -139,7 +153,8 @@ export function scanAgents(s: Session) {
 
 // The app's panel names a workflow after its script file (nightly-review.js → nightly-review).
 // The run id shows up in the Workflow call's result in the transcript; its input has
-// the script path, or the script itself with `meta.name`.
+// the script path, or the script itself with `meta.name`. Only the transcript is read:
+// never the script file, which can be anywhere on disk.
 const runNames = new Map<string, { name?: string; description?: string; tried: number }>();
 
 export function runName(s: Session, runId: string): { name?: string; description?: string } {
@@ -169,14 +184,12 @@ export function runName(s: Session, runId: string): { name?: string; description
       const use = (row.message?.content ?? []).find((b: any) => b?.type === "tool_use" && b.id === toolUseId);
       if (!use) continue;
       const input = use.input ?? {};
-      let script: string = input.script ?? "";
-      if (input.scriptPath) {
-        entry.name = basename(input.scriptPath).replace(/\.[cm]?js$/, "");
-        if (!script && existsSync(input.scriptPath)) script = readFileSync(input.scriptPath, "utf8").slice(0, 4000);
-      }
-      if (!entry.name && input.name) entry.name = input.name;
+      const script = typeof input.script === "string" ? input.script.slice(0, 4000) : "";
+      if (typeof input.scriptPath === "string") entry.name = basename(input.scriptPath).replace(/\.[cm]?js$/, "");
+      if (!entry.name && typeof input.name === "string") entry.name = input.name;
       entry.name ??= script.match(/name:\s*['"`]([^'"`]+)['"`]/)?.[1];
-      entry.description = script.match(/description:\s*['"`]([^'"`]+)['"`]/)?.[1]?.slice(0, 160);
+      entry.name = short(entry.name, 80);
+      entry.description = short(script.match(/description:\s*['"`]([^'"`]+)['"`]/)?.[1]);
     } catch {}
     break;
   }
@@ -242,14 +255,50 @@ export function activeCommands(s: Session): Command[] {
   return (s.commands ?? []).filter((c) => now - c.at < COMMAND_MAX_MS);
 }
 
+// A folder's time changes when a file is added to it, not when one grows. So a session with
+// no agent at work and no workflow run still open needs a walk only when its subagents
+// folder or its workflows folder changed: a new agent or a new run.
+const folderSig = new Map<string, string>();
+export function folderSignature(s: Session): string {
+  const dir = sessionDir(s);
+  if (!dir) return "";
+  const mtime = (p: string) => {
+    try {
+      return statSync(p).mtimeMs;
+    } catch {
+      return -1;
+    }
+  };
+  const sub = join(dir, "subagents");
+  return `${dir}|${mtime(sub)}|${mtime(join(sub, "workflows"))}|${mtime(join(dir, "workflows"))}`;
+}
+export function needsWalk(s: Session, now = Date.now()): boolean {
+  if (activeAgents(s).length) return true; // its transcript grows without the folder changing
+  for (const r of s.runs.values()) if (!r.finished && now - r.startedAt < RUN_DIR_MS) return true;
+  for (const a of s.agents.values()) if (!a.finished && !a.file) return true; // heard from, file not found yet
+  const sig = folderSignature(s);
+  if (folderSig.get(s.sid) === sig) return false;
+  folderSig.set(s.sid, sig);
+  return true;
+}
+export let walks = 0; // sessions walked since the start, for tests
+
 let agentSig = "";
 export function scanAllAgents() {
   const now = Date.now();
   for (const s of sessions.values()) {
-    if (s.status === "ended" || now - s.last > FORGET_MS) continue;
+    if (s.status === "ended" || now - s.last > FORGET_MS) {
+      folderSig.delete(s.sid);
+      continue;
+    }
     try {
-      scanAgents(s);
-    } catch {}
+      if (needsWalk(s, now)) {
+        walks++;
+        scanAgents(s);
+      }
+    } catch {
+      folderSig.delete(s.sid); // try again next pass
+    }
     // A finished turn may have left a command running; one still at work shows anyway.
     if ((s.status === "done" || s.status === "idle") && now - s.last < COMMAND_MAX_MS) {
       try {
