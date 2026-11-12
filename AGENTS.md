@@ -6,11 +6,16 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 
 - `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`. `hooks/statusline.sh`: the status line that saves the plan's weekly and 5-hour usage to `usage.json`; the server runs Claude Code in a hidden terminal every 10 minutes so it runs (`probeUsage`).
 - `install-hooks.ts`: adds or removes the hook's entries in `~/.claude/settings.json`, after a dated backup.
-- `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page.
+- `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page. The file itself is the web server, the timers and startup (only when run, behind `import.meta.main`); its parts live in `src/`, one per job, and import without side effects:
+  - `config.ts` folders and time limits; `state.ts` the types and the shared state (sessions, tasks, the version that bumps on each change).
+  - `session.ts` the state machine (`apply`); `log.ts` reading, rotating and replaying `events.jsonl`; `turns.ts` process checks and how a turn ended.
+  - `db.ts` `sessions.db` and History; `desktop.ts` the Claude app's session files; `agents.ts` subagents, workflows and background commands.
+  - `tasks.ts` scheduled tasks and reminders; `usage.ts` plan usage and its probe; `snapshot.ts` what the page gets, with the "needs you" rule.
+- `closing.ts`: the rules that read a turn's closing message (done, asks you, or passes on another session's question), with its cases in `test/closing.test.ts` (`bun test`).
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.
 - `public/index.html`: the whole page, styles and script: the Obsidian theme's colors in Apple's system fonts (SF Pro, SF Mono), with no font files.
 - `public/anime-layout.js`: anime.js's layout module (`createLayout`), MIT, built from the npm package with `bun build` (its header says how). It animates Last 7 Days; the page works without it. Never load it from a CDN: the app makes one network request only.
-- `app/main.swift`: the native app. `app/build.sh` builds it universal and copies the server, the page and the hook into it.
+- `app/main.swift`: the native app. `app/build.sh` builds it universal and puts the server, bundled into one `server.js` with `bun build`, the page, the hook and its installer into it.
 - `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots.
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
 - `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome on a Mac, for SF Pro (the command is at the top of the file). Edit the HTML, never the PNG.

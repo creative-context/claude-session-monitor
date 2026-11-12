@@ -26,10 +26,12 @@ lipo -create build/ClaudeSessionMonitor-arm64 build/ClaudeSessionMonitor-x86_64 
 
 cp app/Info.plist "$APP/Contents/Info.plist"
 
-# The server, the page and the hook, inside the app.
+# The server, bundled into one server.js, and the page, the hook and its installer, inside the app.
+# The bundle finds public/ and hooks/ next to itself.
 SERVER="$APP/Contents/Resources/server"
 mkdir -p "$SERVER"
-cp server.ts closing.ts cron.ts install-hooks.ts "$SERVER/"
+bun build server.ts --target=bun --outfile "$SERVER/server.js" >/dev/null
+cp install-hooks.ts "$SERVER/"
 cp -R public hooks "$SERVER/"
 chmod 755 "$SERVER/hooks/session-hook.sh" "$SERVER/hooks/statusline.sh"
 # The app's license travels with it.

@@ -187,10 +187,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
     // MARK: server
 
-    // The server, the page and the hook travel inside the app (build.sh copies them).
+    // The server, bundled into server.js, the page and the hook travel inside the app (build.sh puts them there).
     var serverDir: URL? {
         guard let dir = Bundle.main.resourceURL?.appendingPathComponent("server"),
-              FileManager.default.fileExists(atPath: dir.appendingPathComponent("server.ts").path) else { return nil }
+              FileManager.default.fileExists(atPath: dir.appendingPathComponent("server.js").path) else { return nil }
         return dir
     }
 
@@ -295,7 +295,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: bun)
-        p.arguments = [dir.appendingPathComponent("server.ts").path]
+        p.arguments = [dir.appendingPathComponent("server.js").path]
         p.currentDirectoryURL = dir
         var env = ProcessInfo.processInfo.environment
         env["CSM_VERSION"] = currentVersion
