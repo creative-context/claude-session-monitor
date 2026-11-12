@@ -1,8 +1,7 @@
 name: Release
 
 # When a release is published, builds the universal app on macOS and attaches the zip
-# to it. Only here, not on every push: on a private repository a macOS minute counts as
-# ten. Run it by hand to build a release's zip as a workflow artifact, and to replace
+# to it. Only here, not on every push, so CI stays quick. Run it by hand to build a release's zip as a workflow artifact, and to replace
 # the one attached to the release if you tick "attach".
 on:
   release:

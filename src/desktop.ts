@@ -89,7 +89,7 @@ export function saysTitle(text: string, title: string): boolean {
   return t.length >= 6 && ` ${nameWords(text).join(" ")} `.includes(` ${t} `);
 }
 
-// A note that only invites the next piece of work ("Paste the next text so it can be…",
+// A note that only invites the next piece of work ("Send the next part when it's ready…",
 // "Send another file…") is an open offer, like one in the closing message: nothing waits.
 // Only when it starts that way: "Give the OK to push, or ask for more changes" still asks.
 const OPEN_NOTE = /^(paste|send|share|drop|upload)( me| us| it)? (the next|your next|another|any other)\b/i;

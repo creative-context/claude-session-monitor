@@ -73,7 +73,7 @@ export function nextOf(t: Task, now: number): number | null {
 }
 
 // The scheduled tasks a session set up, as the Claude app lists them now; one it later
-// deleted is gone. The app can change the ID it was asked for ("check-inbox-2"), so a
+// deleted is gone. The app can change the ID it was asked for ("nightly-check-2"), so a
 // task with an ID that starts the same, created right then, counts too.
 export function madeTasks(made: Session["made"], now: number) {
   const out: { id: string; name: string; enabled: boolean; next: number | null }[] = [];

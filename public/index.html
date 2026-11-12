@@ -15,7 +15,7 @@
   :root {
     color-scheme: dark;
 
-    --color-background-body: #030304;  /* darker than the theme's #08090A, for a window that sits on a dark desk */
+    --color-background-body: #030304;  /* darker than the theme's #08090A */
     --color-background-card: #FFFFFF08;   /* 3% veil */
     --color-overlay-hover: #FFFFFF0A;     /* 4% */
     --obsidian-veil-selected: #FFFFFF0F;  /* 6% */
@@ -453,7 +453,7 @@
     translate: 0 calc(round(nearest, calc(var(--csm-scale, 1) * 1px), 1px) / var(--csm-scale, 1)); }
   .detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
   .detail b { color: var(--color-text-primary); font-weight: 400; }
-  /* A short window (yours is about 430 px tall at 125%) gets lower cards: the title
+  /* A short window gets lower cards: the title
      keeps one line, and both lines of detail stay, since they carry the plan step and
      what the agents do. */
   @media (max-height: 600px) {

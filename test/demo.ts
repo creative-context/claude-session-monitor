@@ -167,16 +167,16 @@ runOf(releaseRun, "release-notes", "Release notes for 2.4", project("docs"), now
 task("data-audit", "Nightly data audit", "0 2 * * *", project("analytics"), { lastFor: prev("0 2 * * *") });
 runOf(auditRun, "data-audit", "Nightly data audit", project("analytics"), now - 22 * MIN);
 // Ran fine, three times.
-const inbox = "0 8 * * 1-5";
-let at = prev(inbox);
-task("inbox-summary", "Morning inbox summary", inbox, project("inbox"), { lastFor: at });
+const builds = "30 10 * * 1-5";
+let at = prev(builds);
+task("build-summary", "Build health summary", builds, project("ci"), { lastFor: at });
 for (let i = 0; i < 3; i++) {
-  const sid = finished("Morning inbox summary", project("inbox"), at + 8 * MIN, "Eleven new threads. Two need a reply today; both are flagged.");
-  runOf(sid, "inbox-summary", "Morning inbox summary", project("inbox"), at);
-  at = prev(inbox, at - MIN);
+  const sid = finished("Build health summary", project("ci"), at + 8 * MIN, "Eleven builds ran. Two failed; both are flagged.");
+  runOf(sid, "build-summary", "Build health summary", project("ci"), at);
+  at = prev(builds, at - MIN);
 }
 // Missed its latest run: the one before it is the last that happened.
-const daily = "0 7 * * *";
+const daily = "0 11 * * *";
 const ranAt = prev(daily, prev(daily, now - 10 * MIN) - MIN);
 task("metrics-email", "Daily metrics email", daily, project("analytics"), { lastFor: ranAt });
 runOf(finished("Daily metrics email", project("analytics"), ranAt + 8 * MIN, "Sent the metrics summary to the team channel."),
@@ -289,7 +289,7 @@ if (EDGE) {
   ev(s, now - 8 * MIN - 2000, { ev: "PostToolUse", tool: "CronCreate", x: { id: "e5f6a7b8", at: now + 52 * MIN, cron: "*/10 * * * *", rec: true }, cwd: project("infra") });
   ev(s, now - 8 * MIN - 1000, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "migration-report" }, cwd: project("infra") });
   ev(s, now - 8 * MIN - 500, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "migration-cleanup" }, cwd: project("infra") });
-  task("migration-report", "Migration status report with a much longer name than usual", "30 7 * * *", project("infra"), { created: now - 8 * MIN - 1000 });
+  task("migration-report", "Migration status report with a much longer name than usual", "30 16 * * *", project("infra"), { created: now - 8 * MIN - 1000 });
   taskFile.push({ id: "migration-cleanup", displayName: "Drop the old tables", fireAt: new Date(now + 26 * 60 * MIN).toISOString(),
     enabled: true, cwd: project("infra"), createdAt: now - 8 * MIN - 500 });
   taskFile.push({ id: "send-recap", displayName: "Send the launch recap", fireAt: new Date(now - 30 * 60 * MIN).toISOString(),

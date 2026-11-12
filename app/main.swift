@@ -866,8 +866,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
 
     // MARK: size
 
-    // A 4K screen at 1x makes 14 px text tiny, so dense screens get 150% unless you pick
-    // a size. The longer side counts, so a 4K screen turned vertical counts too.
+    // A very large screen at 1x makes 14 px text tiny, so dense screens get 150% unless you
+    // pick a size. The longer side counts, so a large screen turned vertical counts too.
     func autoZoom(for screen: NSScreen?) -> CGFloat {
         guard let s = screen else { return 1 }
         return s.backingScaleFactor < 1.5 && max(s.frame.width, s.frame.height) >= 3000 ? 1.5 : 1

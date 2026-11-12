@@ -1,7 +1,7 @@
 // Draws docs/screenshot.png: the page on the demo data, in WebKit (the app's own engine),
 // at twice the pixels, with the weekly usage card open. Run the demo first.
 //
-//   bun test/demo.ts --hot &
+//   TZ=UTC bun test/demo.ts --hot &
 //   swift docs/screenshot.swift http://127.0.0.1:4748/ docs/screenshot.png
 import AppKit
 import WebKit
@@ -19,7 +19,23 @@ let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
 let window = NSWindow(contentRect: NSRect(origin: .zero, size: NSSize(width: size.width * scale, height: size.height * scale)),
                       styleMask: [.borderless], backing: .buffered, defer: false)
-let web = WKWebView(frame: window.contentLayoutRect)
+// The page's clock in UTC, whatever the Mac's time zone, so the times on the picture say
+// nothing about where it was drawn.
+let utc = WKUserScript(source: """
+  (() => {
+    const pin = (f, at) => function (loc, o) { return f.call(this, loc, { ...(o || {}), timeZone: "UTC" }); };
+    for (const k of ["toLocaleString", "toLocaleDateString", "toLocaleTimeString"]) Date.prototype[k] = pin(Date.prototype[k]);
+    for (const k of ["FullYear", "Month", "Date", "Day", "Hours", "Minutes", "Seconds"]) Date.prototype["get" + k] = Date.prototype["getUTC" + k];
+    for (const k of ["FullYear", "Month", "Date", "Hours", "Minutes", "Seconds", "Milliseconds"]) Date.prototype["set" + k] = Date.prototype["setUTC" + k];
+    Date.prototype.getTimezoneOffset = () => 0;
+    const DTF = Intl.DateTimeFormat;
+    Intl.DateTimeFormat = function (loc, o) { return new DTF(loc, { ...(o || {}), timeZone: "UTC" }); };
+    Intl.DateTimeFormat.prototype = DTF.prototype;
+  })();
+  """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+let config = WKWebViewConfiguration()
+config.userContentController.addUserScript(utc)
+let web = WKWebView(frame: window.contentLayoutRect, configuration: config)
 web.pageZoom = scale
 window.contentView = web
 window.orderBack(nil)

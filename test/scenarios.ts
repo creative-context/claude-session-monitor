@@ -52,7 +52,7 @@ ev(id(51), { ev: "PreCompact" });
 
 // 53. A closing message that quotes a question it sent to someone else doesn't ask you
 {
-  const tp = transcript("t53.jsonl", [said("Yes, it went out. I checked it in the chat after sending it:\n\n> @Sam, could you send an example? A screen would work.")]);
+  const tp = transcript("t53.jsonl", [said("Yes, it went out. I checked it in the chat after sending it:\n\n> Could you send an example? A screen would work.")]);
   ev(id(53), { ev: "UserPromptSubmit", prompt: "Did you send it?", tp });
   ev(id(53), { ev: "Stop", tp });
 }
@@ -280,12 +280,12 @@ ev(id(38), { ev: "PreToolUse", tool: "Bash", d: "Export the data", t: dueAt - DA
 // invites the next piece of work. 61: it says to answer in another session, by name.
 // 62–63: they mention more or another, but ask you here.
 for (const [n, cat, action, about] of [
-  [39, "blocked", "In Routines, set Permissions to Bypass for the three tasks", "u-last"],
+  [39, "blocked", "In Settings, turn on the shared folder for the two tasks", "u-last"],
   [40, "blocked", "Approve the old plan", "u-older"],
   [41, "completed", "", "u-last"],
   [42, "completed", "", "u-last"],
   [54, "blocked", "Give the OK to [Routines 39] in its own session so it sends the report", "u-last"],
-  [56, "blocked", "Paste the next text so it can be rewritten in your voice", "u-last"],
+  [56, "blocked", "Send the next part when it's ready", "u-last"],
   [61, "blocked", "Answer in the weekday digest session: which day works best", "u-last"],
   [62, "blocked", "Give the OK to push, or ask for more changes", "u-last"],
   [63, "blocked", "Tell it which option you want, or pick another", "u-last"],
@@ -309,8 +309,8 @@ for (const [n, cat, action, about] of [
 // but their question is their own: they still ask.
 const link = (n: number) => `[Draft review ${n}](#local_${id(n)})`;
 for (const [n, other, answered, close] of [
-  [57, 58, true, `The ${link(58)} session can't start until you answer: who is the image for?`],
-  [59, 60, false, `The ${link(60)} session can't start until you answer: who is the image for?`],
+  [57, 58, true, `The ${link(58)} session can't start until you answer: which cover goes first?`],
+  [59, 60, false, `The ${link(60)} session can't start until you answer: which cover goes first?`],
   [66, 67, true, `I started ${link(67)} for the icons. Should I also push the branch?`],
   [68, 69, true, `La sesión ${link(69)} te hace dos preguntas; contéstalas en esa sesión:\n\n1. ¿Quién la va a ver?\n2. ¿Qué tamaños?`],
   [70, 71, true, `Aparte, ${link(71)} te espera en esa sesión.\n\n¿Subo los cambios?`],
@@ -321,7 +321,7 @@ for (const [n, other, answered, close] of [
   ev(id(n), { ev: "Stop", tp, t: at + 1000 });
   ev(id(other), { ev: "UserPromptSubmit", prompt: "Draft review", t: at - 60_000 });
   ev(id(other), { ev: "Stop", t: at - 30_000 });
-  if (answered) ev(id(other), { ev: "UserPromptSubmit", prompt: "It's for the board", t: at + 60_000 });
+  if (answered) ev(id(other), { ev: "UserPromptSubmit", prompt: "The blue one", t: at + 60_000 });
   const local = `local_${id(other)}`;
   writeFileSync(join(appDir, `${local}.json`), JSON.stringify({
     sessionId: local, cliSessionId: id(other), title: `Draft review ${other}`, originCwd: "/tmp/demo", createdAt: at - 60_000, lastActivityAt: at + 60_000,
@@ -679,7 +679,7 @@ try {
   check("16 a courtesy closing is done", find(s, 16)?.status === "done", find(s, 16));
   check("23 an open offer for more is done", find(s, 23)?.status === "done", find(s, 23));
   check("39 when the Claude app says the turn needs you, it asks you, in the app's words",
-    find(s, 39)?.status === "asks" && find(s, 39)?.ask === "In Routines, set Permissions to Bypass for the three tasks" && find(s, 39)?.needsYou === true, find(s, 39));
+    find(s, 39)?.status === "asks" && find(s, 39)?.ask === "In Settings, turn on the shared folder for the two tasks" && find(s, 39)?.needsYou === true, find(s, 39));
   check("40 a summary of an earlier turn doesn't count", find(s, 40)?.status === "done", find(s, 40));
   check("41 a completed turn stays done", find(s, 41)?.status === "done", find(s, 41));
   check("42 a request without a question mark the app read as done is done", find(s, 42)?.status === "done", find(s, 42));
