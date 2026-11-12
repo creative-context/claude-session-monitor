@@ -12,7 +12,7 @@ import { join } from "node:path";
 import { DIR, LOG, PORT } from "./src/config.ts";
 import { bumpView, onBump, sessions, version } from "./src/state.ts";
 import { hydrate } from "./src/session.ts";
-import { pump, replay } from "./src/log.ts";
+import { pump, replay, savePosition } from "./src/log.ts";
 import { checkProcesses, checkQuietTurns, checkRelayed, checkTurns } from "./src/turns.ts";
 import { db, forgetOld, history, loadRecent, openDatabase, persist } from "./src/db.ts";
 import { readDesktopSessions } from "./src/desktop.ts";
@@ -92,7 +92,7 @@ export function parentGone(pid = PARENT) {
 }
 
 function stop(code: number) {
-  try { persist(true); db.close(); } catch {}
+  try { persist(true); savePosition(); db.close(); } catch {}
   process.exit(code);
 }
 
@@ -181,21 +181,26 @@ function writeSoon() {
 }
 
 // A turn that ended is read a moment after its Stop, once the closing message is in the
-// transcript (CLASSIFY_AFTER): a timeout for the first one due, instead of a poll.
+// transcript (CLASSIFY_AFTER): a timeout for the first one due, instead of a poll. A turn
+// that is still not read after its look (it waits for the Claude app's summary) is looked
+// at again every RETRY_AFTER, as the old poll did.
 const CLASSIFY_AFTER = 800;
+const RETRY_AFTER = 500;
 let turnTimer: ReturnType<typeof setTimeout> | undefined;
 let turnAt = Infinity;
-function checkTurnsSoon() {
+function checkTurnsSoon(again = false) {
   let due = Infinity;
   for (const s of sessions.values()) if (s.status === "done" && !s.classified) due = Math.min(due, s.since + CLASSIFY_AFTER);
-  if (due === Infinity || due >= turnAt) return;
+  if (due === Infinity) return;
+  if (again) due = Math.max(due, Date.now() + RETRY_AFTER);
+  if (due >= turnAt) return;
   clearTimeout(turnTimer);
   turnAt = due;
   turnTimer = setTimeout(() => {
     turnTimer = undefined;
     turnAt = Infinity;
     safe("checkTurns", checkTurns)();
-    safe("checkTurns", checkTurnsSoon)(); // one that came meanwhile
+    safe("checkTurns", () => checkTurnsSoon(true))(); // one still waiting, or one that came meanwhile
   }, Math.max(0, due - Date.now()));
 }
 
