@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.0
+
+- Active's window is a menu in its header: the last 2, 4, 8, 12 or 24 hours. The app remembers your pick.
+
 ## 0.5.1
 
 - The README says that sessions already open load the usage plugin with `/reload-plugins`; until then their usage comes from the app's own check, up to 10 minutes late.

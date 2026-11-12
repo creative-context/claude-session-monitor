@@ -255,6 +255,17 @@
   .group-head svg.i { width: 14px; height: 14px; }
   .group-head .count { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
+  /* Active's window: its words are a menu, with a small chevron to say so. */
+  .group-head .hint.pick { display: inline-flex; align-items: center; gap: 4px; }
+  .hint.pick select {
+    appearance: none; -webkit-appearance: none; margin: 0 -14px 0 0; padding: 1px 14px 1px 0; border: 0; border-radius: 4px;
+    background: none; color: inherit; font: inherit; cursor: pointer;
+    transition: color var(--duration-fast) var(--ease-standard);
+  }
+  .hint.pick svg.chev { width: 9px; height: 9px; opacity: 0.6; pointer-events: none; }
+  .group-head .hint.pick:hover { color: var(--color-text-primary); }
+  .hint.pick:hover svg.chev { opacity: 1; }
+  .hint.pick select:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
   /* Active is the zone that matters: its header is a title, the rest are labels. */
   .group.active .group-head { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   .group.active .group-head svg.i { width: 14px; height: 14px; }
@@ -1218,13 +1229,17 @@
 
   // ---------------------------------------------------------------- Last 7 Days
 
-  // Active comes first: what needs you, what is working, anything touched in the last two
-  // hours, and anything set to pick up again on its own, in order of urgency. Then the rest
-  // of today, yesterday and earlier.
-  const ACTIVE_MS = 2 * 60 * 60 * 1000;
+  // Active comes first: what needs you, what is working, anything touched in the last few
+  // hours (2 unless you pick more in its header), and anything set to pick up again on its
+  // own, in order of urgency. Then the rest of today, yesterday and earlier.
+  const ACTIVE_HOURS = [2, 4, 8, 12, 24];
+  let activeHours = 2;
+  try { const h = Number(localStorage.getItem("csm-active-hours")); if (ACTIVE_HOURS.includes(h)) activeHours = h; } catch {}
+  const activePick = () => `<span class="hint pick">· <select id="active-hours" aria-label="How far back Active goes">${
+    ACTIVE_HOURS.map((h) => `<option value="${h}"${h === activeHours ? " selected" : ""}>last ${h} hours</option>`).join("")}</select>${ICON.chev}</span>`;
   const SECTIONS = [
-    { id: "active", label: "Active", hint: "last 2 hours", icon: ICON.activity,
-      test: (s) => needsYou(s) || s.status === "working" || now() - s.last < ACTIVE_MS || Boolean(s.reminder) },
+    { id: "active", label: "Active", pick: activePick, icon: ICON.activity,
+      test: (s) => needsYou(s) || s.status === "working" || now() - s.last < activeHours * 36e5 || Boolean(s.reminder) },
     { id: "today", label: "Earlier today", icon: ICON.sun, test: (s) => s.last >= dayStart(0) },
     { id: "yesterday", label: "Yesterday", icon: ICON.calendar, test: (s) => s.last >= dayStart(1) },
     { id: "earlier", label: "Earlier", icon: ICON.layers, test: () => true },
@@ -1457,7 +1472,7 @@
       sec.className = `group ${g.id}`;
       sec.dataset.layoutId = `g-${g.id}`;
       sec.setAttribute("aria-label", g.label);
-      sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2>${body}`;
+      sec.innerHTML = `<h2 class="group-head">${g.icon}<span>${g.label}</span><span class="count"></span>${g.pick ? g.pick() : g.hint ? `<span class="hint">· ${g.hint}</span>` : ""}</h2>${body}`;
       groups.set(g.id, sec);
       return sec;
     };
@@ -2619,6 +2634,14 @@
   // already in place, as they would have been.
   let behind = false;
   let catchingUp = false;
+  // Active's window, picked in its header and kept for next time.
+  document.addEventListener("change", (e) => {
+    if (e.target.id !== "active-hours") return;
+    activeHours = Number(e.target.value);
+    try { localStorage.setItem("csm-active-hours", String(activeHours)); } catch {}
+    render();
+  });
+
   function render() {
     if (document.hidden) { behind = true; return; }
     behind = false;
