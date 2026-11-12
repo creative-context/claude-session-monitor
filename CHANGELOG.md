@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.2
+
+- Fix: a session that was already waiting for you when the app updated gets its card's words read again with the new rules, so a request cut short before 0.6.1 shows whole without waiting for its next turn.
+
 ## 0.6.1
 
 - Fix: a request with a version number in it, such as "to tag 3.4.2 with 3.4.1 inside I need your approval", shows whole on the card. It was cut at the number's first dot.

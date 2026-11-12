@@ -127,6 +127,7 @@ export function checkRelayed() {
 // After a restart the log resumes where it stopped, so a turn read before isn't read again,
 // and which sessions it passes on isn't saved. For each session still asking you, read its
 // closing once more for that: the one place the same question shows is the session it's from.
+// Its words are read again too, so a newer version of the rules fixes a card saved before it.
 export function relinkRelays() {
   for (const s of sessions.values()) {
     if (s.status !== "done" || s.outcome !== "asks" || s.relays || !s.tp || !existsSync(s.tp)) continue;
@@ -137,7 +138,9 @@ export function relinkRelays() {
     // Its own question passes on what it names; with none, the ask came from the app's
     // note, which then is the other session's (as applyAppAsk reads it).
     s.relayed = c.ask ? c.relayed : c.relays.length ? c.relays : undefined;
-    if (s.relayed?.length) bump(s);
+    const reworded = Boolean(c.askText && !s.ask && s.askText && c.askText !== s.askText);
+    if (reworded) s.askText = c.askText;
+    if (s.relayed?.length || reworded) bump(s);
   }
 }
 
