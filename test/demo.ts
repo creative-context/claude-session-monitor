@@ -5,6 +5,7 @@
 //   bun test/demo.ts 4747     → on the app's port (quit the app first)
 //   bun test/demo.ts --edge   → adds the edge cases: long text, a usage limit, a stopped
 //                               session, one closed mid-turn, many agents, an idle one
+//   bun test/demo.ts --hot    → a week running hot: the forecast and its card; --limit, a week used up
 
 import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -300,8 +301,9 @@ writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTa
 // The plan's usage, as the status line saves it: a week on pace (--hot: well
 // past an even pace), and the last 5 hours.
 const hot = process.argv.includes("--hot");
-const weekResets = Math.floor(now / 1000 + 3.25 * 86400);
-const weekUsed = hot ? 74 : 50;
+const limit = process.argv.includes("--limit"); // a week used up, 5 hours before it resets
+const weekResets = Math.floor(now / 1000 + (limit ? 5 * 3600 : 3.25 * 86400));
+const weekUsed = limit ? 100 : hot ? 74 : 50;
 writeFileSync(join(dir, "usage.json"), JSON.stringify({
   at: now / 1000 - 4 * 60,
   week: { used_percentage: weekUsed, resets_at: weekResets },
