@@ -35,7 +35,10 @@ export function readUsage() {
     usage = { at: toMs(j.at) ?? m, week: win(j.week), five: win(j.five_hour) };
     remember(usage.at, usage.week);
   } catch {
-    usage = null;
+    // Caught mid-write (a writer that can't swap the file in whole): keep the last good
+    // numbers and read it again on the next pass.
+    usageMtime = 0;
+    return;
   }
   bump();
 }
