@@ -235,6 +235,7 @@ const RELAY = new RegExp(String.raw`\b(${[
   String.raw`te (espera|esta esperando|pregunta|hace \S+ preguntas?|necesita)`,
   String.raw`(esta|estan|sigue|siguen) esperando`,
   String.raw`espera tu respuesta`,
+  String.raw`esperan? (a )?que (elijas|escojas|decidas|confirmes|apruebes|contestes|respondas|le digas)`,
   String.raw`necesita que (decidas|contestes|respondas|elijas|apruebes|confirmes)`,
   String.raw`in (that|its|their) (own )?session`,
   String.raw`(is|are) (still )?waiting (for|on) (you|your)`,

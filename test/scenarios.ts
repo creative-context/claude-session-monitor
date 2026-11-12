@@ -340,6 +340,16 @@ for (const [n, other, answered, close] of [
   const tp87 = transcript("t87.jsonl", [said(`The design session is waiting for you to pick where to start: ${link(88)}.`)]);
   ev(id(87), { ev: "UserPromptSubmit", prompt: "Where are we?", tp: tp87, t: at });
   ev(id(87), { ev: "Stop", tp: tp87, t: at + 1000 });
+  // 89: the same in Spanish, with the closing asking nothing itself and the app's note
+  // asking for the other session's pick.
+  const tp89 = transcript("t89.jsonl", [said(`La sesión del borrador espera que escojas una de las dos portadas: ${link(88)}.\n\nAparte, las pruebas pasan.`)]);
+  ev(id(89), { ev: "UserPromptSubmit", prompt: "¿Cómo vamos?", tp: tp89, t: at });
+  ev(id(89), { ev: "Stop", tp: tp89, t: at + 1000 });
+  writeFileSync(join(appDir, `local_${id(89)}.json`), JSON.stringify({
+    sessionId: `local_${id(89)}`, cliSessionId: id(89), title: "Notes 89", originCwd: "/tmp/demo", createdAt: at - 60_000, lastActivityAt: at + 1000,
+    lastTurnEdgeAt: at + 1000, lastAssistantUuid: "u-last",
+    postTurnSummary: { status_category: "blocked", needs_action: "choose which to start with", summarizes_uuid: "u-last" },
+  }));
 }
 
 // 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
@@ -658,6 +668,7 @@ try {
   check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
   check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
   check("87 a question it passes on, which the other session shows itself, shows only there", find(s, 87)?.status === "done" && find(s, 87)?.needsYou === false && find(s, 88)?.status === "asks", [find(s, 87), find(s, 88)]);
+  check("89 the app's note on a closing that passes on another session's pick shows only there", find(s, 89)?.status === "done" && find(s, 89)?.needsYou === false, find(s, 89));
   check("61 an app note that says to answer in another session, named in words, is that session's", find(s, 61)?.status === "done", find(s, 61));
   check("62 an app note that asks for the OK, or for more changes, still asks", find(s, 62)?.status === "asks", find(s, 62));
   check("63 an app note that asks which option, or another, still asks", find(s, 63)?.status === "asks", find(s, 63));

@@ -105,10 +105,13 @@ export function applyAppAsk(s: Session) {
     // It passes on a linked session's question when the closing says that session waits
     // for you and the note names it, or the note itself says it waits there ("Answer
     // billing-api's questions in its session").
-    const named = (s.relays ?? []).filter((sid) => {
+    let named = (s.relays ?? []).filter((sid) => {
       const t = titleOf(sid);
       return saysTitle(a.text!, t) || sessionNames(a.text!).some((ws) => hasWords(t, ws));
     });
+    // The closing asked nothing of its own and says another session waits for you: the
+    // note's request is that session's ("choose which to start with").
+    if (!named.length && s.relays?.length) named = s.relays;
     s.relayed = [...new Set([...named, ...relayTargets(a.text, ...closingContext(s))])];
     bump(s);
   } else if (!a.text && s.outcome === "asks" && !s.ask && !(s.askText ?? "").includes("?")) {

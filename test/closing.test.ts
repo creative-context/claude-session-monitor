@@ -136,6 +136,12 @@ test("a relayed session is listed among the ones that wait for you", () => {
   expect(classifyClosing("Falta que respondas las preguntas de billing-api en su sesión (local_1a2b3c4d).", others, []).relays).toEqual(["cli-billing"]);
 });
 
+test("a linked session that waits for you to pick is listed, and this one asks nothing", () => {
+  const r = classifyClosing(`La sesión del borrador espera que escojas una de las dos portadas: ${link}.\n\nAparte, las pruebas pasan.`, others, []);
+  expect(r.ask).toBeUndefined();
+  expect(r.relays).toEqual(["cli-draft"]);
+});
+
 const asks = rows.filter(([, r]) => r.is === "asks").length;
 test(`the table holds both kinds (${asks} asks, ${rows.length - asks} not)`, () => {
   expect(asks).toBeGreaterThan(20);
