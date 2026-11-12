@@ -50,6 +50,7 @@ type Agent = {
   startedAt: number;
   lastAt: number;
   finished?: boolean;
+  stoppedAt?: number; // when its SubagentStop came
   metaRead?: boolean;
   tailMtime?: number; // transcript mtime we last read the tail at
 };
@@ -254,7 +255,14 @@ function touchAgent(s: Session, e: Ev) {
     a.tool = e.tool;
     a.detail = e.d;
   }
-  if (e.ev === "SubagentStop") a.finished = true;
+  if (e.ev === "SubagentStop") {
+    a.finished = true;
+    a.stoppedAt = e.t;
+  } else if (a.finished && a.stoppedAt != null && e.t > a.stoppedAt) {
+    // A stopped agent the session sent another message to: it works again.
+    a.finished = false;
+    a.tailMtime = undefined;
+  }
 }
 
 // A reminder the session set, changed or dropped, or a scheduled task it set up.

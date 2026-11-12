@@ -404,6 +404,16 @@ closing(82, "The notes are filed. The invite is still waiting for you to pick a 
 closing(83, "Revisé las tres sesiones. Nada espera tu respuesta.");
 closing(84, "Sigo vigilando. Solo te escribo si algo espera tu respuesta y no lo has visto.");
 
+// 85. An agent that stopped and then got another message from its session works again,
+// after the session's turn ended: the session shows it in the background.
+ev(id(85), { ev: "UserPromptSubmit", prompt: "Check the build" });
+ev(id(85), { ev: "SubagentStart", agent: "a85" });
+ev(id(85), { ev: "PreToolUse", tool: "Bash", d: "Build it", agent: "a85" });
+ev(id(85), { ev: "SubagentStop", agent: "a85" });
+ev(id(85), { ev: "Stop" });
+ev(id(85), { ev: "SubagentStart", agent: "a85" });
+ev(id(85), { ev: "PreToolUse", tool: "Bash", d: "Build it again", agent: "a85" });
+
 // 77–80. A turn that ends with a command still running in the background stays active until
 // Claude Code's notice that it ended, a TaskStop, or two hours. 77 gets its notice later on.
 const background = (n: number, extra: object[] = [], ago = 60_000) => {
@@ -519,6 +529,7 @@ try {
   writeFileSync(join(dir, "usage.json"), JSON.stringify({ at: Date.now() / 1000, week: { used_percentage: 45, resets_at: weekResets / 1000 }, five_hour: null }));
   check("2 subagents leave status working", find(s, 2)?.status === "working", find(s, 2));
   check("2 only the agent without SubagentStop counts", find(s, 2)?.agentCount === 1, find(s, 2)?.agents);
+  check("85 an agent that works again after its SubagentStop keeps the session working", find(s, 85)?.status === "working" && find(s, 85)?.background === true && find(s, 85)?.agentCount === 1, find(s, 85));
   const s9 = find(s, 9);
   check("9 workflow keeps a finished session busy", s9?.status === "working" && s9?.background === true, s9);
   check("9 workflow named after its script file", s9?.workflows?.[0]?.name === "w9-test", s9?.workflows);
