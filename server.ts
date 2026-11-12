@@ -13,7 +13,7 @@ import { DIR, LOG, PORT } from "./src/config.ts";
 import { bumpView, onBump, sessions, version } from "./src/state.ts";
 import { hydrate } from "./src/session.ts";
 import { pump, replay, savePosition } from "./src/log.ts";
-import { checkProcesses, checkQuietTurns, checkRelayed, checkTurns } from "./src/turns.ts";
+import { checkProcesses, checkQuietTurns, checkRelayed, checkTurns, relinkRelays } from "./src/turns.ts";
 import { db, forgetOld, history, loadRecent, openDatabase, persist } from "./src/db.ts";
 import { readDesktopSessions } from "./src/desktop.ts";
 import { scanAllAgents } from "./src/agents.ts";
@@ -237,6 +237,7 @@ export function start() {
   safe("checkProcesses", checkProcesses)();
   safe("scanAllAgents", scanAllAgents)();
   safe("checkTurns", checkTurns)(); // sessions that ended while the server was off
+  safe("relinkRelays", relinkRelays)(); // which of them pass on another session's question
   safe("persist", persist)();
   onBump((write) => {
     sendSoon();

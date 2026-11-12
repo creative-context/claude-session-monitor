@@ -124,6 +124,23 @@ export function checkRelayed() {
   }
 }
 
+// After a restart the log resumes where it stopped, so a turn read before isn't read again,
+// and which sessions it passes on isn't saved. For each session still asking you, read its
+// closing once more for that: the one place the same question shows is the session it's from.
+export function relinkRelays() {
+  for (const s of sessions.values()) {
+    if (s.status !== "done" || s.outcome !== "asks" || s.relays || !s.tp || !existsSync(s.tp)) continue;
+    const last = readLastTurn(s.tp);
+    if (last.kind !== "text") continue;
+    const c = classifyClosing(last.text!, ...closingContext(s));
+    s.relays = c.relays;
+    // Its own question passes on what it names; with none, the ask came from the app's
+    // note, which then is the other session's (as applyAppAsk reads it).
+    s.relayed = c.ask ? c.relayed : c.relays.length ? c.relays : undefined;
+    if (s.relayed?.length) bump(s);
+  }
+}
+
 // Once a turn has ended, tell apart "done", "asks you" and "error". Waits a moment
 // after Stop so the closing message is in the transcript.
 export function classifyTurn(s: Session) {
