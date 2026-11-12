@@ -48,14 +48,16 @@
   }
 
   // Where the chart's dashed line ends: the share at the pace so far, at the reset, or where it
-  // reaches 100% if that comes first. Like the forecast, nothing in the first day (a few hours
-  // make a poor average) except near the limit, and nothing at 100% or past the reset.
+  // reaches 100% if that comes first. From the week's first hour; in its first day (`early`) a
+  // few hours make a rough average, so the chart draws it fainter and the forecast waits.
+  // Nothing at 100% or past the reset.
   function projection(w, p, now) {
     if (!w?.resets || w.pct >= 100) return null;
     const start = w.resets - WEEK, gone = now - start;
-    if (gone <= 0 || now >= w.resets || (gone < DAY && p.key !== "limit")) return null;
+    if (gone < HOUR || now >= w.resets) return null;
     const end = w.pct + (w.pct / gone) * (w.resets - now);
-    return end <= 100 ? { at: w.resets, pct: end } : { at: start + (100 / w.pct) * gone, pct: 100 };
+    const early = gone < DAY && p.key !== "limit";
+    return end <= 100 ? { at: w.resets, pct: end, early } : { at: start + (100 / w.pct) * gone, pct: 100, early };
   }
 
   // The card's rows under the chart, as [label, value]: how far over or under the even pace,

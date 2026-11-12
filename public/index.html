@@ -2063,8 +2063,8 @@
   }
 
   // The week as a curve: the share used so far against the blue diagonal of an even week,
-  // the part ahead of it tinted, and after the first day a dashed line at the same pace to
-  // the reset, or to 100% if it gets there first. Today has its band, its letter in white
+  // the part ahead of it tinted, and a dashed line at the same pace to the reset, or to 100% if
+  // it gets there first (fainter in the first day). Today has its band, its letter in white
   // and a dot at now.
   function weekChart(w, p, W = 216) {
     const H = 66, start = w.resets - WEEK, t = now();
@@ -2083,8 +2083,8 @@
     const color = { fast: "var(--color-text-orange)", hot: "var(--color-text-orange)", limit: "var(--color-text-red)" }[p.key] || "var(--color-text-secondary)";
     const days = (t - start) / DAY;
     const pr = U.projection(w, p, t);
-    const ahead = pr ? `<line x1="${nx.toFixed(1)}" y1="${ny.toFixed(1)}" x2="${X(pr.at).toFixed(1)}" y2="${Y(pr.pct).toFixed(1)}" stroke="${color}" stroke-width="1.75" stroke-dasharray="3 3" stroke-linecap="round"/>
-      <circle cx="${X(pr.at).toFixed(1)}" cy="${Y(pr.pct).toFixed(1)}" r="3.5" fill="${color}"/>` : "";
+    const ahead = pr ? `<g opacity="${pr.early ? 0.55 : 1}"><line x1="${nx.toFixed(1)}" y1="${ny.toFixed(1)}" x2="${X(pr.at).toFixed(1)}" y2="${Y(pr.pct).toFixed(1)}" stroke="${color}" stroke-width="1.75" stroke-dasharray="3 3" stroke-linecap="round"/>
+      <circle cx="${X(pr.at).toFixed(1)}" cy="${Y(pr.pct).toFixed(1)}" r="3.5" fill="${color}"/></g>` : "";
     const today = Math.min(6, Math.floor(days));
     const letters = Array.from({ length: 7 }, (_, d) => {
       const l = new Date(start + d * DAY + 1).toLocaleDateString("en-US", { weekday: "narrow" });

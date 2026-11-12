@@ -3,7 +3,7 @@
 ## 0.5.1
 
 - The README says that sessions already open load the usage plugin with `/reload-plugins`; until then their usage comes from the app's own check, up to 10 minutes late.
-- Fix: the usage card's dashed line follows the same rule as the forecast. It waits for the week's first day, as an average of a few hours overstates, and then ends where the pace reaches 100% if that comes before the reset. Before, it drew from the first hours and stopped at 100% on the reset, which read as "you'll end right at the limit".
+- Fix: the usage card's dashed line ends where the pace so far reaches 100%, when that comes before the reset. Before, it stopped at 100% on the reset, which read as "you'll end right at the limit" even when the pace got there days earlier. In the week's first day it's drawn fainter, as a few hours make a rough average.
 - Fix: within a week the share only goes up. A lower number for the same week, from a session that starts again with the last one it saw, no longer takes the card or the week's curve back for a moment.
 - Fix: a session whose agent ended its turn while a command of its own kept running in the background shows as working, with that agent and its command, until Claude Code says the command ended. It showed as Done while the agent waited.
 - Fix: background commands Claude Code reports only in the result's text, in any of its three wordings ("running in background", "was moved to the background", "did not complete within its timeout and was moved to the background"), now count.
