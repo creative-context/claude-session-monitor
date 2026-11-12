@@ -52,7 +52,7 @@ ev(id(51), { ev: "PreCompact" });
 
 // 53. A closing message that quotes a question it sent to someone else doesn't ask you
 {
-  const tp = transcript("t53.jsonl", [said("Yes, it went out at 3:54 PM. I checked it in the chat after sending it:\n\n> @Sam, what can you share from the tool? Screens or an example would work.")]);
+  const tp = transcript("t53.jsonl", [said("Yes, it went out. I checked it in the chat after sending it:\n\n> @Sam, could you send an example? A screen would work.")]);
   ev(id(53), { ev: "UserPromptSubmit", prompt: "Did you send it?", tp });
   ev(id(53), { ev: "Stop", tp });
 }
@@ -217,8 +217,8 @@ const dueAt = (() => {
 const daily = `0 ${new Date(dueAt).getHours()} * * *`;
 const iso = (ms: number) => new Date(ms).toISOString();
 writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: [
-  { id: "t-digest", displayName: "Weekday digest", cronExpression: "0 7 * * 1-5", enabled: true, cwd: "/tmp/demo",
-    createdAt: Date.now() - 30 * 24 * HOUR, lastScheduledFor: iso(prevRun(parseCron("0 7 * * 1-5")!, Date.now() - 11 * 60_000)!) },
+  { id: "t-digest", displayName: "Weekday digest", cronExpression: "30 9 * * 1-5", enabled: true, cwd: "/tmp/demo",
+    createdAt: Date.now() - 30 * 24 * HOUR, lastScheduledFor: iso(prevRun(parseCron("30 9 * * 1-5")!, Date.now() - 11 * 60_000)!) },
   { id: "t-paused", displayName: "Paused report", cronExpression: "0 9 * * *", enabled: false, createdAt: Date.now() - 30 * 24 * HOUR },
   // Ran three hours ago, and not since: its last hourly run is missing.
   { id: "t-hourly", displayName: "Hourly check", cronExpression: "0 * * * *", enabled: true,
@@ -291,7 +291,7 @@ for (const [n, cat, action, about] of [
   [63, "blocked", "Tell it which option you want, or pick another", "u-last"],
 ] as const) {
   // 42: a request with no question mark ("dime cuál") that the app read as done.
-  const close = n === 42 ? "Revisé el buzón. Dime cuál carpeta limpio primero." : "Listo, quedó arreglado.";
+  const close = n === 42 ? "Revisé las notas. Dime cuál lista ordeno primero." : "Listo, quedó arreglado.";
   const tp = transcript(`t${n}.jsonl`, [{ type: "user", message: { content: "Fix the routines" } }, said(close)]);
   const stop = Date.now() - 30_000 + n;
   ev(id(n), { ev: "UserPromptSubmit", prompt: "Fix the routines", tp, t: stop - 60_000 });
@@ -430,7 +430,7 @@ closing(75, "**A tener en cuenta:**\n- **Colores:** en la portada el azul es má
 closing(76, "**Qué cambió:**\n1. **¿Por qué fallaba?** La regla estaba en otra hoja de estilos.\n2. **Pruebas:** 17 de 17, en desarrollo y en build.");
 // 81–84. A closing that says something waits on your choice, without a question mark, asks
 // you; one that says nothing waits, or only if it happens, doesn't.
-closing(81, "Quedó anotado el rechazo. La respuesta al cliente sigue esperando que elijas versión: tal cual, o con la línea nueva.");
+closing(81, "Quedó anotado el cambio. El correo sigue esperando que elijas versión: tal cual, o con la línea nueva.");
 closing(82, "The notes are filed. The invite is still waiting for you to pick a slot.");
 closing(83, "Revisé las tres sesiones. Nada espera tu respuesta.");
 closing(84, "Sigo vigilando. Solo te escribo si algo espera tu respuesta y no lo has visto.");
@@ -602,8 +602,8 @@ try {
   check("35 a task that started after a skip isn't blocked", task("t-unblocked")?.blocked === null, task("t-unblocked")?.blocked);
   check("36 once the app stops trying, it isn't blocked anymore", task("t-stale")?.blocked === null, task("t-stale")?.blocked);
   check("34 blocked since the first skip after its last run", blk?.blocked?.since === dueAt + 53_000, blk?.blocked?.since);
-  check("a task's schedule in words", digest?.schedule === "Weekdays at 7:00 AM", digest?.schedule);
-  check("its next run is the next weekday at 7:00", Boolean(next && digest.next > Date.now() && next.getHours() === 7 && next.getMinutes() === 0 && next.getDay() >= 1 && next.getDay() <= 5), digest?.next);
+  check("a task's schedule in words", digest?.schedule === "Weekdays at 9:30 AM", digest?.schedule);
+  check("its next run is the next weekday at 9:30", Boolean(next && digest.next > Date.now() && next.getHours() === 9 && next.getMinutes() === 30 && next.getDay() >= 1 && next.getDay() <= 5), digest?.next);
   check("19 its last run is linked, asks you, and nothing was missed", digest?.lastRun?.sid === id(19) && digest?.lastRun?.status === "asks" && digest?.missed === null, digest);
   check("19 the run knows its task", find(s, 19)?.task === "t-digest" && find(s, 19)?.taskName === "Weekday digest", find(s, 19));
   check("what needs you comes first: a task whose last run asks you, and one that can't run",

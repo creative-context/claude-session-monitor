@@ -72,11 +72,11 @@ mkdirSync(runDir, { recursive: true });
 writeFileSync(join(runDir, "journal.jsonl"), [
   { type: "launched" },
   { type: "started", agentId: "demo1", label: "review:tables · high", phase: "Review" },
-  { type: "started", agentId: "demo2", label: "review:jobs · high", phase: "Review" },
+  { type: "started", agentId: "demo2", label: "review:rows · high", phase: "Review" },
 ].map((r) => JSON.stringify(r)).join("\n") + "\n");
 for (const [agent, label, tool, file] of [
   ["demo1", "review:tables · high", "Read", "/srv/warehouse/orders.sql"],
-  ["demo2", "review:jobs · high", "Grep", "late_rows"],
+  ["demo2", "review:rows · high", "Grep", "late_rows"],
 ]) {
   writeFileSync(join(runDir, `agent-${agent}.meta.json`), JSON.stringify({ description: label, workflowPhase: "Review", model: "opus" }));
   writeFileSync(join(runDir, `agent-${agent}.jsonl`), JSON.stringify({
