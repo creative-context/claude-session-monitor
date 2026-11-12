@@ -18,7 +18,9 @@ export type Closing = {
 };
 
 export const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-const SENTENCE = /[^.!?\n]+[.!?]+|[^.!?\n]+$/g;
+// A sentence ends at . ! or ? followed by a space or the end, so "0.1.0" or "server.ts"
+// stays inside one.
+const SENTENCE = /(?:[^.!?\n]|[.!?]+(?=[^\s.!?]))+[.!?]*/g;
 const LIST_ITEM = /^\s*(\d+[.)]|[-•+*])\s/;
 const markless = (line: string) => line.replace(/[*_`#>]/g, "");
 // Quoted lines ("> …") are what the session quotes, such as a message it sent for you;

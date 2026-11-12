@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.6.1
+
+- Fix: a request with a version number in it, such as "to tag 3.4.2 with 3.4.1 inside I need your approval", shows whole on the card. It was cut at the number's first dot.
+- Fix: Active's menu keeps its chevron right after the words, and clicking it no longer leaves a blue ring around it. The ring shows when you reach it with the keyboard.
+
 ## 0.6.0
 
 - Active's window is a menu in its header: the last 2, 4, 8, 12 or 24 hours. The app remembers your pick.

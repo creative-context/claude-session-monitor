@@ -256,16 +256,13 @@
   .group-head .count { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   /* Active's window: its words are a menu, with a small chevron to say so. */
-  .group-head .hint.pick { display: inline-flex; align-items: center; gap: 4px; }
-  .hint.pick select {
-    appearance: none; -webkit-appearance: none; margin: 0 -14px 0 0; padding: 1px 14px 1px 0; border: 0; border-radius: 4px;
-    background: none; color: inherit; font: inherit; cursor: pointer;
-    transition: color var(--duration-fast) var(--ease-standard);
-  }
-  .hint.pick svg.chev { width: 9px; height: 9px; opacity: 0.6; pointer-events: none; }
-  .group-head .hint.pick:hover { color: var(--color-text-primary); }
-  .hint.pick:hover svg.chev { opacity: 1; }
-  .hint.pick select:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+  .pick-box { position: relative; display: inline-flex; align-items: center; gap: 3px; border-radius: 4px; transition: color var(--duration-fast) var(--ease-standard); }
+  .pick-box svg.chev { width: 9px; height: 9px; opacity: 0.6; }
+  .pick-box select { position: absolute; inset: 0; width: 100%; margin: 0; opacity: 0; cursor: pointer; font: inherit; }
+  .pick-box:hover { color: var(--color-text-primary); }
+  .pick-box:hover svg.chev { opacity: 1; }
+  /* WebKit counts a click on a menu as keyboard focus: the ring shows only when you came by keyboard. */
+  .pick-box:has(select:focus-visible:not([data-clicked])) { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
   /* Active is the zone that matters: its header is a title, the rest are labels. */
   .group.active .group-head { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
   .group.active .group-head svg.i { width: 14px; height: 14px; }
@@ -1235,8 +1232,9 @@
   const ACTIVE_HOURS = [2, 4, 8, 12, 24];
   let activeHours = 2;
   try { const h = Number(localStorage.getItem("csm-active-hours")); if (ACTIVE_HOURS.includes(h)) activeHours = h; } catch {}
-  const activePick = () => `<span class="hint pick">· <select id="active-hours" aria-label="How far back Active goes">${
-    ACTIVE_HOURS.map((h) => `<option value="${h}"${h === activeHours ? " selected" : ""}>last ${h} hours</option>`).join("")}</select>${ICON.chev}</span>`;
+  // The words and chevron are drawn; the menu itself sits unseen on top, so they keep their width.
+  const activePick = () => `<span class="hint pick">· <span class="pick-box"><span class="pick-text">last ${activeHours} hours</span>${ICON.chev}<select id="active-hours" aria-label="How far back Active goes">${
+    ACTIVE_HOURS.map((h) => `<option value="${h}"${h === activeHours ? " selected" : ""}>last ${h} hours</option>`).join("")}</select></span></span>`;
   const SECTIONS = [
     { id: "active", label: "Active", pick: activePick, icon: ICON.activity,
       test: (s) => needsYou(s) || s.status === "working" || now() - s.last < activeHours * 36e5 || Boolean(s.reminder) },
@@ -2635,9 +2633,13 @@
   let behind = false;
   let catchingUp = false;
   // Active's window, picked in its header and kept for next time.
+  document.addEventListener("pointerdown", (e) => { if (e.target.id === "active-hours") e.target.dataset.clicked = ""; });
+  document.addEventListener("focusout", (e) => { if (e.target.id === "active-hours") delete e.target.dataset.clicked; });
   document.addEventListener("change", (e) => {
     if (e.target.id !== "active-hours") return;
     activeHours = Number(e.target.value);
+    const words = e.target.parentElement.querySelector(".pick-text");
+    if (words) words.textContent = `last ${activeHours} hours`;
     try { localStorage.setItem("csm-active-hours", String(activeHours)); } catch {}
     render();
   });
