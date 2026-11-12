@@ -867,6 +867,7 @@
   <div id="announce" class="sr" aria-live="polite"></div>
 </main>
 
+<script src="usage.js"></script>
 <script>
   const params = new URLSearchParams(location.search);
   const embed = params.has("embed");
@@ -1130,6 +1131,9 @@
     return "";
   }
 
+  // When its workflow or its first agent started, for "agents · 12m".
+  const agentsSince = (s) => s.workflows?.[0]?.startedAt ?? Math.min(...(s.agents || []).map((a) => a.startedAt || Date.now()));
+
   function tags(s) {
     const out = [];
     if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
@@ -1141,7 +1145,7 @@
     const wf = s.workflows?.[0];
     if (wf || s.agentCount) {
       const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);
-      const since = wf?.startedAt ?? Math.min(...(s.agents || []).map((a) => a.startedAt || Date.now()));
+      const since = agentsSince(s);
       const bits = [
         s.agentCount ? plural(s.agentCount, "agent", "agents") : "",
         wf && !s.background && wfNamed(wf) ? wf.name : "",
@@ -1229,9 +1233,22 @@
   const cards = new Map(); // sid → card element, kept between updates
   let weekLayout = null; // anime.js layout for Last 7 Days, once its module has loaded
   let weekShape = ""; // which sessions are in which section, in order, at the last draw
+  let weekMeterOn = false; // whether the week's column stood beside the cards at the last draw
   const groups = new Map(); // section id → section element
 
-  function upsertCard(s) {
+  // A card is drawn again only when what it shows changes: its session, or a time it shows
+  // ("5m", "agents · 12m", "today at 9:00 AM"). The rest of an update leaves it be.
+  // Needs you and working say for how long; anything else says how long ago.
+  const lastingOf = (s) => s.kind !== "task" && (s.status === "working" || ((s.status === "waiting" || s.status === "asks") && needsYou(s)));
+  const agoOf = (s, lasting) => (lasting ? span2(s.since || s.last) : ago(s.status === "working" ? s.last : s.since));
+  function cardKey(s) {
+    const lasting = lastingOf(s);
+    return JSON.stringify(s) + "\n" + [agoOf(s, lasting), lasting, needsYou(s), isStale(s), dayStart(0), Math.floor(now() / 36e5),
+      s.agentCount || s.workflows?.length ? span(agentsSince(s)) : "",
+      onlyCommands(s) ? s.commands.map((c) => (c.startedAt ? span2(c.startedAt) : "")).join() : ""].join("|");
+  }
+
+  function upsertCard(s, key = cardKey(s)) {
     let el = cards.get(s.sid);
     if (!el) {
       el = document.createElement("button");
@@ -1246,9 +1263,10 @@
     const keep = ["new", "found", "rel-lit", "rel-self"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
     const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
-    // Needs you and working say for how long; anything else says how long ago.
-    const lasting = s.kind !== "task" && (s.status === "working" || ((s.status === "waiting" || s.status === "asks") && needsYou(s)));
-    const agoText = lasting ? span2(s.since || s.last) : ago(s.status === "working" ? s.last : s.since);
+    if (el._key === key) return el;
+    el._key = key;
+    const lasting = lastingOf(s);
+    const agoText = agoOf(s, lasting);
     // A run of a scheduled task shows a calendar clock by its time instead of the plain clock.
     const timeTip = s.kind === "task" ? ` title="${esc(`Can't start since ${when(s.since)}`)}"`
       : lasting ? ` title="${esc(`${s.task ? `${s.taskName ? `A run of ${s.taskName}` : "A scheduled run"}. ` : ""}${s.status === "working" ? "Working" : "Waiting for you"} since ${when(s.since || s.last)}`)}"`
@@ -1269,10 +1287,11 @@
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
       el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s), ...relWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
-    el.title = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
+    const tip = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
       ? `Open in the Claude app\n\n${s.agents.map((a) => `${a.label || "Agent"}: ${describe(a.tool || "Agent")[0]}`).join("\n")}`
       : "Open in the Claude app";
+    if (el.title !== tip) el.title = tip;
     return el;
   }
 
@@ -1407,19 +1426,31 @@
 
     // Cards are kept between updates, one per session. A status change then fades the
     // card's color instead of redrawing it, and a card that changes place slides there.
-    const before = new Map([...cards].map(([sid, el]) => [sid, el.isConnected ? el.getBoundingClientRect() : null]));
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const buckets = new Map(SECTIONS.map((g) => [g.id, []]));
+    for (const s of list) buckets.get(SECTIONS.find((g) => g.test(s)).id).push(s);
     // Only a change in what is where (which cards and rows, in what order) is animated by
     // the layout. While it measures it mutes CSS transitions, and a card's color fade on a
     // status change must keep running, so updates that only change content skip it.
-    const shape = JSON.stringify(SECTIONS.map((g) => [g.id, list.filter((s) => SECTIONS.find((x) => x.test(s)).id === g.id).map((s) => s.sid)]));
-    const moved = shape !== weekShape;
-    weekShape = shape;
-    const glide = moved && hadShell && weekLayout && !still && document.visibilityState === "visible";
-    const buckets = new Map(SECTIONS.map((g) => [g.id, []]));
-    for (const s of list) buckets.get(SECTIONS.find((g) => g.test(s)).id).push(s);
+    const shape = JSON.stringify(SECTIONS.map((g) => [g.id, buckets.get(g.id).map((s) => s.sid)]));
     // Newest first in the day sections; the server's order (urgency) in Active.
     for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => b.last - a.last);
+    const moved = shape !== weekShape;
+    weekShape = shape;
+    // Back from hidden, things are simply where they are now.
+    const glide = moved && hadShell && weekLayout && !still && !catchingUp && document.visibilityState === "visible";
+    // Without the layout, the page's own FLIP slides what moved: every card if the shape or
+    // the column beside them changed, else the cards from the first one whose content
+    // changed (a taller card pushes the ones after it), else nothing, and no measuring.
+    const active = buckets.get("active");
+    const keys = active.map((s) => cardKey(s));
+    const meterOn = Boolean(state.usage?.week);
+    let from = moved || meterOn !== weekMeterOn ? 0 : active.findIndex((s, i) => cards.get(s.sid)?._key !== keys[i]);
+    weekMeterOn = meterOn;
+    const before = new Map();
+    if (!glide && !still && !catchingUp && from >= 0) {
+      for (const s of active.slice(from)) { const el = cards.get(s.sid); if (el?.isConnected) before.set(s.sid, el.getBoundingClientRect()); }
+    }
 
     const section = (g, body) => {
       const sec = document.createElement("section");
@@ -1445,7 +1476,6 @@
     // Gone once their fade has run its course, even if the next update comes sooner.
     $week.querySelectorAll("[data-leaving]").forEach((el) => { if (Date.now() - Number(el.dataset.leaving) > 500) el.remove(); });
     // Active: cards.
-    const active = buckets.get("active");
     const keep = new Set();
     // Active stays even when it's empty, and then says so: a calm line instead of a gap.
     let sec = groups.get("active");
@@ -1463,7 +1493,7 @@
       sec.querySelector(".count").textContent = active.length;
       const grid = sec.querySelector(".grid");
       active.forEach((s, i) => {
-        const el = upsertCard(s);
+        const el = upsertCard(s, keys[i]);
         keep.add(s.sid);
         const at = [...grid.children].filter((c) => !("leaving" in c.dataset))[i]; // what's leaving doesn't count
         if (at !== el) grid.insertBefore(el, at || null);
@@ -1498,10 +1528,10 @@
 
     // Without it, FLIP: start each moved card where it was on screen and let it glide to
     // its new place. Starting from the on-screen position keeps it smooth even mid-move.
-    if (!still) {
-      for (const [sid, el] of cards) {
-        const a = before.get(sid);
-        if (!a) continue;
+    if (before.size) {
+      for (const [sid, a] of before) {
+        const el = cards.get(sid);
+        if (!el?.isConnected) continue;
         const b = el.getBoundingClientRect();
         const dx = a.left - b.left;
         const dy = a.top - b.top;
@@ -1755,7 +1785,8 @@
       syncIcons(el);
       el.setAttribute("aria-label", [t.name, look.label, plain(taskDetail(t)), nextText ? `Next run ${when(t.next)}` : "", runSummary(t)].filter(Boolean).join(". "));
     }
-    el.title = t.blocked?.run ? (t.blocked.queued ? "Open the run it's waiting for in the Claude app" : "Open the run that's holding it up in the Claude app") : t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
+    const tip = t.blocked?.run ? (t.blocked.queued ? "Open the run it's waiting for in the Claude app" : "Open the run that's holding it up in the Claude app") : t.lastRun ? "Open the last run in the Claude app" : "No runs yet";
+    if (el.title !== tip) el.title = tip;
     return el;
   }
 
@@ -1999,64 +2030,17 @@
   // The plan's usage, saved by the status line after each reply in any session.
   const $usage = document.getElementById("usage");
   const USAGE_HIGH = 80;
-  // Within a day, the time it resets; further off, the day (and the time, in the tooltip).
-  // On the day the week resets, its next reset is a week off: "next Thu", not "Thu", which
-  // would read as today.
-  const nextDay = (t) => {
-    const day = new Date(t).toLocaleDateString("en-US", { weekday: "short" });
-    return t - now() > DAY && new Date(t).getDay() === new Date(now()).getDay() ? `next ${day}` : day;
-  };
-  const resetWords = (t, full) => {
-    if (!t) return "";
-    return t - now() < DAY ? clock(t) : full ? `${nextDay(t)} ${clock(t)}` : nextDay(t);
-  };
-  // How the week is going: the share used against the share of the week gone by.
-  const WEEK = 7 * DAY;
-  function pace(w) {
-    // At 100% the week is over until the reset, not almost.
-    const near = w.pct >= 100 ? "Limit reached" : "Almost at the limit";
-    if (w.pct >= 90) return { key: "limit", say: near, gone: w.resets ? Math.min(1, Math.max(0, 1 - (w.resets - now()) / WEEK)) * 100 : null };
-    if (!w.resets) return { key: "", say: "" };
-    const gone = Math.min(1, Math.max(0, 1 - (w.resets - now()) / WEEK)) * 100;
-    const ahead = w.pct - gone;
-    if (w.pct >= 90) return { key: "limit", say: "Almost at the limit", gone };
-    if (ahead > 15) return { key: "hot", say: "Running hot", gone };
-    if (ahead > 5) return { key: "fast", say: "A little fast", gone };
-    if (ahead < -15) return { key: "plenty", say: "Plenty left", gone };
-    return { key: "on-pace", say: "On pace", gone };
-  }
-
-  // When the week runs out at its pace so far: only ahead of pace or near the limit, only
-  // after its first day (before that the average overstates), and only before the reset.
-  const HOUR = 36e5;
-  function forecast(w, p = pace(w)) {
-    if (!w?.resets || w.pct <= 0 || w.pct >= 100 || !["fast", "hot", "limit"].includes(p.key)) return null;
-    const start = w.resets - WEEK, gone = now() - start;
-    if (gone <= 0 || (gone < DAY && p.key !== "limit")) return null;
-    const at = start + (100 / w.pct) * gone;
-    return at > now() && at < w.resets ? { at } : null;
-  }
-  // Times to the hour: it's an estimate, and "10:47 PM" would claim more than it knows.
-  const hourOf = (t) => { const d = new Date(t + 30 * 60_000); d.setMinutes(0, 0, 0); return d.getTime(); };
-  const hourWords = (t) => new Date(hourOf(t)).toLocaleTimeString("en-US", { hour: "numeric" });
-  const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateString();
-  const dayName = (t, long) => new Date(t).toLocaleDateString("en-US", { weekday: long ? "long" : "short" });
-  // "11 PM" today, "Wed 1 PM" another day: short enough for the column.
-  const outWords = (t) => (sameDay(hourOf(t), now()) ? hourWords(t) : `${dayName(hourOf(t))} ${hourWords(t)}`);
-  // "Tonight 11 PM", "Tomorrow 2 PM", "Wednesday 8 AM": for the card.
-  // A reset is a known time, not an estimate: `exact` keeps its minutes ("Today 3:44 PM").
-  function whenWords(t, exact = false) {
-    const h = exact ? t : hourOf(t), d = new Date(h);
-    const time = exact ? d.toLocaleTimeString("en-US", d.getMinutes() ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" }) : hourWords(t);
-    if (sameDay(h, now())) return `${d.getHours() >= 18 ? "Tonight" : "Today"} ${time}`;
-    if (sameDay(h, now() + DAY)) return `Tomorrow ${time}`;
-    return `${dayName(h, true)} ${time}`;
-  }
-  // "Thu 1 AM", with minutes only when it isn't on the hour.
-  const dayTime = (t) => {
-    const d = new Date(t);
-    return `${nextDay(t)} ${d.toLocaleTimeString("en-US", d.getMinutes() ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" })}`;
-  };
+  // The week's pace, when it runs out and the times that go with them live in usage.js, as
+  // pure functions of the reading and the time now (tested in test/usage.test.ts). Here they
+  // read the server's clock.
+  const U = window.CsmUsage;
+  const { HOUR, WEEK, hourOf } = U;
+  const resetWords = (t, full) => U.resetWords(t, full, now());
+  const pace = (w) => U.pace(w, now());
+  const forecast = (w, p = pace(w)) => U.forecast(w, p, now());
+  const outWords = (t) => U.outWords(t, now());
+  const whenWords = (t, exact = false) => U.whenWords(t, exact, now());
+  const dayTime = (t) => U.dayTime(t, now());
 
   // A curve through the readings that never dips or overshoots between them (Fritsch and
   // Carlson's monotone cubic), so the week's share reads as the steady climb it is.
@@ -2140,12 +2124,9 @@
         html += `<div class="uc-out${p.key === "limit" ? " limit" : ""}"><div class="l">Runs out around</div><div class="t">${whenWords(fc.at)}</div><div class="l">${before} before the reset</div></div>`;
       }
       html += `<div class="uc-chart">${weekChart(w, p, fc, chartW)}</div>`;
-      const days = (now() - (w.resets - WEEK)) / DAY, left = Math.max(0, 100 - w.pct), daysLeft = (w.resets - now()) / DAY;
-      const ahead = Math.round(w.pct - (p.gone ?? 0));
-      // The column's own words for the pace, and how far over or under the blue line.
-      html += `<div class="uc-rows">${row(p.say, `${Math.abs(ahead)}% ${ahead >= 0 ? "over" : "under"}`, '<i class="uc-sw"></i>')}${
-        days >= 1 / 24 ? row("Your pace", `${Math.round(w.pct / days)}% a day`) : ""}${
-        daysLeft >= 1 ? row("Left per day", `${Math.round(left / daysLeft)}%`) : row("Left until the reset", `${Math.round(left)}%`)}</div>`;
+      // The column's own words for the pace, and how far over or under the blue line; then
+      // the pace a day against what a day can take until the reset.
+      html += `<div class="uc-rows">${U.paceRows(w, p, now()).map(([k, v], i) => row(k, v, i ? "" : '<i class="uc-sw"></i>')).join("")}</div>`;
     }
     // Plans that still have a 5-hour limit get it as its own group.
     if (u.five) html += `<div class="uc-rows">${row("Last 5 hours", `${Math.floor(u.five.pct)}%`, `<i class="uc-bar"><b style="width:${Math.min(100, u.five.pct)}%"></b></i>`)}</div>`;
@@ -2346,11 +2327,16 @@
   addEventListener("resize", () => requestAnimationFrame(renderUsage));
   usageHover($usage);
 
+  // The header's counts, which the app also shows on its Dock icon and in the menu bar.
+  const headCounts = (st) => ({
+    needs: st.needs ?? st.sessions.filter(needsYou).length,
+    working: st.sessions.filter((s) => s.status === "working").length,
+  });
+
   function renderHeader() {
     renderUsage();
     const list = state.sessions;
-    const needs = state.needs ?? list.filter(needsYou).length;
-    const working = list.filter((s) => s.status === "working").length;
+    const { needs, working } = headCounts(state);
     const agents = list.reduce((k, s) => k + (s.agentCount || 0), 0);
     // Each count is a button: hover or focus shows what's behind it.
     // The number and its words are apart, so a tight header can keep just the number.
@@ -2626,7 +2612,14 @@
   });
 
   let freshTimer;
+  // While the window is hidden (closed with the red button, minimized, or covered), the page
+  // keeps every update but draws nothing; it draws once when it's shown again, with things
+  // already in place, as they would have been.
+  let behind = false;
+  let catchingUp = false;
   function render() {
+    if (document.hidden) { behind = true; return; }
+    behind = false;
     renderHeader();
     renderBanner();
     renderWeek();
@@ -2637,6 +2630,11 @@
     const ends = state.sessions.filter(isFresh).map((s) => (s.since || s.last) + FRESH_MS - now());
     if (ends.length) freshTimer = setTimeout(render, Math.max(50, Math.min(...ends) + 50));
   }
+  document.addEventListener("visibilitychange", () => {
+    if (document.hidden || !behind) return;
+    catchingUp = true;
+    try { render(); } finally { catchingUp = false; }
+  });
 
   // Animated icons breathe or turn in step with each other, whenever their card was
   // drawn: each starts at the same point of a shared 2.4 s clock.
@@ -2690,6 +2688,16 @@
   const alertKey = (s) => s.kind === "task" ? `e:task:${s.blocked.since}` :
     s.status === "waiting" ? `w:${s.wait}` : s.status === "asks" ? `a:${s.ask}` : s.status === "error" ? `e:${s.error}` : s.status;
 
+  // The app's Dock badge and menu bar show what the header does. They're told on every
+  // change, hidden window or not, so the app doesn't have to ask.
+  let sentStatus = "";
+  function postStatus(st) {
+    const status = { ...headCounts(st), attention: st.attention ?? null };
+    const key = JSON.stringify(status);
+    if (key !== sentStatus && bridge()) { sentStatus = key; bridge().postMessage({ status }); }
+    return status;
+  }
+
   function receive(next) {
     const first = !ready;
     const changed = [];
@@ -2705,7 +2713,7 @@
     seen.clear();
     for (const s of [...next.sessions, ...blockedCards(next)]) seen.set(s.sid, alertKey(s));
     if (!seen.size) seen.set("", "");
-    const needs = next.needs ?? next.sessions.filter(needsYou).length;
+    const { needs } = postStatus(next);
     document.title = needs ? `(${needs}) Claude Session Monitor` : "Claude Session Monitor";
     if (changed.length) {
       const text = changed.map((s) => `${s.title}: ${s.status === "error" ? "error" : "needs you"}`).join(". ");
