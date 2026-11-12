@@ -1,0 +1,11 @@
+{
+  "name": "mac-app-design",
+  "version": "0.2.0",
+  "files": {
+    "design-tokens.css": "3da2d43cf661890fc1d913aee20566a06bf894e7fdea54588a53bb7a3c845951",
+    "design-base.css": "4915d15c99d859d0e6522a10d3576cb3f9219959b6063a5e781c5707c94d4456",
+    "design-components.css": "04bcb5154379c3ece63ccf813f7f4003874f8b6d34e0f55f4b49d3cf873d0aff",
+    "design-dataviz.css": "993adfa1d537f5dc8a52c246bbfd021e82564b7758ddcf6d2a7ad6a70dfbb6e7",
+    "design-icons.js": "e86a199fc74039923ef38db4b6dd3fbff6168eeac2e70af92de9c6b9359f1fe4"
+  }
+}

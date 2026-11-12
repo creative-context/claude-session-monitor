@@ -835,5 +835,14 @@ check("cron: a bad expression is null", parseCron("61 * * * *") === null && pars
   rmSync(udir, { recursive: true, force: true });
 }
 
+// The design system's files are as they were vendored: shared pieces change in mac-app-design.
+{
+  const pub = join(import.meta.dir, "..", "public");
+  const manifest = JSON.parse(readFileSync(join(pub, "design.json"), "utf8"));
+  const edited = Object.entries(manifest.files as Record<string, string>)
+    .filter(([file, hash]) => new Bun.CryptoHasher("sha256").update(readFileSync(join(pub, file), "utf8")).digest("hex") !== hash).map(([f]) => f);
+  check("design system: the vendored files weren't edited", edited.length === 0, edited);
+}
+
 console.log(failed ? `\n${failed} failed` : "\nAll passed");
 process.exit(failed ? 1 : 0);

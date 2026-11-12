@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.4
+
+- The page's tokens, shared components and icons now come from the family's design system, mac-app-design 0.2.0, vendored next to it, instead of living inside the page. Nothing changes on screen: every element's computed style was compared before and after in WebKit, in four window sizes, in a browser and inside the app, in each view and popover, with the demo's edge cases.
+
 ## 0.6.3
 
 - Fix: a session that passes on another session's question no longer needs you again after the app restarts, once you answered in that other session. The Claude app's note on its turn still asks, and on a restart the monitor no longer knew you had answered. Now a passed-on question also counts as answered once its session has moved on and asks you nothing.

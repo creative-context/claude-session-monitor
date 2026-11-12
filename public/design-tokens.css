@@ -1,0 +1,112 @@
+/* mac-app-design 0.2.0 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* Tokens: colors, type, space, shape and motion for the family's Mac apps.
+   Dark only. The Obsidian theme's names and values stay as they are;
+   the --csm-* names are the family's own, kept from the first app so nothing renames. */
+
+:root {
+  color-scheme: dark;
+
+  /* Surfaces: veils of white on a near-black body, never lines. */
+  --color-background-body: #030304;     /* darker than the theme's #08090A */
+  --color-background-card: #FFFFFF08;   /* 3% veil */
+  --color-overlay-hover: #FFFFFF0A;     /* 4% */
+  --obsidian-veil-selected: #FFFFFF0F;  /* 6% */
+  --color-overlay-pressed: #FFFFFF14;   /* 8% */
+  --color-surface-raised: #16171A;      /* popovers and panels: lifted by light and a soft shadow */
+  --shadow-raised: 0 12px 32px #00000080, inset 0 0 0 1px #FFFFFF0A;
+
+  /* Text */
+  --color-text-primary: #F7F8F8;
+  --obsidian-text-hover: #D5D8DC;
+  --color-text-secondary: #8A8F98;
+  --color-text-disabled: #62666D;       /* only for things that are off, never for text to read */
+  --csm-text-on-tint: #A3A8B0;          /* secondary text on colored cards, 5.4:1 or more */
+
+  /* State, by meaning: needs you (warning), working (accent), done (success), error.
+     Fills a step darker than the theme's, so white or dark text on them reaches 5.6:1. */
+  --color-accent: #2D72D2;
+  --color-accent-muted: #2D72D23D;
+  --color-text-accent: #6FA6E8;
+  --color-warning: #C87619;
+  --color-warning-muted: #C8761940;
+  --color-text-orange: #FDB876;
+  --color-success: #238551;
+  --color-success-muted: #23855140;
+  --color-text-green: #A5F690;
+  --color-error: #CD4246;
+  --color-error-muted: #CD424640;
+  --color-text-red: #FFB2B8;
+  --color-on-accent: #FFFFFF;
+  --color-on-light: #0D0E10;
+
+  /* Type: Apple's system fonts, no font files. Three sizes, each with a fixed line height. */
+  --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
+  --font-family-heading: var(--font-family-body);
+  --font-family-mono: ui-monospace, "SF Mono", Menlo, monospace;
+  --font-family-figure: ui-rounded, var(--font-family-body); /* big figures, as in Apple's activity widgets */
+  --font-weight-medium: 510;
+  --font-weight-heading: 600; /* titles in Semibold, as in Mail and Finder */
+  --csm-text-title: 1rem;       /* 16px: card and window titles */
+  --csm-lh-title: 20px;
+  --csm-text-body: 0.75rem;     /* 12px: what's going on */
+  --csm-lh-body: 16px;
+  --csm-text-meta: 0.6875rem;   /* 11px: tags, time, counts */
+  --csm-lh-meta: 14px;
+
+  /* Shape */
+  --radius-inner: 4px;
+  --radius-element: 6px;
+  --radius-container: 8px;
+  --radius-raised: 10px;
+
+  /* Cards: regular density. The compact density is below. */
+  --csm-card-w: 288px;
+  --csm-card-h: 164px;
+  --csm-tag-h: 20px;
+  --card-title-size: var(--csm-text-title);
+  --card-title-lh: var(--csm-lh-title);
+  --card-title-lines: 2;
+  --card-title-gap: 8px;
+  --card-detail-size: var(--csm-text-body);
+  --card-detail-lh: var(--csm-lh-body);
+  --card-detail-gap: 4px;
+  --card-tags-gap: 0px;
+
+  /* Motion: calm and in step, one easing curve, no bounce. */
+  --duration-fast: 100ms;
+  --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+
+  /* Data viz: one quiet fill, tracks a step above the card, "now" in the accent, and the
+     state colors for how it's going. Whose turn: orange you, blue Claude, gray others. */
+  --viz-fill: #C4C8CF;
+  --viz-track: #FFFFFF0D;
+  --viz-track-strong: #FFFFFF1C;
+  --viz-now: var(--color-text-accent);
+  --viz-done: var(--color-success);
+  --turn-you: #FB8C00;
+  --turn-claude: #6FA6E8;
+  --turn-others: #8A8F98;      /* text and icons */
+  --turn-others-fill: #62666D; /* fills: far enough from blue (ΔE 22.8) to tell apart in a bar */
+}
+
+/* Compact density: what a short window shows (under 600 pt tall), or always, for an app
+   that sets <html data-density="compact">. 130 px cards, the title on one line. */
+@media (max-height: 600px) {
+  :root:not([data-density="regular"]) {
+    --csm-card-h: 130px;
+    --card-title-size: 13.5px; --card-title-lh: 17px; --card-title-lines: 1; --card-title-gap: 10px;
+    --card-detail-size: 11.5px; --card-detail-lh: 15px; --card-detail-gap: 3px;
+    --card-tags-gap: 8px;
+  }
+}
+:root[data-density="compact"] {
+  --csm-card-h: 130px;
+  --card-title-size: 13.5px; --card-title-lh: 17px; --card-title-lines: 1; --card-title-gap: 10px;
+  --card-detail-size: 11.5px; --card-detail-lh: 15px; --card-detail-gap: 3px;
+  --card-tags-gap: 8px;
+}
+
+/* Increase Contrast (macOS Accessibility): brighter secondary text. */
+@media (prefers-contrast: more) {
+  :root { --color-text-secondary: #B4B9C1; --csm-text-on-tint: #C4C8CE; }
+}

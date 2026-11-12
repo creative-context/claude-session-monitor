@@ -1,0 +1,344 @@
+/* mac-app-design 0.2.0 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* Components: the pieces both apps draw, with their states. Class names are the first
+   app's, so nothing renames; a few aliases name a state by its meaning (needs, soft). */
+
+/* ---------- tag: a small label, with its mark ---------- */
+.tag {
+  display: inline-flex; align-items: center; gap: 5px;
+  height: var(--csm-tag-h); padding: 0 6px;
+  border-radius: var(--radius-inner);
+  background: var(--obsidian-veil-selected); color: var(--color-text-secondary);
+  font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta);
+  white-space: nowrap; min-width: 0;
+}
+button.tag { border: 0; font: inherit; font-size: var(--csm-text-meta); cursor: pointer; }
+.tag > span { overflow: hidden; text-overflow: ellipsis; }
+.tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); font-weight: var(--font-weight-medium); }
+.tag.s-waiting, .tag.s-asks, .tag.s-needs { background: var(--color-warning-muted); color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
+.tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); font-weight: var(--font-weight-medium); }
+.tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); font-weight: var(--font-weight-medium); }
+.tag.s-idle, .tag.s-ended { color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
+.tag svg.spin { animation: spin 2.4s linear infinite; }
+.tag.s-working svg.bot { animation: breathe 2.4s ease-in-out infinite; }
+
+/* ---------- marks: what a state looks like in a tag or a count ---------- */
+/* Still: a dot. */
+.sdot { width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
+.sdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+/* Needs you: a dot that beats, for as long as it needs you. */
+.pdot { position: relative; width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
+.pdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+.pdot::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0;
+  animation: dotping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; animation-delay: var(--sync, 0s); }
+/* Working: three dots that light up in turn, calmly. */
+.calm { display: inline-flex; gap: 2.5px; align-items: center; height: 12px; flex: none; }
+.calm i { width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; opacity: 0.35;
+  animation: calm 2.4s ease-in-out infinite; animation-delay: var(--sync, 0s); }
+.calm i:nth-child(2) { animation-delay: calc(var(--sync, 0s) + 0.4s); }
+.calm i:nth-child(3) { animation-delay: calc(var(--sync, 0s) + 0.8s); }
+
+/* ---------- header: the app's name, its counts, its views ---------- */
+header { display: flex; align-items: center; gap: 8px; height: 24px; flex: none; container-type: inline-size; }
+header .name { flex: none; font-family: var(--font-family-heading); font-size: var(--csm-text-title); line-height: var(--csm-lh-title);
+  font-weight: var(--font-weight-heading); margin-right: 6px; }
+header .spacer { flex: 1; }
+/* Counts: the number reads first, in white; the words after it in gray. What needs you
+   stays orange. Each one is a button with a chevron that opens what's behind it. */
+#counts { display: flex; gap: 8px; min-width: 0; overflow: hidden; }
+#counts .tag { flex: none; }
+#counts .tag > span:not(.pdot):not(.sdot) { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+#counts .tag .word { color: var(--color-text-secondary); font-weight: 400; }
+#counts .tag.s-waiting > span:not(.pdot), #counts .tag.s-waiting .word,
+#counts .tag.s-needs > span:not(.pdot), #counts .tag.s-needs .word { color: var(--color-text-orange); }
+#counts .tag.working .sdot { color: var(--color-accent); }
+#counts.tight .tag .word { display: none; }
+#counts.tighter .tag.low { display: none; }
+#counts.tightest .tag:not(.s-waiting):not(.s-needs) { display: none; }
+#counts .tag[data-pop] { padding-right: 5px; transition: background-color var(--duration-fast) var(--ease-standard); }
+#counts .tag[data-pop]:hover, #counts .tag[data-pop][aria-expanded="true"] { background-image: linear-gradient(#FFFFFF0F, #FFFFFF0F); }
+#counts .tag[data-pop]:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+#counts .tag[data-pop] svg.chev { width: 9px; height: 9px; margin-left: -1px; opacity: 0.6; }
+#counts .tag[data-pop]:hover svg.chev, #counts .tag[data-pop][aria-expanded="true"] svg.chev { opacity: 1; }
+
+/* ---------- buttons ---------- */
+.btn {
+  all: unset; cursor: pointer;
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 28px; padding: 0 12px;
+  border-radius: var(--radius-element);
+  background: var(--obsidian-veil-selected); color: var(--color-text-primary);
+  font-size: var(--csm-text-body);
+}
+.btn:hover { background: var(--color-overlay-pressed); }
+.btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+.btn svg.i { width: 13px; height: 13px; }
+.btn.small { height: 22px; padding: 0 8px; font-size: var(--csm-text-meta); }
+.btn.primary { background: var(--color-accent); color: var(--color-on-accent); }
+.btn.primary:hover { background: #3A80E0; }
+.btn.ghost { background: none; color: var(--color-text-secondary); }
+.btn.ghost:hover { background: var(--color-overlay-hover); color: var(--obsidian-text-hover); }
+.btn.danger { background: #B5383C; color: var(--color-on-accent); }
+.icon-btn {
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: inline-grid; place-items: center; width: 24px; height: 24px;
+  border-radius: var(--radius-element); color: var(--color-text-secondary);
+  transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
+}
+.icon-btn:hover { background: var(--color-overlay-hover); color: var(--obsidian-text-hover); }
+.icon-btn:active { background: var(--color-overlay-pressed); }
+.icon-btn[aria-pressed="true"] { color: var(--color-text-primary); }
+.icon-btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+.icon-btn svg.i { width: 15px; height: 15px; }
+
+/* ---------- view switch (in a browser; an app has it in its toolbar) ---------- */
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-container); background: var(--color-background-card); }
+.seg button, .seg a {
+  all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
+  height: 24px; padding: 0 10px; border-radius: var(--radius-element);
+  color: var(--color-text-secondary); font-size: var(--csm-text-body);
+}
+.seg button:hover, .seg a:hover { color: var(--obsidian-text-hover); }
+.seg button[aria-selected="true"], .seg a[aria-current="page"] { background: var(--color-overlay-pressed); color: var(--color-text-primary); }
+.seg a:focus-visible, .seg button:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+
+/* ---------- fields ---------- */
+.search { position: relative; flex: 0 1 260px; }
+.search svg.i { position: absolute; left: 9px; top: 7px; color: var(--color-text-secondary); }
+.search input, .field {
+  all: unset; box-sizing: border-box; width: 100%; height: 28px;
+  padding: 0 10px; border-radius: var(--radius-element);
+  background: var(--color-background-card); color: var(--color-text-primary); font-size: var(--csm-text-body);
+}
+.search input { padding-left: 28px; }
+.search input:focus, .field:focus { background: var(--obsidian-veil-selected); }
+.search input::placeholder, .field::placeholder { color: var(--color-text-secondary); }
+/* A switch, for a yes or no. */
+.switch { appearance: none; -webkit-appearance: none; margin: 0; width: 30px; height: 18px; border-radius: 9px; background: var(--color-overlay-pressed);
+  position: relative; cursor: pointer; transition: background var(--duration-fast); }
+.switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-text-primary);
+  transition: transform 150ms var(--ease-standard); }
+.switch:checked { background: var(--color-warning); }
+.switch:checked::after { transform: translateX(12px); }
+/* A small segmented choice inside a panel. */
+.pseg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-element); background: var(--obsidian-veil-selected); }
+.pseg button { all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 5px; height: 24px; padding: 0 8px;
+  border-radius: var(--radius-inner); color: var(--color-text-secondary); font-size: var(--csm-text-body); }
+.pseg button:hover { color: var(--obsidian-text-hover); }
+.pseg button[aria-pressed="true"] { background: var(--color-overlay-pressed); color: var(--color-text-primary); }
+
+/* ---------- group head: a section's title (13 px) or label (12 px) ---------- */
+.group-head {
+  display: flex; align-items: center; gap: 6px; margin: 0 0 8px;
+  font-family: var(--font-family-heading); font-size: var(--csm-text-body); line-height: var(--csm-lh-body);
+  font-weight: var(--font-weight-medium); color: var(--obsidian-text-hover);
+}
+.group-head svg.i { width: 14px; height: 14px; }
+.group.active .group-head svg.i { width: 14px; height: 14px; }
+.group-head .count, .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
+/* The zone that matters now is a title; the rest are labels. */
+.group.active .group-head, .group-head.strong { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+.group.active .group-head .count, .group-head.strong .count { color: var(--color-text-primary); }
+.group.active .group-head .count, .group.active .group-head .hint,
+.group-head.strong .count, .group-head.strong .hint { font-size: var(--csm-text-body); font-weight: 400; }
+.group-head .right { margin-left: auto; }
+
+/* ---------- quiet: a calm line of news, on a card surface ---------- */
+.quiet { display: flex; align-items: center; gap: 14px; padding: 12px; border-radius: var(--radius-container);
+  background: var(--color-background-card); color: var(--color-text-secondary); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
+.quiet b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+
+/* ---------- banner: something wrong (red) or new (blue) ---------- */
+.banner { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border-radius: var(--radius-container);
+  background: color-mix(in srgb, var(--color-error) 18%, transparent); color: var(--color-text-red); }
+.banner svg.i { width: 14px; height: 14px; }
+.banner b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+.banner.update { background: var(--color-accent-muted); color: var(--color-text-accent); }
+.banner .btn { margin-left: auto; height: 24px; }
+.banner .x { all: unset; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--color-text-secondary); }
+.banner .x:hover { background: var(--obsidian-veil-selected); color: var(--color-text-primary); }
+
+/* ---------- card: surfaces, no lines; the whole card takes its state's color ---------- */
+@property --tint { syntax: "<color>"; inherits: false; initial-value: transparent; }
+.card {
+  --tint: var(--color-background-card);
+  --meta: var(--color-text-secondary);
+  all: unset; box-sizing: border-box; cursor: pointer; min-width: 0;
+  height: var(--csm-card-h);
+  display: flex; flex-direction: column; padding: 12px 12px 10px;
+  background: var(--tint); border-radius: var(--radius-container);
+  overflow: hidden; position: relative;
+  transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
+}
+/* Needs you and errors get the strongest tint; work a quieter blue; done a faint green. */
+.card.waiting, .card.asks, .card.needs { --tint: color-mix(in srgb, var(--color-warning) 34%, transparent); --meta: var(--color-text-orange); }
+.card.error { --tint: color-mix(in srgb, var(--color-error) 34%, transparent); --meta: var(--color-text-red); }
+.card.working { --tint: color-mix(in srgb, var(--color-accent) 16%, transparent); --meta: var(--csm-text-on-tint); }
+.card.working.background, .card.working.soft { --tint: color-mix(in srgb, var(--color-accent) 10%, transparent); }
+.card.done { --tint: color-mix(in srgb, var(--color-success) 14%, transparent); --meta: var(--csm-text-on-tint); }
+/* Old news keeps its tag's color but drops the loud card. */
+.card.stale { --tint: var(--color-background-card); --meta: var(--color-text-secondary); }
+/* Hover and press add one step of light on top of the state color; press responds on the way down. */
+.card:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
+.card:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); transform: scale(0.985); }
+.card:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+.card.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
+.card.new { animation: enter 320ms var(--ease-standard) both; }
+.card.fresh .tag svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
+
+/* Its parts, top to bottom: state tag and time; title; detail lines; tags at the foot. */
+.top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
+.card .top .tag { font-weight: 600; }
+/* Only what needs you gets a solid tag; work and done are soft, so they don't pull the eye. */
+.card .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); }
+.card .tag.s-waiting, .card .tag.s-asks, .card.needs .top .tag { background: var(--color-warning); color: var(--color-on-light); }
+.card .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); }
+.card .tag.s-error { background: #B5383C; color: var(--color-on-accent); }
+.card.stale .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); }
+.card.stale .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); }
+.time { display: inline-flex; align-items: center; gap: 4px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; }
+.card .time { font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--meta); }
+.title {
+  margin-top: 8px;
+  font-family: var(--font-family-heading); font-size: var(--csm-text-title); line-height: var(--csm-lh-title);
+  font-weight: var(--font-weight-heading); color: var(--color-text-primary);
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
+}
+.card .title { margin-top: var(--card-title-gap); font-size: var(--card-title-size); line-height: var(--card-title-lh); -webkit-line-clamp: var(--card-title-lines); }
+.detail { margin-top: 4px; color: var(--color-text-secondary); }
+.card .detail { margin-top: var(--card-detail-gap); font-size: var(--card-detail-size); line-height: var(--card-detail-lh); }
+.detail .sub { color: var(--color-text-secondary); }
+.card .detail, .card .detail .sub { color: var(--meta); }
+.card.waiting .detail, .card.waiting .detail b, .card.asks .detail, .card.asks .detail b, .card.needs .detail { color: var(--color-text-orange); }
+.card.error .detail { color: var(--color-text-red); }
+.card.stale .detail, .card.stale .detail b { color: var(--color-text-secondary); }
+.detail .line { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
+.detail .line .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+/* A block, so the icon centers on the line, one screen pixel lower to sit with lowercase text. */
+.detail .line svg.i { display: block; width: 13px; height: 13px;
+  translate: 0 calc(round(nearest, calc(var(--csm-scale, 1) * 1px), 1px) / var(--csm-scale, 1)); }
+.detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
+.detail b { color: var(--color-text-primary); font-weight: 400; }
+.tags { margin-top: auto; display: flex; gap: 4px; overflow: hidden; }
+.card .tags { padding-top: var(--card-tags-gap); }
+.tags .tag { flex: 0 1 auto; }
+.card .tags .tag { color: var(--meta); }
+/* A name from the file system (a folder) is the one thing set in mono. */
+.tags .tag.name { flex: 0 100 auto; min-width: 40px; }
+.card .tags .tag.name { font-family: var(--font-family-mono); font-size: 10.5px; font-weight: 500; }
+/* A button among the tags: what to do next, on the right. */
+.tags .act, .card .tags .act { margin-left: auto; flex: none; background: var(--color-overlay-pressed); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+.tags .act:hover { background: #FFFFFF26; }
+.card.waiting .act, .card.asks .act, .card.needs .act { background: #FFFFFF26; }
+/* Paused or closed: a step down in brightness, not opacity. */
+.idle .title, .ended .title { color: var(--csm-text-on-tint); }
+.idle .detail, .ended .detail, .idle .detail b, .ended .detail b { color: var(--color-text-secondary); }
+/* Cards fill as many columns as fit; one column, as wide as the window, when it's narrower than a card. */
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--csm-card-w)), 1fr)); grid-auto-rows: var(--csm-card-h); gap: 8px; }
+@media (prefers-contrast: more) { .card, .hrow { box-shadow: inset 0 0 0 1px #FFFFFF40; } }
+@media (prefers-reduced-motion: reduce) {
+  .card { transition: --tint 450ms var(--ease-standard), opacity 220ms var(--ease-standard); }
+  .card:active { transform: none; }
+}
+
+/* ---------- history row: one line per item, a second one for what it said ---------- */
+.hlist { display: flex; flex-direction: column; gap: 4px; }
+.hrow {
+  --tint: var(--color-background-card);
+  all: unset; box-sizing: border-box; cursor: pointer;
+  display: grid; grid-template-columns: 16px minmax(0, 1fr) auto auto; grid-template-rows: auto auto;
+  column-gap: 10px; row-gap: 2px; align-items: center;
+  padding: 10px 12px; border-radius: var(--radius-container); background: var(--tint);
+  transition: --tint 450ms var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
+}
+.hrow.live.s-working { --tint: color-mix(in srgb, var(--color-accent) 14%, transparent); }
+.hrow.live.s-waiting, .hrow.live.s-asks { --tint: color-mix(in srgb, var(--color-warning) 24%, transparent); }
+.hrow.live.s-error { --tint: color-mix(in srgb, var(--color-error) 24%, transparent); }
+.hrow:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
+.hrow:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); }
+.hrow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+.hrow .hicon { grid-row: 1 / 3; align-self: start; padding-top: 2px; color: var(--color-text-secondary); }
+.hrow .hicon svg.i { width: 16px; height: 16px; }
+.hrow:not(:has(.hsnip)) .hicon { grid-row: 1; align-self: center; padding-top: 0; }
+.hrow.s-waiting .hicon, .hrow.s-asks .hicon { color: var(--color-text-orange); }
+.hrow.s-error .hicon { color: var(--color-text-red); }
+.hrow.s-done .hicon { color: var(--color-text-green); }
+.hrow.s-working .hicon { color: var(--color-text-accent); }
+.hrow .htitle { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-family: var(--font-family-heading);
+  font-weight: var(--font-weight-heading); font-size: var(--csm-text-body); color: var(--color-text-primary); white-space: nowrap; }
+.hrow .htitle .hstate { font-family: var(--font-family-body); flex: none; }
+.hrow .htitle .t { overflow: hidden; text-overflow: ellipsis; }
+.hrow .htime { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
+.hrow .hsnip { grid-column: 2 / 5; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.hrow.s-asks .hsnip, .hrow.s-waiting .hsnip { color: var(--color-text-orange); }
+.hrow.s-error .hsnip { color: var(--color-text-red); }
+.more { display: flex; justify-content: center; margin-top: 12px; }
+
+/* ---------- popover: a raised card with what's behind a count ---------- */
+.pop {
+  position: fixed; z-index: 20; width: 340px; max-height: min(60vh, 420px); overflow: auto;
+  padding: 6px; border-radius: var(--radius-raised); background: var(--color-surface-raised); box-shadow: var(--shadow-raised);
+  opacity: 0; visibility: hidden; transform: translateY(-4px);
+  transition: opacity 120ms var(--ease-standard), transform 120ms var(--ease-standard), visibility 0s linear 120ms;
+}
+.pop.open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
+.pop-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta);
+  font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
+.pop-head svg.i { width: 12px; height: 12px; }
+.prow { all: unset; box-sizing: border-box; width: 100%;
+  display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 1px; align-items: center;
+  padding: 6px 8px; border-radius: 6px; }
+/* A row that opens something says so on hover. */
+.prow[data-sid]:hover, .prow[data-state]:hover, .prow[data-open]:hover, .prow:focus-visible { background: var(--obsidian-veil-selected); }
+.prow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: -2px; }
+.prow .pi { grid-row: 1 / 3; align-self: start; padding-top: 2px; display: inline-flex; color: var(--color-text-secondary); }
+.prow .pi svg.i { width: 14px; height: 14px; }
+.prow .pt { font-family: var(--font-family-heading); font-weight: var(--font-weight-heading); font-size: var(--csm-text-body); line-height: var(--csm-lh-body);
+  color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow .pm { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
+.prow .ps { grid-column: 2 / 4; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.prow.s-waiting .pi, .prow.s-asks .pi, .prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
+.prow.s-needs .pm { color: var(--color-text-orange); }
+.prow.s-error .pi, .prow.s-error .ps { color: var(--color-text-red); }
+.prow.s-working .pi { color: var(--color-text-accent); }
+.prow.s-done .pi { color: var(--color-text-green); }
+.prow.count { grid-template-columns: 14px minmax(0, 1fr) auto; }
+.prow.count .pt { font-family: var(--font-family-body); font-weight: 400; }
+.prow.count .pm { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+.pop-dot { width: 8px; height: 8px; border-radius: 50%; margin: 3px; background: var(--color-overlay-pressed); }
+.pop-more, .pop-note { padding: 6px 8px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
+.pop-foot { margin-top: 2px; padding-top: 2px; }
+.pop-foot .prow { grid-template-columns: 14px 1fr; color: var(--color-text-accent); font-size: var(--csm-text-body); }
+.pop-foot .prow:hover { background: var(--obsidian-veil-selected); }
+@media (prefers-reduced-motion: reduce) { .pop { transform: none !important; } }
+
+/* ---------- panel: a raised surface on the right with one item's details ---------- */
+.panel { position: absolute; z-index: 20; right: 16px; width: min(340px, calc(100% - 32px)); overflow: auto; scrollbar-width: none;
+  display: flex; flex-direction: column; gap: 12px; padding: 12px;
+  border-radius: var(--radius-raised); background: var(--color-surface-raised); box-shadow: var(--shadow-raised); }
+.p-top { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: var(--csm-tag-h); }
+.p-title { all: unset; box-sizing: border-box; width: 100%; resize: none; overflow: hidden; field-sizing: content; min-height: 20px;
+  font-size: var(--csm-text-title); line-height: var(--csm-lh-title); font-weight: var(--font-weight-heading); color: var(--color-text-primary);
+  padding: 2px 4px; margin: -2px -4px; border-radius: var(--radius-inner); }
+.p-title:focus { background: var(--obsidian-veil-selected); }
+.p-fields { display: flex; flex-direction: column; gap: 8px; }
+.p-field { display: grid; grid-template-columns: 76px minmax(0, 1fr); align-items: center; column-gap: 8px; min-height: 28px; }
+.p-label { font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+.p-row { display: flex; gap: 6px; min-width: 0; align-items: center; }
+.p-field .field { background: var(--obsidian-veil-selected); }
+.p-field .field:focus { background: var(--color-overlay-pressed); }
+.p-meta { font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+.p-foot { display: flex; align-items: center; gap: 8px; margin-top: 2px; }
+.p-foot .spacer { flex: 1; }
+
+/* ---------- toast: a moment of news after a change, with Undo ---------- */
+.toast { position: absolute; z-index: 30; left: 50%; bottom: 60px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+  max-width: calc(100% - 32px); height: 36px; padding: 0 6px 0 12px; border-radius: var(--radius-container);
+  background: #1F2125; box-shadow: 0 8px 24px #00000080; color: var(--color-text-primary); white-space: nowrap; }
+.toast span { overflow: hidden; text-overflow: ellipsis; }
+
+/* ---------- empty state ---------- */
+.empty-state { min-height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 40px 16px; text-align: center; }
+.empty-state h3 { margin: 14px 0 0; font-family: var(--font-family-heading); font-size: var(--csm-text-title); line-height: var(--csm-lh-title); font-weight: var(--font-weight-heading); }
+.empty-state p { margin: 0 0 10px; max-width: 360px; color: var(--color-text-secondary); }
+.badge { display: grid; place-items: center; width: 56px; height: 56px; border-radius: 16px; background: var(--obsidian-veil-selected); color: var(--color-text-secondary); }
+.badge svg.i { width: 26px; height: 26px; }

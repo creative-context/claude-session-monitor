@@ -14,7 +14,7 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/badge/version-0.6.3-2D72D2?labelColor=1A1D21" alt="Version 0.6.3">
+  <img src="https://img.shields.io/badge/version-0.6.4-2D72D2?labelColor=1A1D21" alt="Version 0.6.4">
   <img src="https://img.shields.io/badge/license-MIT-238551?labelColor=1A1D21" alt="MIT license">
   <img src="https://img.shields.io/badge/macOS-14%2B-8A8F98?labelColor=1A1D21" alt="macOS 14 or later">
   <img src="https://img.shields.io/badge/data-stays_on_your_Mac-6FA6E8?labelColor=1A1D21" alt="Data stays on your Mac">
@@ -60,7 +60,7 @@ This app puts every session on one screen, colored by what it needs from you. It
 
 ### Download the app
 
-1. Download `Claude-Session-Monitor-0.6.3.zip` from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
+1. Download `Claude-Session-Monitor-0.6.4.zip` from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
 2. Open it. The app isn't notarized, so the first time macOS says it can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
 
    ```bash
@@ -190,6 +190,8 @@ It never stores whole conversations.
 1. **Hook** (`hooks/session-hook.sh`). Claude Code runs it on every event of every session, and it appends one short line to `events.jsonl`. No network, no output, and it always exits 0. Its neighbor `hooks/statusline.sh` is the status line that saves your usage.
 2. **Server** (`server.ts` and `src/`, Bun). It reads that file, keeps a small state per session, saves it to `sessions.db` and streams it to the page, only when something changed. After a restart it goes on reading the log where it stopped. It makes the one list of what needs you that the window, the Dock and the menu bar show. `closing.ts` holds the rules that tell a closing message that asks you from one that only reports, and `cron.ts` reads the scheduled tasks' schedules, to say them in words and to work out the next run and a missed one. Inside the app it ships as one bundled `server.js`.
 3. **Page** (`public/index.html`). The cards, the three views and their empty and offline states. It uses the colors of the [Obsidian theme](https://github.com/creative-context/astryx-theme-obsidian) and Apple\'s system fonts, SF Pro and SF Mono, so it ships no font files. In Last 7 Days, cards that move, leave or turn into rows are animated with the layout module of [anime.js](https://animejs.com), which ships inside the app (`public/anime-layout.js`), so it loads nothing from the network. Reduce Motion turns it off.
+
+   Its tokens, shared components and icons come from the family's design system, [mac-app-design](https://github.com/creative-context/mac-app-design), vendored next to the page (`public/design-*`), so the family's apps look the same.
 4. **App** (`app/main.swift`). A standard macOS window with a transparent title bar, the usual menus, Settings, a toolbar for the views, search and sound, a Dock icon and a menu bar item. In full screen the toolbar hides with the menu bar, as in Safari, so the page fills the screen; it comes down when the pointer reaches the top. It runs the server it carries, starts it again if it stops, and replaces one an older version left running. It takes its counts for the Dock and the menu bar from the page.
 
 ## Develop

@@ -5,92 +5,19 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="dark">
 <title>Claude Session Monitor</title>
+<link rel="stylesheet" href="design-tokens.css">
+<link rel="stylesheet" href="design-base.css">
+<link rel="stylesheet" href="design-components.css">
+<link rel="stylesheet" href="design-dataviz.css">
+<script src="design-icons.js"></script>
 <style>
-  /* Apple's system fonts, as the rest of the Mac draws them: SF Pro (Text or Display,
-     picked by size, with its own tracking) and SF Mono. No font files. The colors are
-     the Obsidian theme's. */
+  /* The family's design system draws the tokens, the base and the shared components
+     (design-*.css, vendored from mac-app-design; never edit them here). What follows is
+     this page's own: its layout, the usage meter and strip, and its menus. */
 
-  /* Obsidian tokens (astryx-theme-obsidian 0.2): same names and values as the
-     theme. Dark only. The --csm-* tokens are this page's own. */
-  :root {
-    color-scheme: dark;
-
-    --color-background-body: #030304;  /* darker than the theme's #08090A */
-    --color-background-card: #FFFFFF08;   /* 3% veil */
-    --color-overlay-hover: #FFFFFF0A;     /* 4% */
-    --obsidian-veil-selected: #FFFFFF0F;  /* 6% */
-    --color-overlay-pressed: #FFFFFF14;   /* 8% */
-
-    --color-text-primary: #F7F8F8;
-    --obsidian-text-hover: #D5D8DC;
-    --color-text-secondary: #8A8F98;
-    --color-text-disabled: #62666D;       /* only for things that are off, never for text to read */
-    --csm-text-on-tint: #A3A8B0;          /* secondary text on colored cards, 5.4:1 or more */
-
-    --color-accent: #2D72D2;
-    --color-accent-muted: #2D72D23D;
-    --color-text-accent: #6FA6E8;
-
-    --color-warning: #C87619;
-    --color-warning-muted: #C8761940;
-    --color-text-orange: #FDB876;
-    --color-success: #238551;
-    --color-success-muted: #23855140;
-    --color-text-green: #A5F690;
-    --color-error: #CD4246;
-    --color-error-muted: #CD424640;
-    --color-text-red: #FFB2B8;
-    --color-on-accent: #FFFFFF;
-    --color-on-light: #0D0E10;
-
-    --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
-    --font-family-heading: var(--font-family-body);
-    --font-family-mono: ui-monospace, "SF Mono", Menlo, monospace;
-    --font-weight-medium: 510;
-    --font-weight-heading: 600; /* titles in Semibold, as in Mail and Finder */
-    --radius-inner: 4px;
-    --radius-element: 6px;
-    --radius-container: 8px;
-    --duration-fast: 100ms;
-    --ease-standard: cubic-bezier(0.2, 0, 0, 1);
-
-    /* Type scale: three sizes, each with a fixed line height so cards keep their height. */
-    --csm-text-title: 1rem;       /* 16px: card and window titles */
-    --csm-lh-title: 20px;
-    --csm-text-body: 0.75rem;     /* 12px: what a session is doing */
-    --csm-lh-body: 16px;
-    --csm-text-meta: 0.6875rem;   /* 11px: tags, time, counts */
-    --csm-lh-meta: 14px;
-
-    /* Card geometry */
-    --csm-card-w: 288px;
-    --csm-card-h: 164px;
-    --csm-tag-h: 20px;
-  }
-
-  * { box-sizing: border-box; }
-  html, body { margin: 0; height: 100%; overflow: hidden; }
-  body {
-    background: var(--color-background-body);
-    color: var(--color-text-primary);
-    font-family: var(--font-family-body);
-    font-size: var(--csm-text-body);
-    line-height: var(--csm-lh-body);
-    font-feature-settings: "cv11", "ss01";
-    font-variant-numeric: tabular-nums;
-    -webkit-font-smoothing: antialiased;
-  }
-  /* One stroke for every icon at every size: 1.25 px on screen, whatever the icon's size. */
-  svg.i { width: 12px; height: 12px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.25px; stroke-linecap: round; stroke-linejoin: round; }
-  svg.i * { vector-effect: non-scaling-stroke; }
-  button { font: inherit; color: inherit; }
-  .sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
-  code { font-family: var(--font-family-mono); font-size: 0.95em; color: var(--color-text-primary); }
 
   /* In the app it should feel like a Mac window, not a web page: the arrow cursor (the
      hand is for links), no text selection, and its own context menu. */
-  body.embed, body.embed * { cursor: default !important; }
-  body.embed { -webkit-user-select: none; user-select: none; }
 
   /* The page fills its window and reflows to any size: the header, then the views,
      which scroll when their content doesn't fit. */
@@ -107,53 +34,8 @@
   .lights { display: none; flex: none; width: var(--csm-lights-w, 56px); height: 1px; margin-right: -8px; }
   body.embed .lights { display: block; }
 
-  /* ---------- tags ---------- */
-  .tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: var(--csm-tag-h);
-    padding: 0 6px;
-    border-radius: var(--radius-inner);
-    background: var(--obsidian-veil-selected);
-    color: var(--color-text-secondary);
-    font-size: var(--csm-text-meta);
-    line-height: var(--csm-lh-meta);
-    white-space: nowrap;
-    min-width: 0;
-  }
-  .tag > span { overflow: hidden; text-overflow: ellipsis; }
-  .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); font-weight: var(--font-weight-medium); }
-  .tag.s-waiting, .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
-  .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); font-weight: var(--font-weight-medium); }
-  .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); font-weight: var(--font-weight-medium); }
-  .tag.s-idle, .tag.s-ended { color: var(--color-text-secondary); font-weight: var(--font-weight-medium); }
 
   /* ---------- header ---------- */
-  header { display: flex; align-items: center; gap: 8px; height: 24px; flex: none; container-type: inline-size; }
-  /* In a narrow window the less important counts give way first. */
-  /* When the header runs out of room, the counts drop their words and keep the number,
-     then the less important ones go. They are never squeezed or cut (fitCounts). */
-  #counts .tag { flex: none; }
-  /* The number reads first, in white; the words after it in gray. What needs you stays orange. */
-  #counts .tag > span:not(.pdot):not(.sdot) { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
-  #counts .tag .word { color: var(--color-text-secondary); font-weight: 400; }
-  #counts .tag.s-waiting > span:not(.pdot), #counts .tag.s-waiting .word { color: var(--color-text-orange); }
-  #counts .tag.working .sdot { color: var(--color-accent); }
-  .group.active .group-head .count { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
-  #counts.tight .tag .word { display: none; }
-  #counts.tighter .tag.low { display: none; }
-  #counts.tightest .tag:not(.s-waiting) { display: none; } /* last, only what needs you */
-  header .name {
-    flex: none;
-    font-family: var(--font-family-heading);
-    font-size: var(--csm-text-title);
-    line-height: var(--csm-lh-title);
-    font-weight: var(--font-weight-heading);
-    margin-right: 6px;
-  }
-  #counts { display: flex; gap: 8px; min-width: 0; overflow: hidden; }
-  header .spacer { flex: 1; }
   /* The plan's weekly usage, from the status line: quiet gray, orange from 80%. */
   .usage { display: inline-flex; align-items: center; gap: 7px; flex: none; height: var(--csm-tag-h); padding: 0 8px; border-radius: var(--radius-inner); background: var(--obsidian-veil-selected); font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); margin-right: 6px; cursor: default; }
   .usage[hidden] { display: none; }
@@ -169,48 +51,9 @@
   .link { display: inline-flex; align-items: center; gap: 6px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
   .link i { width: 6px; height: 6px; border-radius: 50%; background: #26A756; }
   .link.off i { background: var(--color-error); }
-  .icon-btn {
-    all: unset;
-    box-sizing: border-box;
-    cursor: pointer;
-    display: inline-grid;
-    place-items: center;
-    width: 24px;
-    height: 24px;
-    border-radius: var(--radius-element);
-    color: var(--color-text-secondary);
-    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard);
-  }
-  .icon-btn:hover { background: var(--color-overlay-hover); color: var(--obsidian-text-hover); }
-  .icon-btn:active { background: var(--color-overlay-pressed); }
-  .icon-btn[aria-pressed="true"] { color: var(--color-text-primary); }
-  .icon-btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
-  .icon-btn svg.i { width: 15px; height: 15px; }
 
   /* ---------- view switch and search (in the browser; the app has them in its toolbar) ---------- */
   .nav { display: flex; align-items: center; gap: 8px; flex: none; }
-  .seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-container); background: var(--color-background-card); }
-  .seg button {
-    all: unset;
-    display: inline-flex; align-items: center; gap: 6px;
-    height: 24px; padding: 0 10px;
-    border-radius: var(--radius-element);
-    color: var(--color-text-secondary);
-    font-size: var(--csm-text-body);
-    cursor: pointer;
-  }
-  .seg button:hover { color: var(--obsidian-text-hover); }
-  .seg button[aria-selected="true"] { background: var(--color-overlay-pressed); color: var(--color-text-primary); }
-  .search { position: relative; flex: 0 1 260px; }
-  .search svg.i { position: absolute; left: 9px; top: 7px; color: var(--color-text-secondary); }
-  .search input {
-    all: unset; box-sizing: border-box; width: 100%; height: 28px;
-    padding: 0 10px 0 28px; border-radius: var(--radius-element);
-    background: var(--color-background-card); color: var(--color-text-primary);
-    font-size: var(--csm-text-body);
-  }
-  .search input:focus { background: var(--obsidian-veil-selected); }
-  .search input::placeholder { color: var(--color-text-secondary); }
 
   /* ---------- groups ---------- */
   .group + .group { margin-top: 20px; }
@@ -220,9 +63,6 @@
   #week, #history { container: list / inline-size; }
   .wsplit { display: flex; flex-direction: column; gap: 28px; }
   .wmain:empty, .wside:empty { display: none; }
-  .quiet { display: flex; align-items: center; gap: 8px; padding: 12px; border-radius: var(--radius-container);
-    background: var(--color-background-card); color: var(--color-text-secondary); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
-  .quiet { gap: 14px; }
   .qart { display: inline-flex; gap: 6px; flex: none; }
   .qcard { width: 84px; height: 34px; border-radius: 6px; padding: 7px 8px; display: flex; flex-direction: column; gap: 6px;
     background: var(--color-background-card); opacity: 1; transition: background-color 450ms var(--ease-standard), opacity 400ms var(--ease-standard); }
@@ -243,18 +83,6 @@
     .hlist.long { display: block; columns: 2; column-gap: 8px; }
     .hlist.long .hrow { width: 100%; margin-bottom: 4px; break-inside: avoid; }
   }
-  .group-head {
-    display: flex; align-items: center; gap: 6px;
-    margin: 0 0 8px;
-    font-family: var(--font-family-heading);
-    font-size: var(--csm-text-body);
-    line-height: var(--csm-lh-body);
-    font-weight: var(--font-weight-medium);
-    color: var(--obsidian-text-hover);
-  }
-  .group-head svg.i { width: 14px; height: 14px; }
-  .group-head .count { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
-  .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
   /* Active's window: its words are a menu, with a small chevron to say so. */
   .pick-box { position: relative; display: inline-flex; align-items: center; gap: 3px; border-radius: 4px; transition: color var(--duration-fast) var(--ease-standard); }
   .pick-box svg.chev { width: 9px; height: 9px; opacity: 0.6; }
@@ -263,10 +91,6 @@
   .pick-box:hover svg.chev { opacity: 1; }
   /* WebKit counts a click on a menu as keyboard focus: the ring shows only when you came by keyboard. */
   .pick-box:has(select:focus-visible:not([data-clicked])) { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
-  /* Active is the zone that matters: its header is a title, the rest are labels. */
-  .group.active .group-head { font-size: 13px; line-height: 18px; color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
-  .group.active .group-head svg.i { width: 14px; height: 14px; }
-  .group.active .group-head .count, .group.active .group-head .hint { font-size: var(--csm-text-body); font-weight: 400; }
   /* The week's usage, a narrow tile at the right of Active, always two cards tall. The week
      reads bottom up as its seven days; the fill is what you've used, the blue mark is
      where an even week would be today. Gray while you're on pace, orange when you run
@@ -379,137 +203,14 @@
     gap: 8px;
   }
 
-  /* ---------- cards ---------- */
-  /* Surfaces, no lines: the whole card takes the color of its state, strongest for
-     what needs you. Needs you > error > working > agents working > done >
-     idle and closed (no color). */
-  @property --tint { syntax: "<color>"; inherits: false; initial-value: transparent; }
-  .card {
-    --tint: var(--color-background-card);
-    all: unset;
-    box-sizing: border-box; /* all: unset drops it, and the padding would add to the height */
-    cursor: pointer;
-    min-width: 0;
-    height: var(--csm-card-h);
-    display: flex;
-    flex-direction: column;
-    padding: 12px 12px 10px;
-    background: var(--tint);
-    border-radius: var(--radius-container);
-    overflow: hidden;
-    position: relative;
-    /* A color change fades here; when the card also moves, the layout animation fades it. */
-    transition: --tint 450ms var(--ease-standard), transform var(--duration-fast) var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
-  }
-  /* What needs you (blocked, or a question) and errors get the strongest tint; work in
-     progress a quieter blue; done a faint green, and only in Active, so green keeps its
-     meaning when twenty finished sessions fill the rest of the week. */
-  .card.waiting, .card.asks { --tint: color-mix(in srgb, var(--color-warning) 34%, transparent); }
-  .card.error { --tint: color-mix(in srgb, var(--color-error) 34%, transparent); }
-  .card.working { --tint: color-mix(in srgb, var(--color-accent) 16%, transparent); }
-  .card.working.background { --tint: color-mix(in srgb, var(--color-accent) 10%, transparent); }
-  .card.done { --tint: color-mix(in srgb, var(--color-success) 14%, transparent); }
+  /* ---------- cards: the design system draws them; these are this page's own ---------- */
   .group:not(.active) .card.done { --tint: var(--color-background-card); }
-  /* A question or an error more than a day old no longer needs you (it isn't counted
-     either), so it keeps its tag color but drops the loud card. */
-  .card.stale { --tint: var(--color-background-card); }
-  /* Hover and press add one step of light on top of the state color; press responds
-     on the way down, not on release. */
-  .card:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
-  .card:active {
-    background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint);
-    transform: scale(0.985);
-  }
-  .card:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
-  /* The cards a header count stands for, marked for a moment after you click it. */
-  .card.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
-
-  /* On a colored card the status tag is solid. */
-  /* State tags a step darker than the theme's fills, so white text reaches 5.8:1. */
-  /* Only what needs you gets a solid tag; work and done are soft, so they don't pull the eye. */
-  .card .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); }
-  .card .tag.s-waiting, .card .tag.s-asks { background: var(--color-warning); color: var(--color-on-light); }
-  .card.stale .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); }
-  .card.stale .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); }
-  .card .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); }
-  .card .tag.s-error { background: #B5383C; color: var(--color-on-accent); }
-
-  .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
-  .time { display: inline-flex; align-items: center; gap: 4px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; }
-
-  .title {
-    margin-top: 8px;
-    font-family: var(--font-family-heading);
-    font-size: var(--csm-text-title);
-    line-height: var(--csm-lh-title);
-    font-weight: var(--font-weight-heading);
-    color: var(--color-text-primary);
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    overflow-wrap: anywhere;
-  }
-
-  .detail { margin-top: 4px; color: var(--color-text-secondary); }
-  .detail .line { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
-  .detail .line .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
-  /* A block, so an icon inside a span (for its tip) centers on the line instead of sitting on
-     the text's baseline, 2 px high. Centered on the line it matches the capitals and still
-     looks high beside mostly lowercase text, so it goes one screen pixel lower. */
-  .detail .line svg.i { display: block; width: 13px; height: 13px;
-    translate: 0 calc(round(nearest, calc(var(--csm-scale, 1) * 1px), 1px) / var(--csm-scale, 1)); }
-  .detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
-  .detail b { color: var(--color-text-primary); font-weight: 400; }
-  /* A short window gets lower cards: the title
-     keeps one line, and both lines of detail stay, since they carry the plan step and
-     what the agents do. */
+  .group:not(.active) .card.done { --meta: var(--color-text-secondary); }
+  .card .detail .cur { font-weight: 500; color: var(--csm-text-on-tint); }
   @media (max-height: 600px) {
-    :root { --csm-card-h: 130px; }
-    .card .title { -webkit-line-clamp: 1; margin-top: 10px; font-size: 13.5px; line-height: 17px; }
-    .card .detail { margin-top: 3px; font-size: 11.5px; line-height: 15px; }
-    .card .tags { padding-top: 8px; }
     .card:has(.bar) .tags { display: none; } /* the plan's bar takes the folder's place */
     .card .bar { margin-top: auto; padding-bottom: 6px; } /* at the foot of the card, where the folder would be */
   }
-  .detail .sub { color: var(--color-text-secondary); }
-  /* Secondary text on a colored card. Plain gray drops below 4.5:1 on the strong tints
-     (3.8:1 on orange, 4.3:1 on red), so those use their own light color (orange 6.1 to
-     7.3:1, red 7.0 to 8.3:1) and the blue and green cards a lighter gray (6.3 to 7.5:1). */
-  .card { --meta: var(--color-text-secondary); }
-  .card.working, .card.done { --meta: var(--csm-text-on-tint); }
-  .card.waiting, .card.asks { --meta: var(--color-text-orange); }
-  .card.error { --meta: var(--color-text-red); }
-  .group:not(.active) .card.done, .card.stale { --meta: var(--color-text-secondary); }
-  .card .time, .card .detail, .card .detail .sub, .card .tags .tag { color: var(--meta); }
-  .waiting .detail, .waiting .detail b, .asks .detail, .asks .detail b { color: var(--color-text-orange); }
-  .error .detail { color: var(--color-text-red); }
-  .card.stale .detail, .card.stale .detail b { color: var(--color-text-secondary); }
-
-  .tags { margin-top: auto; display: flex; gap: 4px; overflow: hidden; }
-  .tags .tag { flex: 0 1 auto; }
-  .tags .tag.name { flex: 0 100 auto; min-width: 40px; }
-  /* A folder is a name from the file system, so it's the one thing set in mono. */
-  .card .tags .tag.name { font-family: var(--font-family-mono); font-size: 10.5px; font-weight: 500; }
-  /* Weights as in the strip mockup: the state tag reads first, then the time. */
-  .card .top .tag { font-weight: 600; }
-  .card .time { font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; }
-  .card .detail .cur { font-weight: 500; color: var(--csm-text-on-tint); }
-  .sdot { width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
-  .sdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  /* Needs you: a dot that beats where the icon was, for as long as it needs you. */
-  .pdot { position: relative; width: 12px; height: 12px; flex: none; display: inline-grid; place-items: center; }
-  .pdot::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
-  .pdot::after { content: ""; position: absolute; width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0;
-    animation: dotping 2.4s cubic-bezier(0, 0, 0.2, 1) infinite; animation-delay: var(--sync, 0s); }
-  @keyframes dotping { 0% { transform: scale(1); opacity: 0.55; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
-  /* Working: three dots that light up in turn, calmly. */
-  .calm { display: inline-flex; gap: 2.5px; align-items: center; height: 12px; flex: none; }
-  .calm i { width: 3.5px; height: 3.5px; border-radius: 50%; background: currentColor; opacity: 0.35;
-    animation: calm 2.4s ease-in-out infinite; animation-delay: var(--sync, 0s); }
-  .calm i:nth-child(2) { animation-delay: calc(var(--sync, 0s) + 0.4s); }
-  .calm i:nth-child(3) { animation-delay: calc(var(--sync, 0s) + 0.8s); }
-  @keyframes calm { 0%, 50%, 100% { opacity: 0.35; } 20% { opacity: 1; } }
   /* A reminder's time and a "+1" never shrink; a long task name gives way first. */
   .tags .tag.sched { flex: none; }
   .tags .tag.made { flex: 0 100000 auto; min-width: 64px; }
@@ -524,30 +225,12 @@
   /* The step in progress breathes while the session works, in step with its spinner. */
   .card.working .bar .segs span.now { background: var(--color-text-accent); animation: step 2.4s ease-in-out infinite; }
 
-  /* Paused or closed sessions step down in brightness, not opacity. */
-  .idle .title, .ended .title { color: var(--csm-text-on-tint); }
-  .idle .detail, .ended .detail, .idle .detail b, .ended .detail b { color: var(--color-text-secondary); }
 
   /* ---------- history ---------- */
   /* A readable line length: the time stays near the title on a wide window. */
   .hlist { display: flex; flex-direction: column; gap: 4px; max-width: 960px; }
   #history .group-head { max-width: 960px; }
   mark { background: color-mix(in srgb, var(--color-warning) 40%, transparent); color: inherit; border-radius: 2px; }
-  .hrow {
-    --tint: var(--color-background-card);
-    all: unset; box-sizing: border-box; cursor: pointer;
-    display: grid;
-    grid-template-columns: 16px minmax(0, 1fr) auto auto;
-    grid-template-rows: auto auto;
-    column-gap: 10px; row-gap: 2px;
-    align-items: center;
-    padding: 10px 12px;
-    border-radius: var(--radius-container);
-    background: var(--tint);
-    transition: --tint 450ms var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
-  }
-  /* A session that is live right now keeps its state's color here too, quieter than on
-     its card, and updates as it changes. */
   .hrow.live.s-working { --tint: color-mix(in srgb, var(--color-accent) 14%, transparent); }
   .hrow.live.s-waiting, .hrow.live.s-asks { --tint: color-mix(in srgb, var(--color-warning) 24%, transparent); }
   .hrow.live.s-error { --tint: color-mix(in srgb, var(--color-error) 24%, transparent); }
@@ -593,115 +276,9 @@
   .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
   .top .time { margin-left: auto; }
 
-  /* ---------- count details ---------- */
-  /* Each count in the header opens a card with what's behind it, on hover or focus. */
-  #counts .tag[data-pop]:hover, #counts .tag[data-pop][aria-expanded="true"] { background-image: linear-gradient(#FFFFFF0F, #FFFFFF0F); }
-  #counts .tag[data-pop]:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
-  /* A small chevron says a count opens something. */
-  #counts .tag[data-pop] { padding-right: 5px; transition: background-color var(--duration-fast) var(--ease-standard); }
-  #counts .tag[data-pop] svg.chev { width: 9px; height: 9px; margin-left: -1px; opacity: 0.6; }
-  #counts .tag[data-pop]:hover svg.chev, #counts .tag[data-pop][aria-expanded="true"] svg.chev { opacity: 1; }
-  .pop {
-    position: fixed; z-index: 20; width: 340px; max-height: min(60vh, 420px); overflow: auto;
-    padding: 6px; border-radius: 10px;
-    background: #16171A; /* a solid, raised surface: lifted by light and a soft shadow, not by a line */
-    box-shadow: 0 12px 32px #00000080, inset 0 0 0 1px #FFFFFF0A;
-    opacity: 0; visibility: hidden; transform: translateY(-4px);
-    transition: opacity 120ms var(--ease-standard), transform 120ms var(--ease-standard), visibility 0s linear 120ms;
-  }
-  .pop.open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
-  .pop-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
-  .pop-head svg.i { width: 12px; height: 12px; }
-  .prow {
-    all: unset; box-sizing: border-box; width: 100%;
-    display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 1px; align-items: center;
-    padding: 6px 8px; border-radius: 6px;
-  }
-  .prow[data-sid]:hover, .prow[data-state]:hover, .prow:focus-visible { background: var(--obsidian-veil-selected); }
-  .prow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: -2px; }
-  .prow .pi { grid-row: 1 / 3; align-self: start; padding-top: 2px; display: inline-flex; color: var(--color-text-secondary); }
-  .prow .pi svg.i { width: 14px; height: 14px; }
-  .prow .pt { font-family: var(--font-family-heading); font-weight: var(--font-weight-heading); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .prow .pm { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
-  .prow .ps { grid-column: 2 / 4; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .prow.s-waiting .pi, .prow.s-asks .pi, .prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
-  .prow.s-error .pi, .prow.s-error .ps { color: var(--color-text-red); }
-  .prow.s-working .pi { color: var(--color-text-accent); }
-  .prow.s-done .pi { color: var(--color-text-green); }
-  .prow.count { grid-template-columns: 14px minmax(0, 1fr) auto; }
-  .prow.count .pt { font-family: var(--font-family-body); font-weight: 400; }
-  .prow.count .pm { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
-  .pop-dot { width: 8px; height: 8px; border-radius: 50%; margin: 3px; background: var(--color-overlay-pressed); }
-  .pop-more, .pop-note { padding: 6px 8px; font-size: var(--csm-text-meta); color: var(--color-text-secondary); }
-  .pop-foot { margin-top: 2px; padding-top: 2px; }
-  .pop-foot .prow { grid-template-columns: 14px 1fr; color: var(--color-text-accent); font-size: var(--csm-text-body); }
-  .pop-foot .prow:hover { background: var(--obsidian-veil-selected); }
 
-  /* ---------- connection ---------- */
-  .banner {
-    display: flex; align-items: center; gap: 8px;
-    margin-bottom: 12px; padding: 8px 12px;
-    border-radius: var(--radius-container);
-    background: color-mix(in srgb, var(--color-error) 18%, transparent);
-    color: var(--color-text-red);
-  }
-  .banner svg.i { width: 14px; height: 14px; }
-  .banner b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
-  /* A newer version: the accent, not the alarm red. */
-  .banner.update { background: var(--color-accent-muted); color: var(--color-text-accent); }
-  .banner .btn { margin-left: auto; height: 24px; }
-  .banner .x { all: unset; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--color-text-secondary); }
-  .banner .x:hover { background: var(--obsidian-veil-selected); color: var(--color-text-primary); }
-  .hrow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
-  .hrow .hicon { grid-row: 1 / 3; align-self: start; padding-top: 2px; color: var(--color-text-secondary); }
-  .hrow .hicon svg.i { width: 16px; height: 16px; }
-  .hrow:not(:has(.hsnip)) .hicon { grid-row: 1; align-self: center; padding-top: 0; } /* one line when there's nothing more to say */
-  .hrow.s-waiting .hicon, .hrow.s-asks .hicon { color: var(--color-text-orange); }
-  .hrow.s-error .hicon { color: var(--color-text-red); }
-  .hrow.s-done .hicon { color: var(--color-text-green); }
-  .hrow.s-working .hicon { color: var(--color-text-accent); }
-  .hrow .htitle {
-    display: flex; align-items: baseline; gap: 8px; min-width: 0;
-    font-family: var(--font-family-heading); font-weight: var(--font-weight-heading);
-    font-size: var(--csm-text-body); color: var(--color-text-primary);
-    white-space: nowrap;
-  }
-  .hrow .htitle .t { overflow: hidden; text-overflow: ellipsis; }
-  .hrow .htitle .hstate { font-family: var(--font-family-body); flex: none; }
-  .hrow .htime { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
-  .hrow .hsnip { grid-column: 2 / 5; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .hrow.s-asks .hsnip, .hrow.s-waiting .hsnip { color: var(--color-text-orange); }
-  .hrow.s-error .hsnip { color: var(--color-text-red); }
-  .more { display: flex; justify-content: center; margin-top: 12px; }
 
-  /* ---------- buttons ---------- */
-  .btn {
-    all: unset; cursor: pointer;
-    display: inline-flex; align-items: center; gap: 6px;
-    height: 28px; padding: 0 12px;
-    border-radius: var(--radius-element);
-    background: var(--obsidian-veil-selected);
-    color: var(--color-text-primary);
-    font-size: var(--csm-text-body);
-  }
-  .btn:hover { background: var(--color-overlay-pressed); }
-  .btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
-  .btn svg.i { width: 13px; height: 13px; }
 
-  /* ---------- empty states ---------- */
-  .empty-state {
-    min-height: 100%;
-    display: flex; flex-direction: column; align-items: center; justify-content: center;
-    gap: 6px; padding: 40px 16px; text-align: center;
-  }
-  .empty-state h3 {
-    margin: 14px 0 0;
-    font-family: var(--font-family-heading);
-    font-size: var(--csm-text-title);
-    line-height: var(--csm-lh-title);
-    font-weight: var(--font-weight-heading);
-  }
-  .empty-state p { margin: 0 0 10px; max-width: 360px; color: var(--color-text-secondary); }
   /* Three small session cards, as surfaces: working, needs you, done. */
   .art { position: relative; width: 184px; height: 92px; }
   .mini {
@@ -718,42 +295,10 @@
   .mini.m2 i { background: #FB8C00; }
   .mini.m3 { left: 88px; top: 26px; background: color-mix(in srgb, var(--color-success) 16%, var(--color-background-body)); }
   .mini.m3 i { background: #26A756; }
-  .badge {
-    display: grid; place-items: center;
-    width: 56px; height: 56px; border-radius: 16px;
-    background: var(--obsidian-veil-selected); color: var(--color-text-secondary);
-  }
-  .badge svg.i { width: 26px; height: 26px; }
   .badge svg.spin { animation: spin 2.4s linear infinite; }
   .badge.off { color: var(--color-text-red); background: var(--color-error-muted); }
   .empty-state.loading { animation: enter 320ms 300ms var(--ease-standard) both; } /* no flash on a fast load */
 
-  /* ---------- motion ---------- */
-  /* Calm and in step. No bounce (nothing here comes from a flick), one easing curve,
-     colors that fade between states, icons that breathe or turn together. */
-  @keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
-  @keyframes step { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes enter { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
-  .tag svg.spin { animation: spin 2.4s linear infinite; }
-  .tag.s-working svg.bot { animation: breathe 2.4s ease-in-out infinite; }
-  /* What needs you breathes for its first minute, to catch the eye, then holds still. */
-  .card.fresh .tag svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
-  .card.new { animation: enter 320ms var(--ease-standard) both; }
-  /* Increase Contrast (macOS Accessibility): brighter secondary text, and a thin edge on
-     cards and rows so they hold their shape. The only place the page draws lines. */
-  @media (prefers-contrast: more) {
-    :root { --color-text-secondary: #B4B9C1; --csm-text-on-tint: #C4C8CE; }
-    .card, .hrow { box-shadow: inset 0 0 0 1px #FFFFFF40; }
-  }
-  /* Reduce Motion: nothing moves, turns or breathes, but colors still cross-fade, as
-     macOS itself does. */
-  @media (prefers-reduced-motion: reduce) {
-    .pop { transform: none !important; }
-    *, *::before, *::after { animation: none !important; }
-    .card { transition: --tint 450ms var(--ease-standard), opacity 220ms var(--ease-standard); }
-    .card:active { transform: none; }
-  }
 
   /* ---------- compact: a narrow window (a laptop on its own) ----------
      Under 640 pt the cards become rows of free height with the same tints: a dot for the
@@ -885,52 +430,8 @@
   // ---------------------------------------------------------------- icons
   // Drawn for this app on a 24 px grid, all in the same 1.25 px stroke.
   const svg = (d, cls = "") => `<svg class="i ${cls}" viewBox="0 0 24 24" aria-hidden="true">${d}</svg>`;
-  const ICON = {
-    folder: svg('<path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/>'),
-    flow: svg('<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><path d="M6.5 10v3a2 2 0 0 0 2 2H14"/>'),
-    agents: svg('<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20a6.5 6.5 0 0 1 13 0"/><path d="M16 4.5a3.5 3.5 0 0 1 0 7"/><path d="M18.5 14.5A6.5 6.5 0 0 1 21.5 20"/>'),
-    spinner: svg('<path d="M21 12a9 9 0 1 1-9-9"/>', "spin"),
-    alert: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.5h.01"/>', "pulse"),
-    question: svg('<path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.1 2.2c-.6.3-.9.7-.9 1.3"/><path d="M12 15.8h.01"/>', "pulse"),
-    error: svg('<path d="M10.3 4.2 2.6 18a2 2 0 0 0 1.7 3h15.4a2 2 0 0 0 1.7-3L13.7 4.2a2 2 0 0 0-3.4 0z"/><path d="M12 9.5v4"/><path d="M12 17h.01"/>', "pulse"),
-    check: svg('<circle cx="12" cy="12" r="9"/><path d="m8 12.5 2.8 2.8L16.5 9.5"/>'),
-    moon: svg('<path d="M20 14.5A8 8 0 1 1 9.5 4a6.5 6.5 0 0 0 10.5 10.5z"/>'),
-    power: svg('<path d="M12 3v8"/><path d="M6.3 7.2a8 8 0 1 0 11.4 0"/>'),
-    bot: svg('<rect x="4" y="8" width="16" height="12" rx="3"/><path d="M12 4v4"/><path d="M9 13.5v1"/><path d="M15 13.5v1"/>', "bot"),
-    terminal: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="m7 9 3 3-3 3"/><path d="M12.5 15H17"/>'),
-    file: svg('<path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"/><path d="M14 3v5h5"/>'),
-    pencil: svg('<path d="M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z"/><path d="m14.5 7.5 2 2"/>'),
-    search: svg('<circle cx="11" cy="11" r="6.5"/><path d="m20 20-4.2-4.2"/>'),
-    globe: svg('<circle cx="12" cy="12" r="9"/><path d="M3 12h18"/><path d="M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z"/>'),
-    star: svg('<path d="m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z"/>'),
-    plug: svg('<path d="M9 3v5"/><path d="M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/>'),
-    unplug: svg('<path d="M9 3v5"/><path d="M15 3v5"/><path d="M6 8h12v3a6 6 0 0 1-12 0z"/><path d="M12 17v4"/><path d="m3 3 18 18"/>'),
-    browser: svg('<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18"/><path d="M6.5 6.5h.01"/><path d="M9 6.5h.01"/>'),
-    bulb: svg('<path d="M9 18h6"/><path d="M10 21h4"/><path d="M12 3a6 6 0 0 0-3.5 10.9c.6.5 1 1.2 1 2V16h5v-.1c0-.8.4-1.5 1-2A6 6 0 0 0 12 3z"/>'),
-    listChecks: svg('<path d="m4 7.75 2 2 3.5-3.5"/><path d="m4 15.75 2 2 3.5-3.5"/><path d="M13 8.25h7"/><path d="M13 16.25h7"/>'), // ink centered on 12
-    compress: svg('<path d="M4 14h6v6"/><path d="M20 10h-6V4"/><path d="m14 10 7-7"/><path d="m3 21 7-7"/>'),
-    clock: svg('<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>'),
-    sun: svg('<circle cx="12" cy="12" r="4"/><path d="M12 2.5v2M12 19.5v2M4.6 4.6 6 6M18 18l1.4 1.4M2.5 12h2M19.5 12h2M4.6 19.4 6 18M18 6l1.4-1.4"/>'),
-    history: svg('<path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/>'),
-    calendar: svg('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/>'),
-    layers: svg('<path d="m12 3 9 4.5-9 4.5-9-4.5z"/><path d="m3 12 9 4.5 9-4.5"/><path d="m3 16.5 9 4.5 9-4.5"/>'),
-    grid: svg('<rect x="3.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="3.5" width="7" height="7" rx="1.5"/><rect x="3.5" y="13.5" width="7" height="7" rx="1.5"/><rect x="13.5" y="13.5" width="7" height="7" rx="1.5"/>'),
-    activity: svg('<path d="M3 12h4l3-8 4 16 3-8h4"/>'),
-    calendarClock: svg('<path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/>'),
-    pause: svg('<circle cx="12" cy="12" r="9"/><path d="M10 9v6"/><path d="M14 9v6"/>'),
-    alarm: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5v4"/><path d="M12 16.5h.01"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
-    // An alarm clock with hands: a session set to pick up again on its own.
-    wake: svg('<circle cx="12" cy="13" r="7.5"/><path d="M12 9.5V13l2.5 1.5"/><path d="M4.5 3.5 2.5 5.5"/><path d="m19.5 3.5 2 2"/>'),
-    calendarPlus: svg('<rect x="3.5" y="5" width="17" height="15.5" rx="2"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><path d="M12 12.5v5"/><path d="M9.5 15h5"/>'),
-    // A branch: a session the Claude app started from another one, or the one it came from.
-    branch: svg('<circle cx="6" cy="6" r="2.5"/><circle cx="6" cy="18" r="2.5"/><circle cx="18" cy="8" r="2.5"/><path d="M6 8.5v7"/><path d="M18 10.5c0 4-3 5.5-9.5 6.5"/>'),
-    chev: svg('<path d="m6 9 6 6 6-6"/>', "chev"),
-    close: svg('<path d="M6 6l12 12"/><path d="M18 6 6 18"/>'),
-    arrowDown: svg('<path d="M12 5v14"/><path d="m6 13 6 6 6-6"/>'),
-    // A speaker, not a bell: on a Mac a bell reads as notifications, and this is sound.
-    speaker: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="M15.5 9a4.5 4.5 0 0 1 0 6"/><path d="M18.5 6a8.5 8.5 0 0 1 0 12"/>'),
-    speakerOff: svg('<path d="M11 5 6.5 9H3.5v6h3l4.5 4z"/><path d="m15.5 9.5 5 5"/><path d="m20.5 9.5-5 5"/>'),
-  };
+  // The family's icons, from the design system (design-icons.js), as inline SVG strings.
+  const ICON = Object.fromEntries(DesignIcons.names.map((n) => [n, DesignIcons.svg(n)]));
   // A question keeps its own icon, but it needs you just like a blocked session does.
   const STATUS_ICON = {
     working: ICON.spinner, waiting: ICON.alert, asks: ICON.question, error: ICON.error,

@@ -1,0 +1,41 @@
+/* mac-app-design 0.2.0 (base.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* Base: the page as a Mac window draws it. */
+
+* { box-sizing: border-box; }
+html, body { margin: 0; height: 100%; overflow: hidden; }
+body {
+  background: var(--color-background-body);
+  color: var(--color-text-primary);
+  font-family: var(--font-family-body);
+  font-size: var(--csm-text-body);
+  line-height: var(--csm-lh-body);
+  font-feature-settings: "cv11", "ss01";
+  font-variant-numeric: tabular-nums;
+  -webkit-font-smoothing: antialiased;
+}
+/* One stroke for every icon at every size: 1.25 px on screen, whatever the icon's size. */
+svg.i { width: 12px; height: 12px; flex: none; stroke: currentColor; fill: none; stroke-width: 1.25px; stroke-linecap: round; stroke-linejoin: round; }
+svg.i * { vector-effect: non-scaling-stroke; }
+button { font: inherit; color: inherit; }
+.sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+code { font-family: var(--font-family-mono); font-size: 0.95em; color: var(--color-text-primary); }
+
+/* In an app it should feel like a Mac window, not a web page: the arrow cursor (the hand
+   is for links), no text selection except in fields. The app marks <body class="embed">. */
+body.embed, body.embed * { cursor: default !important; }
+body.embed { -webkit-user-select: none; user-select: none; }
+
+/* Motion: calm and in step. No bounce, one easing curve, colors that fade between states,
+   icons that breathe or turn together. */
+@keyframes breathe { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+@keyframes step { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes enter { from { opacity: 0; transform: translateY(6px) scale(0.98); } }
+@keyframes dotping { 0% { transform: scale(1); opacity: 0.55; } 70%, 100% { transform: scale(2.6); opacity: 0; } }
+@keyframes calm { 0%, 50%, 100% { opacity: 0.35; } 20% { opacity: 1; } }
+
+/* Reduce Motion: nothing moves, turns or breathes, but colors still cross-fade, as macOS
+   itself does. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; }
+}

@@ -1,0 +1,95 @@
+/* mac-app-design 0.2.0 (dataviz.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* Data viz: figures, meters, progress and charts, in the family's quiet way.
+   Rules: one quiet fill; color only for state (on pace, ahead, near the limit, whose turn);
+   thin marks with round ends and gaps of the surface between them; text in text colors,
+   never the series color; "now" is a blue line; axes and grids stay in the background.
+   Read docs/dataviz.md before adding a chart. */
+
+/* ---------- figure: a big number with its unit a step quieter ---------- */
+.figure { display: block; white-space: nowrap; font-family: var(--font-family-figure); font-size: 32px; line-height: 34px;
+  font-weight: var(--font-weight-heading); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
+.figure small { font-size: 17px; line-height: 1; font-weight: var(--font-weight-heading); letter-spacing: 0; margin-left: 1px; color: var(--color-text-secondary); }
+.figure small.ghost { visibility: hidden; margin-left: 0; margin-right: 1px; } /* balances the unit, so the digits sit on the axis */
+.figure.small { font-size: 26px; line-height: 28px; }
+.figure.small small { font-size: 14px; }
+/* What the figure means, in the color of how it's going. */
+/* How it's going: a .pace (or a .meter) carries on-pace, plenty, fast, hot or limit. */
+.pace, .meter { --say: var(--color-text-secondary); }
+.say, .meter .m-say { font-size: var(--csm-text-body); line-height: var(--csm-lh-body); font-weight: var(--font-weight-heading); color: var(--say); }
+.pace.on-pace, .pace.plenty, .meter.on-pace, .meter.plenty { --say: var(--color-text-green); }
+.pace.fast, .meter.fast { --over: var(--color-text-orange); --say: var(--color-text-orange); }
+.pace.hot, .meter.hot { --over: var(--color-warning); --say: var(--color-text-orange); }
+.pace.limit, .meter.limit { --fill: var(--color-error); --over: var(--color-error); --say: var(--color-text-red); }
+
+/* ---------- mini bar: how full, in one line ---------- */
+.minibar { position: relative; flex: none; width: 84px; height: 6px; border-radius: 3px; background: var(--color-overlay-pressed); overflow: hidden; }
+.minibar.thin { height: 4px; border-radius: 2px; }
+.minibar.hair { height: 3px; border-radius: 2px; background: var(--viz-track-strong); }
+.minibar > b { position: absolute; inset: 0 auto 0 0; display: block; width: 0; border-radius: inherit; background: var(--fill, var(--obsidian-text-hover));
+  transition: width 600ms var(--ease-standard), background-color 200ms var(--ease-standard); }
+.minibar.warn > b { background: var(--color-warning); }
+.minibar.done > b { background: var(--viz-done); }
+@media (prefers-reduced-motion: reduce) { .minibar > b { transition: background-color 200ms linear; } }
+
+/* ---------- segments: one per step or item, in a row ---------- */
+/* A plan's steps (done, the one it's on, to do), or a group's items (done, then the open
+   ones by whose turn). The row is taller than the 4 px marks so a tooltip is easy to hover. */
+.segs { flex: 1; display: flex; align-items: center; gap: 4px; }
+.segs > span { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); }
+.segs > .on { background: var(--viz-now); }
+.segs > .now { background: color-mix(in srgb, var(--viz-now) 45%, transparent); }
+.segs.live > .now { background: var(--viz-now); animation: step 2.4s ease-in-out infinite; }
+.segs > .d { background: var(--viz-done); }
+.segs > .y { background: var(--turn-you); }
+.segs > .c { background: var(--turn-claude); }
+.segs > .w { background: var(--turn-others-fill); }
+
+/* ---------- meter: a week, bottom up, one block a day ---------- */
+/* Filled up to what's used; days gone a step lighter than days to come; "now" is the blue
+   line across today. Gray while on pace; only the part above the line takes the color of
+   running ahead. */
+.meter { --fill: #C4C8CF; --over: var(--fill);
+  display: flex; flex-direction: column; align-items: center; text-align: center; width: 96px; padding: 12px 4px 10px; cursor: default; }
+.meter .m-lbl { font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); letter-spacing: 0.01em; color: var(--color-text-secondary); }
+.meter .m-week { flex: 1; min-height: 40px; display: flex; flex-direction: column-reverse; gap: 2px; margin: 12px 0 10px; }
+.meter .m-row { flex: 1; min-height: 0; display: flex; align-items: center; gap: 7px; }
+.meter .m-row::after { content: ""; width: 9px; flex: none; }
+.meter .m-dl { width: 9px; flex: none; font-size: 10px; line-height: 10px; font-weight: var(--font-weight-medium); color: var(--color-text-secondary); text-align: center; }
+.meter .m-row.today .m-dl { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
+.meter .m-seg { position: relative; align-self: stretch; width: 22px; border-radius: 2px; background: var(--viz-track); }
+.meter .m-row.past .m-seg, .meter .m-row.today .m-seg { background: var(--viz-track-strong); }
+.meter .m-seg b { position: absolute; left: 0; right: 0; bottom: 0; height: 0; border-radius: inherit; background: var(--fill);
+  transition: height 380ms var(--ease-standard) var(--d, 0ms), background-color 450ms var(--ease-standard); }
+.meter .m-seg i { position: absolute; left: 0; right: 0; height: 0; border-radius: inherit; background: var(--over);
+  transition: height 380ms var(--ease-standard) var(--d, 0ms), background-color 450ms var(--ease-standard); }
+.meter .m-seg b.seam { border-top-left-radius: 0; border-top-right-radius: 0; }
+.meter .m-seg i.seam { border-bottom-left-radius: 0; border-bottom-right-radius: 0; }
+/* The dark contour sets the line off the fill. */
+.meter .m-now { position: absolute; left: -5px; right: -5px; height: 2px; margin-bottom: -1px; border-radius: 1px; background: var(--viz-now);
+  box-shadow: 0 0 0 1.6px var(--color-background-body); z-index: 1; }
+.meter .m-reset { margin-top: 1px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+@media (prefers-reduced-motion: reduce) { .meter .m-seg b, .meter .m-seg i { transition: background-color 200ms linear; } }
+
+/* ---------- chart: an SVG line or bar chart ---------- */
+/* Lines 2 px, the reference (a limit, an even pace) in the accent; labels 10 px medium in
+   gray, today in white; no grid but a hairline baseline. */
+.chart svg { display: block; overflow: visible; }
+.chart text { font: var(--font-weight-medium) 10px var(--font-family-body); fill: var(--color-text-secondary); }
+.chart text.today { fill: var(--color-text-primary); font-weight: 700; }
+.chart text.lim { font-size: 9.5px; }
+.chart .axis { stroke: var(--viz-track-strong); stroke-width: 1; }
+.chart .series { fill: none; stroke: var(--viz-fill); stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+.chart .ref { fill: none; stroke: var(--viz-now); stroke-width: 1.5; stroke-dasharray: 3 3; }
+.chart .area { fill: color-mix(in srgb, var(--viz-fill) 12%, transparent); stroke: none; }
+/* Legend and key rows: a swatch, the words in gray, the value in white. */
+.key { display: flex; align-items: center; gap: 8px; height: 20px; font-size: var(--csm-text-body); }
+.key .k { flex: 1; color: var(--color-text-secondary); }
+.key .v { font-weight: 500; color: #E6E8EB; font-variant-numeric: tabular-nums; }
+.sw { flex: none; width: 14px; height: 2px; border-radius: 1px; background: var(--viz-now); }
+.sw.fill { height: 8px; border-radius: 2px; background: var(--viz-fill); }
+
+/* ---------- the outcome, when it matters: the one solid block ---------- */
+.outcome { border-radius: 6px; padding: 10px 10px 11px; background: var(--color-warning); color: var(--color-on-light); }
+.outcome.limit { background: #B5383C; color: var(--color-on-accent); }
+.outcome .l { font-size: 11.5px; line-height: 15px; }
+.outcome .t { margin: 1px 0 2px; font-size: 17px; line-height: 22px; font-weight: var(--font-weight-heading); letter-spacing: -0.01em; }
