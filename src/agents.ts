@@ -123,6 +123,7 @@ export function scanAgents(s: Session) {
       }
     }
     if (!a.finished) readAgentTail(a, st.mtimeMs);
+    if (a.finished) scanAgentCommands(a, st.size);
     return a;
   };
 
@@ -201,20 +202,24 @@ export function activeAgents(s: Session): Agent[] {
   if (s.status === "ended") return [];
   const now = Date.now();
   return [...s.agents.values()]
-    .filter((a) => !a.finished && now - a.lastAt < AGENT_QUIET_MS)
+    .filter((a) => (!a.finished && now - a.lastAt < AGENT_QUIET_MS) || waitsOnCommand(a, now))
     .filter((a) => !a.run || !s.runs.get(a.run)?.finished)
     .sort((a, b) => a.startedAt - b.startedAt);
 }
 
-// Background commands, from the end of the transcript. A Bash call that ran past its timeout,
+// Background commands, from the end of a transcript. A Bash call that ran past its timeout,
 // or was started in the background, returns a task ID; when the command ends, Claude Code
-// queues a <task-notification> with that ID to wake the session up. TaskStop ends one too.
-export function scanCommands(s: Session) {
-  if (!s.tp || !existsSync(s.tp)) return;
-  const size = statSync(s.tp).size;
-  if (s.commandsRead === size) return;
+// queues a <task-notification> with that ID to wake the session (or the agent) up. TaskStop
+// ends one too. The session's transcript keeps the ID in the result's data; an agent's keeps
+// it only in the result's text, which starts with one of these.
+const MOVED = /^Command (?:running in background with ID|was moved to the background \(ID): ([A-Za-z0-9_-]+)/;
+const textOf = (c: unknown): string =>
+  typeof c === "string" ? c : Array.isArray(c) ? c.map((x) => (typeof x?.text === "string" ? x.text : "")).join("") : "";
+
+export function openCommands(file: string, agent = false): Command[] {
+  const size = statSync(file).size;
   const from = Math.max(0, size - 262144);
-  const lines = readRange(s.tp, from, size).split("\n");
+  const lines = readRange(file, from, size).split("\n");
   const described = new Map<string, string | undefined>(); // Bash calls, by tool-use ID
   const started = new Map<string, Command>();
   const ended = new Set<string>();
@@ -228,25 +233,48 @@ export function scanCommands(s: Session) {
     } catch {
       continue;
     }
-    if (row.isSidechain) continue;
-    if (row.type === "queue-operation") {
+    if (row.type === "queue-operation" || row.type === "attachment") {
       for (const m of line.matchAll(/<task-id>([^<]+)<\/task-id>/g)) ended.add(m[1]);
       continue;
     }
+    if (Boolean(row.isSidechain) !== agent) continue; // the session's own rows, or the agent's
     const content = Array.isArray(row.message?.content) ? row.message.content : [];
     for (const b of content) {
       if (b?.type === "tool_use" && b.name === "Bash") described.set(b.id, b.input?.description);
       if (b?.type === "tool_use" && (b.name === "TaskStop" || b.name === "KillShell")) ended.add(b.input?.task_id ?? b.input?.shell_id);
-      const task = row.toolUseResult?.backgroundTaskId;
-      if (b?.type === "tool_result" && typeof task === "string") {
+      if (b?.type !== "tool_result") continue;
+      let task = row.toolUseResult?.backgroundTaskId;
+      if (typeof task !== "string" && described.has(b.tool_use_id)) task = textOf(b.content).match(MOVED)?.[1];
+      if (typeof task === "string") {
         const at = Date.parse(row.timestamp);
         started.set(task, { id: task, at: Number.isFinite(at) ? at : Date.now(), detail: described.get(b.tool_use_id) });
       }
     }
   }
-  s.commands = [...started.values()].filter((c) => !ended.has(c.id));
+  return [...started.values()].filter((c) => !ended.has(c.id));
+}
+
+export function scanCommands(s: Session) {
+  if (!s.tp || !existsSync(s.tp)) return;
+  const size = statSync(s.tp).size;
+  if (s.commandsRead === size) return;
+  s.commands = openCommands(s.tp);
   s.commandsRead = size;
 }
+
+// An agent that ended its turn with a command of its own still running isn't done: Claude Code
+// wakes it when the command ends. Read again only when its transcript grows.
+function scanAgentCommands(a: Agent, size: number) {
+  if (!a.file || a.commandsRead === size) return;
+  a.commandsRead = size;
+  a.commands = openCommands(a.file, true);
+  const last = a.commands.at(-1);
+  if (last) {
+    a.tool = "Bash";
+    a.detail = last.detail ?? a.detail;
+  }
+}
+const waitsOnCommand = (a: Agent, now: number) => Boolean(a.commands?.some((c) => now - c.at < COMMAND_MAX_MS));
 
 // Background commands the card should show right now.
 export function activeCommands(s: Session): Command[] {
@@ -306,7 +334,7 @@ export function scanAllAgents() {
       } catch {}
     }
     // Keep memory flat: finished agents and runs go after a while.
-    for (const [id, a] of s.agents) if ((a.finished || now - a.lastAt > AGENT_QUIET_MS) && now - a.lastAt > 600_000) s.agents.delete(id);
+    for (const [id, a] of s.agents) if ((a.finished || now - a.lastAt > AGENT_QUIET_MS) && now - a.lastAt > 600_000 && !waitsOnCommand(a, now)) s.agents.delete(id);
     for (const [id, r] of s.runs) if (r.finished && now - r.startedAt > RUN_DIR_MS) s.runs.delete(id);
   }
   // Each session whose agents or commands changed, on its own.

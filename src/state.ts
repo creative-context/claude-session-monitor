@@ -22,6 +22,8 @@ export type Agent = {
   stoppedAt?: number; // when its SubagentStop came
   metaRead?: boolean;
   tailMtime?: number; // transcript mtime we last read the tail at
+  commands?: Command[]; // its own background commands that haven't said they finished
+  commandsRead?: number; // transcript size we last read them at
 };
 
 export type Run = { id: string; startedAt: number; finished: boolean };

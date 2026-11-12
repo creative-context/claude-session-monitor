@@ -184,6 +184,33 @@ describe("agent scan", () => {
     expect(a.detail!.length).toBe(160);
     expect(a.detail).not.toContain("\n");
   });
+
+  test("an agent that ended its turn with its own command running works until the command's notice", () => {
+    const { s, sub } = sessionWithAgents("bgwait");
+    const side = (row: object) => JSON.stringify({ isSidechain: true, timestamp: new Date().toISOString(), ...row }) + "\n";
+    const file = join(sub, "agent-d1.jsonl");
+    writeFileSync(file,
+      side({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: { command: "sleep 600", description: "Wait for the made-up suite" } }], stop_reason: "tool_use" } }) +
+      side({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: "Command running in background with ID: bgd1. Output is being written to: /tmp/x" }] } }) +
+      // A Read whose text quotes the same words starts nothing.
+      side({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu2", name: "Read", input: { file_path: "notes.md" } }], stop_reason: "tool_use" } }) +
+      side({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu2", content: "Command running in background with ID: quoted1." }] } }) +
+      side({ type: "assistant", message: { content: [{ type: "text", text: "Waiting." }], stop_reason: "end_turn" } }));
+    S.apply({ sid: "bgwait", ev: "SubagentStop", agent: "d1", t: Date.now() } as any);
+    A.scanAllAgents();
+    const a = s.agents.get("d1")!;
+    expect(a.finished).toBe(true);
+    expect(a.commands?.map((c) => c.id)).toEqual(["bgd1"]);
+    expect(A.activeAgents(s).map((x) => x.id)).toEqual(["d1"]);
+    expect(a.detail).toBe("Wait for the made-up suite");
+    const { shownStatus } = require("../src/snapshot.ts");
+    expect(shownStatus(s, A.activeAgents(s))).toBe("working");
+    // The command ends: Claude Code queues its notice in the agent's transcript.
+    appendFileSync(file, side({ type: "attachment", attachment: { type: "queued_command", prompt: "<task-notification> <task-id>bgd1</task-id> <status>completed</status>" } }));
+    A.scanAllAgents();
+    expect(A.activeAgents(s)).toEqual([]);
+    expect(shownStatus(s, A.activeAgents(s))).toBe("done");
+  });
 });
 
 describe("workflow names", () => {

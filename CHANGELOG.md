@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Fix: a session whose agent ended its turn while a command of its own kept running in the background shows as working, with that agent and its command, until Claude Code says the command ended. It showed as Done while the agent waited.
 - An optional Claude Code plugin, `session-usage`, gives the app your weekly usage from every session, terminal or Claude app, the moment Claude Code measures it. It shows nothing and sends nothing, and with it the app no longer opens Claude Code in a hidden terminal to read the numbers. Install it with `/plugin install session-usage --marketplace creative-context/claude-session-monitor`.
 
 ## 0.5.0
