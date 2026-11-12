@@ -82,6 +82,8 @@ The weekly usage comes faster, and without the app ever opening Claude Code in a
 
 Answer `y` to add the marketplace and choose the user scope, so every session loads it. In the Claude app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `creative-context/claude-session-monitor`, then **Add plugin**. It's in `plugin/` in this repository.
 
+A session loads plugins when it starts, so sessions already open don't have it yet: run `/reload-plugins` in each, or open new ones. Until then, the usage from those sessions comes from the app's own check, up to 10 minutes late.
+
 ### Build from source
 
 ```bash
