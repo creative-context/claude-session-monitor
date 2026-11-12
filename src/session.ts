@@ -112,7 +112,7 @@ export function hydrate(s: Session) {
     s.recap = recap?.slice(0, 300);
     s.ask = ask?.slice(0, 140);
   }
-  bump();
+  bump(s);
 }
 
 // Workflow agents never send SubagentStart, so an agent is created by whatever we
@@ -163,7 +163,7 @@ export function noteSchedule(s: Session, e: Ev) {
   } else if (e.tool === "mcp__scheduled-tasks__create_scheduled_task" && typeof x.task === "string") {
     s.made = [...(s.made ?? []).filter((m) => m.id !== x.task), { id: x.task, t: e.t }];
   } else return;
-  bump();
+  bump(s);
 }
 
 export function apply(e: Ev) {
@@ -292,5 +292,5 @@ export function apply(e: Ev) {
       s.detail = undefined;
       break;
   }
-  bump();
+  bump(s);
 }

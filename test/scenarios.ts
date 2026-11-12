@@ -354,6 +354,13 @@ writeFileSync(join(appDir, "local_run19.json"), JSON.stringify({
   cliSessionId: id(19), scheduledTaskId: "t-digest", title: "Weekday digest", originCwd: "/tmp/demo",
   createdAt: Date.now() - 60_000, lastActivityAt: Date.now(),
 }));
+// 86. A session that asked you something today, then archived in the app: it never needs you.
+const tp86 = transcript("t86.jsonl", [said("¿Lo mando así?")]);
+ev(id(86), { ev: "UserPromptSubmit", prompt: "Archived question", tp: tp86 });
+ev(id(86), { ev: "Stop", tp: tp86 });
+writeFileSync(join(appDir, "local_arch86.json"), JSON.stringify({
+  cliSessionId: id(86), title: "Archived question", originCwd: "/tmp/demo", createdAt: Date.now() - 60_000, lastActivityAt: Date.now(), isArchived: true,
+}));
 
 // 20. A workflow agent asks for permission while the main agent is quiet; once that agent
 // runs its tool, the session no longer needs you.
@@ -588,9 +595,20 @@ try {
   check("20 an agent's permission, once its tool ran, no longer needs you", find(s, 20)?.status !== "waiting" && find(s, 20)?.needsYou === false, find(s, 20));
   check("21 an agent's unanswered permission needs you, whatever other agents do", find(s, 21)?.status === "waiting" && find(s, 21)?.needsYou === true, find(s, 21));
   check("22 a finished plan is dropped when the next request comes", find(s, 22)?.status === "working" && find(s, 22)?.plan === null, find(s, 22)?.plan);
-  check("the needs count is the cards that need you plus the tasks that can't run",
-    snap.needs === s.filter((x) => x.needsYou).length + snap.tasks.filter((x: any) => x.blocked && !x.blocked.queued).length && snap.needs > 0,
-    [snap.needs, s.filter((x) => x.needsYou).length, snap.tasks.filter((x: any) => x.blocked && !x.blocked.queued).length]);
+  // What needs you: one list the header, the Dock and the menu bar count.
+  const att: any[] = snap.attention ?? [];
+  check("the needs count is the length of what needs you", snap.needs === att.length && snap.needs > 0, [snap.needs, att.length]);
+  check("every session that needs you is in it once, by its ID",
+    s.filter((x) => x.needsYou).every((x) => att.filter((a) => a.sid === x.sid).length === 1) && att.filter((a) => a.sid).length === s.filter((x) => x.needsYou).length,
+    att.map((a) => [a.kind, a.sid]));
+  const ab = att.find((a) => a.id === "t-blocked");
+  check("34 a task that can't run is in it as blocked, with the run that holds it up",
+    ab?.kind === "blocked" && /^Didn.t run /.test(ab?.words ?? "") && ab?.run === id(34) && !ab?.sid, ab);
+  check("37 a task that only waits its turn isn't in it", !att.some((a) => a.id === "t-queued"), att.map((a) => a.id));
+  const rank = { session: 0, blocked: 1, error: 2 } as Record<string, number>;
+  check("in order: sessions waiting or asking, then blocked tasks, then errors",
+    att.every((a, i) => i === 0 || rank[att[i - 1].kind] <= rank[a.kind]) && att.some((a) => a.kind === "error"), att.map((a) => a.kind));
+  check("86 an archived session isn't on the main view", !find(s, 86), find(s, 86));
 
   // Answer the question and approve the permission
   ev(id(3), { ev: "PostToolUse", tool: "AskUserQuestion", t: Date.now() });
@@ -676,6 +694,12 @@ try {
   check("All Sessions search finds it by its prompt", h.total === 1 && h.sessions[0]?.sid === id(17), h);
   h = await history("nothing like this");
   check("All Sessions search with no match is empty", h.total === 0, h.total);
+  // All Sessions marks the rows that need you by the same rule.
+  h = await history();
+  const row = (n: number) => h.sessions.find((x: any) => x.sid === id(n));
+  check("11 a question from today needs you in All Sessions", row(11)?.status === "asks" && row(11)?.needsYou === true, row(11));
+  check("18 a question over a day old doesn't", row(18)?.status === "asks" && row(18)?.needsYou === false, row(18));
+  check("86 an archived one doesn't either", row(86)?.archived === true && row(86)?.needsYou === false, row(86));
 
   // A restart loses nothing: the week comes back from the database.
   server.kill();

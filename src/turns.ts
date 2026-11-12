@@ -40,7 +40,7 @@ export function checkProcesses() {
       if (s.status === "working" || s.status === "waiting") s.note = "Closed in the middle of a turn";
       setStatus(s, "ended", now);
       s.reminders = undefined; // they lived in its process
-      bump();
+      bump(s);
     }
   }
   // Drop reminders that have fired or run out, so the cards update on their own.
@@ -49,7 +49,7 @@ export function checkProcesses() {
     const keep = new Set(pendingReminders(s, now).map((r) => r.id));
     if (keep.size !== s.reminders.length) {
       s.reminders = s.reminders.filter((r) => keep.has(r.id));
-      bump();
+      bump(s);
     }
   }
 }
@@ -119,7 +119,7 @@ export function checkRelayed() {
       s.outcome = "done";
       s.askText = undefined;
       s.relayed = undefined;
-      bump();
+      bump(s);
     }
   }
 }
@@ -153,7 +153,7 @@ export function classifyTurn(s: Session) {
   } else {
     s.outcome = "done";
   }
-  bump();
+  bump(s);
   applyAppAsk(s); // the app's summary may already be in
 }
 
@@ -179,7 +179,7 @@ export function checkQuietTurns() {
       setStatus(s, "done", s.lastMain || now);
       s.tool = s.detail = undefined;
       s.classified = false; // checkTurns() reads how it ended
-      bump();
+      bump(s);
       continue;
     }
     if (last.kind !== "interrupted" && last.kind !== "error") continue;
@@ -193,6 +193,6 @@ export function checkQuietTurns() {
       s.outcome = "error";
       s.errorText = last.text?.slice(0, 160);
     }
-    bump();
+    bump(s);
   }
 }

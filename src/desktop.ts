@@ -110,12 +110,12 @@ export function applyAppAsk(s: Session) {
       return saysTitle(a.text!, t) || sessionNames(a.text!).some((ws) => hasWords(t, ws));
     });
     s.relayed = [...new Set([...named, ...relayTargets(a.text, ...closingContext(s))])];
-    bump();
+    bump(s);
   } else if (!a.text && s.outcome === "asks" && !s.ask && !(s.askText ?? "").includes("?")) {
     // The app read the whole turn as done; a request without a question mark was a guess.
     s.outcome = "done";
     s.askText = undefined;
-    bump();
+    bump(s);
   }
 }
 
@@ -196,19 +196,25 @@ export function readAppFileSoon(sid: string, every = 1000, until = 20_000) {
   if (!path) return;
   clearInterval(watching.get(sid));
   const started = Date.now();
+  const stop = () => {
+    clearInterval(timer);
+    watching.delete(sid);
+  };
   const timer = setInterval(() => {
-    const s = sessions.get(sid);
-    const d = readCached(path, basename(path))?.file;
-    if (s && d?.cli === sid && JSON.stringify(d.ask) !== JSON.stringify(s.appAsk)) {
-      s.appAsk = d.ask;
-      applyAppAsk(s);
-      bump();
-    }
-    // Done once the summary of this turn is in, or after a while: the full pass takes over.
-    const fresh = s && d?.ask && d.ask.edge >= s.since - 10_000;
-    if (!s || fresh || s.status !== "done" || Date.now() - started >= until) {
-      clearInterval(timer);
-      watching.delete(sid);
+    // A timer of its own, outside the server's guard: a throw only ends this watch.
+    try {
+      const s = sessions.get(sid);
+      const d = readCached(path, basename(path))?.file;
+      if (s && d?.cli === sid && JSON.stringify(d.ask) !== JSON.stringify(s.appAsk)) {
+        s.appAsk = d.ask;
+        applyAppAsk(s);
+        bump(s);
+      }
+      // Done once the summary of this turn is in, or after a while: the full pass takes over.
+      const fresh = s && d?.ask && d.ask.edge >= s.since - 10_000;
+      if (!s || fresh || s.status !== "done" || Date.now() - started >= until) stop();
+    } catch {
+      stop(); // the full pass takes over
     }
   }, every);
   watching.set(sid, timer);
@@ -290,7 +296,7 @@ export function readDesktopSessions() {
       };
       sessions.set(sid, s);
       hydrate(s); // its plan and last recap, from the transcript
-      bump();
+      bump(s);
     }
     if (!s) {
       // Older or archived: straight to the history, without touching memory.
@@ -311,7 +317,7 @@ export function readDesktopSessions() {
       s.model = d.model;
       s.appCwd = d.cwd;
       s.task = d.task;
-      bump();
+      bump(s);
     }
   }
   // Only the rows that changed since the last pass, so a quiet Mac writes nothing.

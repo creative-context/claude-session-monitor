@@ -283,7 +283,7 @@ export function needsWalk(s: Session, now = Date.now()): boolean {
 }
 export let walks = 0; // sessions walked since the start, for tests
 
-let agentSig = "";
+const agentSig = new Map<string, string>();
 export function scanAllAgents() {
   const now = Date.now();
   for (const s of sessions.values()) {
@@ -309,10 +309,12 @@ export function scanAllAgents() {
     for (const [id, a] of s.agents) if ((a.finished || now - a.lastAt > AGENT_QUIET_MS) && now - a.lastAt > 600_000) s.agents.delete(id);
     for (const [id, r] of s.runs) if (r.finished && now - r.startedAt > RUN_DIR_MS) s.runs.delete(id);
   }
-  const sig = JSON.stringify([...sessions.values()].map((s) =>
-    [s.sid, activeAgents(s).map((a) => [a.id, a.tool, a.detail, a.tokens, a.phase]), activeCommands(s).map((c) => c.id)]));
-  if (sig !== agentSig) {
-    agentSig = sig;
-    bump();
+  // Each session whose agents or commands changed, on its own.
+  for (const s of sessions.values()) {
+    const sig = JSON.stringify([activeAgents(s).map((a) => [a.id, a.tool, a.detail, a.tokens, a.phase]), activeCommands(s).map((c) => c.id)]);
+    if (agentSig.get(s.sid) === sig) continue;
+    agentSig.set(s.sid, sig);
+    bump(s);
   }
+  for (const sid of agentSig.keys()) if (!sessions.has(sid)) agentSig.delete(sid);
 }
