@@ -6,7 +6,7 @@
 //
 //   bun test/lifecycle.ts
 
-import { appendFileSync, chmodSync, closeSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, realpathSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { appendFileSync, chmodSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, renameSync, rmSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Subprocess } from "bun";
@@ -170,11 +170,11 @@ async function restarts() {
   ev(dir, 81, { ev: "Stop" });
   // 17. A workflow agent's permission request, from a live process named claude, so a restart
   // keeps the session waiting rather than counting it gone. On macOS a link to sleep runs
-  // under the link's name (a copied sleep won't run there); Linux names a process after the
-  // file it runs, so there it is a copy.
+  // under the link's name; Linux names a process after the file it runs, so there it is a
+  // small script named claude.
   const claude = join(dir, "claude");
   if (process.platform === "darwin") symlinkSync(Bun.which("sleep")!, claude);
-  else copyFileSync(realpathSync(Bun.which("sleep")!), claude), chmodSync(claude, 0o755);
+  else writeFileSync(claude, "#!/bin/sh\nsleep 60\n"), chmodSync(claude, 0o755);
   const proc = Bun.spawn([claude, "60"]);
   procs.push(proc);
   ev(dir, 17, { ev: "UserPromptSubmit", prompt: "Run the audit", pid: proc.pid });
