@@ -77,6 +77,26 @@ describe("forecast", () => {
   });
 });
 
+describe("projection", () => {
+  const p = (pct: number, resets = halfway) => U.projection(week(pct, resets), U.pace(week(pct, resets), NOW), NOW);
+  test("faster than it lasts: it ends where it reaches 100%, before the reset", () => {
+    expect(p(60)).toEqual({ at: halfway - WEEK + (100 / 60) * (WEEK / 2), pct: 100 });
+  });
+  test("slower: it ends at the reset, at the share it gets to", () => {
+    expect(p(30)).toEqual({ at: halfway, pct: 60 });
+  });
+  test("not in the first day, except near the limit", () => {
+    const early = NOW + WEEK - 16 * HOUR; // 16 hours into the week
+    expect(p(15, early)).toBeNull(); // 15% in 16 hours would read as 150%+ by the reset
+    expect(p(92, early)).toMatchObject({ pct: 100 });
+  });
+  test("nothing at 100%, without a reset, or before the week starts", () => {
+    expect(p(100)).toBeNull();
+    expect(U.projection(week(50, null), U.pace(week(50, null), NOW), NOW)).toBeNull();
+    expect(p(10, NOW + WEEK + HOUR)).toBeNull();
+  });
+});
+
 describe("paceRows", () => {
   const rows = (w: { pct: number; resets: number | null }) => U.paceRows(w, U.pace(w, NOW), NOW);
   test("12.5 hours in, a hair under: on the line, no pace a day yet, the rest a day", () => {

@@ -659,6 +659,8 @@ try {
   // Checked after the long wait: the server also reads the usage every 5 s, in case a file event is missed.
   const kept = readFileSync(join(dir, "usage-history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
   check("usage: a new share is kept as one more reading", snap.usage?.week?.samples?.at(-1)?.[1] === 45 && kept.at(-1).pct === 45 && kept.filter((r) => r.pct === 42.6).length === 1, kept);
+  // A session that starts again hands over the last share it saw, hours old: lower than this week's.
+  writeFileSync(join(dir, "usage.json"), JSON.stringify({ at: Date.now() / 1000, week: { used_percentage: 12, resets_at: weekResets / 1000 }, five_hour: null }));
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("52 a quiet turn whose transcript ended is done", find(s, 52)?.status === "done", find(s, 52));
   check("53 a question quoted in the closing message doesn't ask you", find(s, 53)?.status === "done", find(s, 53));
@@ -737,6 +739,7 @@ try {
   check("28 after a restart, the wakeup is still there", find(s, 28)?.reminder?.at === later, find(s, 28)?.reminder);
   check("33 after a restart, All Sessions still knows the tasks it set up",
     (await history("noon check")).sessions.find((x: any) => x.sid === id(33))?.made?.length === 2);
+  check("usage: an older, lower share for the same week doesn't take the week back", snap.usage?.week?.pct === 45 && !snap.usage.week.samples.some((x: number[]) => x[1] === 12), snap.usage?.week);
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
 } finally {
   server.kill();

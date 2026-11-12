@@ -47,6 +47,17 @@
     return at > now && at < w.resets ? { at } : null;
   }
 
+  // Where the chart's dashed line ends: the share at the pace so far, at the reset, or where it
+  // reaches 100% if that comes first. Like the forecast, nothing in the first day (a few hours
+  // make a poor average) except near the limit, and nothing at 100% or past the reset.
+  function projection(w, p, now) {
+    if (!w?.resets || w.pct >= 100) return null;
+    const start = w.resets - WEEK, gone = now - start;
+    if (gone <= 0 || now >= w.resets || (gone < DAY && p.key !== "limit")) return null;
+    const end = w.pct + (w.pct / gone) * (w.resets - now);
+    return end <= 100 ? { at: w.resets, pct: end } : { at: start + (100 / w.pct) * gone, pct: 100 };
+  }
+
   // The card's rows under the chart, as [label, value]: how far over or under the even pace,
   // the pace so far a day, and the most a day that lasts until the reset, in the same unit.
   // The pace a day waits for the first day, like the forecast: a few hours make a poor day.
@@ -82,7 +93,7 @@
     return `${nextDay(t, now)} ${d.toLocaleTimeString("en-US", d.getMinutes() ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" })}`;
   };
 
-  const api = { HOUR, DAY, WEEK, pace, forecast, paceRows, nextDay, resetWords, hourOf, hourWords, outWords, whenWords, dayTime };
+  const api = { HOUR, DAY, WEEK, pace, forecast, projection, paceRows, nextDay, resetWords, hourOf, hourWords, outWords, whenWords, dayTime };
   if (typeof module === "object" && module.exports) module.exports = api;
   else globalThis.CsmUsage = api;
 })();

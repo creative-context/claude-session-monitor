@@ -4,7 +4,7 @@
 // transcript alone. Everything happens in a temp folder. Run with `bun test test/reading.test.ts`.
 
 import { beforeAll, describe, expect, test } from "bun:test";
-import { appendFileSync, mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, utimesSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -210,6 +210,32 @@ describe("agent scan", () => {
     A.scanAllAgents();
     expect(A.activeAgents(s)).toEqual([]);
     expect(shownStatus(s, A.activeAgents(s))).toBe("done");
+  });
+});
+
+describe("usage readings", () => {
+  test("within a week the share only goes up: a lower reading is an old one, and left out", async () => {
+    const config = await import("../src/config.ts");
+    const usage = await import("../src/usage.ts");
+    const resets = Math.floor(Date.now() / 1000) + 3 * 86400;
+    let n = 0;
+    const write = (pct: number) => {
+      const f = join(config.DIR, "usage.json");
+      writeFileSync(f, JSON.stringify({ at: Date.now() / 1000 + n, week: { used_percentage: pct, resets_at: resets }, five_hour: null }));
+      const t = Date.now() / 1000 + ++n; // a new mtime each time, as the server tells writes apart by it
+      utimesSync(f, t, t);
+      usage.readUsage();
+      return usage.usageView(Date.now())?.week;
+    };
+    expect(write(20)?.pct).toBe(20);
+    expect(write(8)?.pct).toBe(20); // a session that started again handed over an old number
+    expect(write(25)?.pct).toBe(25);
+    const kept = readFileSync(join(config.DIR, "usage-history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l).pct);
+    expect(kept).toEqual([20, 25]);
+    // Old lower lines already in the history stay out of the week's curve.
+    appendFileSync(join(config.DIR, "usage-history.jsonl"), JSON.stringify({ at: Date.now() + 9e5, pct: 3, resets: resets * 1000 }) + "\n");
+    usage.loadHistory();
+    expect(usage.usageView(Date.now())?.week?.samples.map((x) => x[1])).toEqual([20, 25]);
   });
 });
 

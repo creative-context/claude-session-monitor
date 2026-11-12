@@ -32,7 +32,16 @@ export function readUsage() {
       w && typeof w.used_percentage === "number" && isFinite(w.used_percentage)
         ? { pct: Math.max(0, Math.min(100, w.used_percentage)), resets: toMs(w.resets_at) }
         : null;
-    usage = { at: toMs(j.at) ?? m, week: win(j.week), five: win(j.five_hour) };
+    const next = { at: toMs(j.at) ?? m, week: win(j.week), five: win(j.five_hour) };
+    // A share lower than one already seen this week is an old reading: a session that starts
+    // again hands over the last numbers it saw, maybe hours ago. The week only goes up.
+    const top = next.week?.resets ? highest(next.week.resets) : -1;
+    if (next.week && next.week.pct < top) {
+      if (usage) return;
+      next.week.pct = top; // on startup, the history's number instead
+      next.five = null;
+    }
+    usage = next;
     remember(usage.at, usage.week);
   } catch {
     // Caught mid-write (a writer that can't swap the file in whole): keep the last good
@@ -72,8 +81,10 @@ export function loadHistory() {
     } catch {}
   }
 }
+// The highest share read for the week that resets then, or -1.
+export const highest = (resets: number) => readings.reduce((n, r) => (sameWeek(r.resets, resets) ? Math.max(n, r.pct) : n), -1);
 export function remember(at: number, w: UsageWindow | null) {
-  if (!w?.resets) return;
+  if (!w?.resets || w.pct < highest(w.resets)) return;
   const last = readings.at(-1);
   if (last && (at <= last.at || (sameWeek(last.resets, w.resets) && last.pct === w.pct))) return;
   const r: Reading = { at, pct: w.pct, resets: w.resets };
@@ -172,10 +183,13 @@ export function usageView(now: number) {
   const live = (w: UsageWindow | null) => (w && (w.resets == null ? now - usage!.at < WEEK_MS : w.resets > now) ? w : null);
   const live7 = live(usage.week);
   // This week's readings, oldest first, as [time, share]: the page draws the week's curve.
-  const week = live7 && {
-    ...live7,
-    samples: live7.resets ? readings.filter((r) => sameWeek(r.resets, live7.resets!)).map((r) => [r.at, r.pct]) : [],
-  };
+  // A reading lower than one before it in the week is an old one (see readUsage): left out.
+  const samples: [number, number][] = [];
+  for (const r of readings) {
+    if (!live7?.resets || !sameWeek(r.resets, live7.resets) || r.pct < (samples.at(-1)?.[1] ?? -1)) continue;
+    samples.push([r.at, r.pct]);
+  }
+  const week = live7 && { ...live7, samples };
   const five = live(usage.five);
   return week || five ? { at: usage.at, week, five } : null;
 }
