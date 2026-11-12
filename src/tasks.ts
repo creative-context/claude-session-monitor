@@ -108,12 +108,27 @@ export type RunView = {
   ask?: string; error?: string; recap?: string; note?: string; tool?: string; detail?: string; wait?: string;
 };
 
+// The latest saved runs of every task, newest first, in one query.
+export function savedRuns(): Map<string, any[]> {
+  const out = new Map<string, any[]>();
+  if (!db) return out;
+  const rows = db.query(`SELECT task, sid, status, outcome, first_at, last_at, ask, error, recap, note FROM (
+      SELECT *, row_number() OVER (PARTITION BY task ORDER BY first_at DESC) AS n FROM sessions WHERE task IS NOT NULL)
+    WHERE n <= ${RUNS_SHOWN} ORDER BY task, first_at DESC`).all() as any[];
+  for (const r of rows) {
+    const list = out.get(r.task);
+    if (list) list.push(r);
+    else out.set(r.task, [r]);
+  }
+  return out;
+}
+
 // A task's latest runs, newest first: this week's from memory (live), older ones from
-// the database.
-export function taskRuns(t: Task, now: number): RunView[] {
+// the database (pass savedRuns() when asking for many tasks).
+export function taskRuns(t: Task, now: number, saved?: Map<string, any[]>): RunView[] {
   const runs = new Map<string, RunView>();
   if (db) {
-    const rows = db.query(`SELECT sid, status, outcome, first_at, last_at, ask, error, recap, note FROM sessions
+    const rows = saved ? saved.get(t.id) ?? [] : db.query(`SELECT sid, status, outcome, first_at, last_at, ask, error, recap, note FROM sessions
       WHERE task = ? ORDER BY first_at DESC LIMIT ${RUNS_SHOWN}`).all(t.id) as any[];
     for (const r of rows) {
       // Saved as busy but no longer in memory: it isn't busy anymore.
@@ -148,10 +163,46 @@ export function onceWords(at: number) {
   return `Once, ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })} at ${d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`;
 }
 
+// "today at 3:05 PM", "yesterday at …", "Tue at …", "Oct 23 at …", in local time like the
+// page's own words.
+export function whenWords(t: number, now: number) {
+  const start = (days: number) => {
+    const d = new Date(now);
+    d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - days);
+    return d.getTime();
+  };
+  const at = new Date(t).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" });
+  if (t >= start(0) && t < start(-1)) return `today at ${at}`;
+  if (t >= start(1) && t < start(0)) return `yesterday at ${at}`;
+  if (t >= start(-1) && t < start(-2)) return `tomorrow at ${at}`;
+  const near = Math.abs(t - now) < 6 * 86_400_000;
+  return `${new Date(t).toLocaleDateString("en-US", near ? { weekday: "short" } : { month: "short", day: "numeric" })} at ${at}`;
+}
+
+export type Blocked = {
+  since: number; last: number; tries: number; reason: string; queued: boolean;
+  run: { sid: string; status: Shown; at: number; last: number } | null;
+};
+
+// Why a task didn't run, in the words the window's card uses.
+export function blockedWhy(b: Blocked, now: number) {
+  if (b.reason === "per_task_limit") {
+    if (!b.run) return "a run of it is still open";
+    const from = `the run from ${whenWords(b.run.at, now)}`;
+    if (b.queued) return `it starts once ${from} ends`;
+    return b.run.status === "working" ? `${from} has had no activity since ${whenWords(b.run.last, now)}`
+      : b.run.status === "waiting" || b.run.status === "asks" ? `${from} is waiting for you` : `${from} is still open`;
+  }
+  return b.reason ? `the Claude app skipped it (${b.reason.replace(/_/g, " ")})` : "the Claude app skipped it";
+}
+export const blockedWords = (b: Blocked, now: number) => `Didn't run ${whenWords(b.since, now)}: ${blockedWhy(b, now)}`;
+
 export function taskList(now: number) {
+  const saved = savedRuns();
   return [...tasks.values()].map((t) => {
     const c = t.cron ? parseCron(t.cron) : null;
-    const runs = taskRuns(t, now);
+    const runs = taskRuns(t, now, saved);
     const lastRun = runs[0] ?? null;
     const prev = t.at != null ? (t.at <= now - MISSED_GRACE_MS ? t.at : null) : c ? prevRun(c, now - MISSED_GRACE_MS) : null;
     // A one-time task that has run is done, not paused or missed. The app turns it off
@@ -168,7 +219,7 @@ export function taskList(now: number) {
     // the app starts this one once that one ends. Otherwise (it waits on you, it's stuck,
     // or it's done and still open) it needs you.
     const queued = open?.status === "working" && now - open.last < STUCK_MS;
-    const blocked = t.enabled && trying && !started ? {
+    const blocked: Blocked | null = t.enabled && trying && !started ? {
       since: skips[0].at, last: skips.at(-1)!.at, tries: skips.length, reason: skips.at(-1)!.reason,
       run: open ? { sid: open.sid, status: open.status, at: open.first, last: open.last } : null,
       queued,
@@ -194,6 +245,9 @@ export function taskList(now: number) {
       next: nextOf(t, now),
       missed: missed ? prev : null,
       blocked,
+      // The app can't start it and waiting won't help: it needs you, like a session that
+      // stopped on an error. (Its runs that need you are counted as sessions.)
+      needsYou: Boolean(blocked && !blocked.queued),
       lastRun,
       runs: runs.map((r) => ({ sid: r.sid, status: r.status, needsYou: r.needsYou, at: r.first })),
       rank,

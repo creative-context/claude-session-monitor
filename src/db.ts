@@ -3,9 +3,11 @@
 import { Database } from "bun:sqlite";
 import { basename, join } from "node:path";
 import { DIR, WEEK_MS, FORGET_MS, MAX_SESSIONS } from "./config.ts";
-import { type Status, type Session, type Reminder, tasks, sessions } from "./state.ts";
+import { type Status, type Session, type Reminder, tasks, sessions, dirty, allDirty, clean } from "./state.ts";
 import { relativesOf } from "./desktop.ts";
 import { madeTasks } from "./tasks.ts";
+import { activeAgents } from "./agents.ts";
+import { type Shown, needsYou, shownStatus } from "./snapshot.ts";
 
 // Every session is kept in ~/.claude-session-monitor/sessions.db: the main view shows
 // the last 7 days, History shows all of it. Only what the cards show is stored (titles,
@@ -54,18 +56,28 @@ export const schedOf = (v: unknown): { r?: Reminder[]; m?: Session["made"] } => 
   try { return typeof v === "string" ? JSON.parse(v) : {}; } catch { return {}; }
 };
 
-// Writes the sessions that changed since the last write.
-const written = new Map<string, string>();
-export function persist() {
-  const changed: Session[] = [];
-  for (const s of sessions.values()) {
-    const sig = JSON.stringify(rowOf(s));
-    if (written.get(s.sid) !== sig) {
-      written.set(s.sid, sig);
-      changed.push(s);
-    }
+// Writes the sessions that changed since the last write: the ones a bump marked, or every
+// one when a bump didn't say which (all = true looks at every one anyway). A row is
+// written only when one of its fields differs from what was written last.
+type Row = ReturnType<typeof rowOf>;
+const written = new Map<string, Row>();
+const sameRow = (a: Row | undefined, b: Row) => {
+  if (!a) return false;
+  for (const k in b) if ((a as any)[k] !== (b as any)[k]) return false;
+  return true;
+};
+export function persist(all = false) {
+  if (!db || (!all && !allDirty && !dirty.size)) return;
+  const look = all || allDirty ? sessions.values() : [...dirty].flatMap((sid) => sessions.get(sid) ?? []);
+  clean();
+  const changed: Row[] = [];
+  for (const s of look) {
+    const row = rowOf(s);
+    if (sameRow(written.get(s.sid), row)) continue;
+    written.set(s.sid, row);
+    changed.push(row);
   }
-  if (changed.length) db.transaction(() => { for (const s of changed) upsert.run(rowOf(s)); })();
+  if (changed.length) db.transaction(() => { for (const row of changed) upsert.run(row); })();
 }
 
 // On startup, the last week comes back from the database, so a restart loses nothing.
@@ -87,6 +99,16 @@ export function loadRecent() {
   }
 }
 
+// The same rule as the main view: a session in memory by its live state; one only in the
+// database can't be waiting on you anymore, and an archived one never needs you.
+export function rowNeedsYou(r: { sid: string; status: string | null; outcome: string | null; last_at: number; archived: number }, now: number) {
+  if (r.archived) return false;
+  const s = sessions.get(r.sid);
+  if (s) return !s.archived && needsYou(shownStatus(s, activeAgents(s)), s.last, now);
+  const shown = (r.status === "done" ? r.outcome ?? "done" : r.status) as Shown;
+  return shown !== "waiting" && needsYou(shown, r.last_at, now);
+}
+
 // History: every session, newest first, optionally filtered by words in its title,
 // first prompt, project or last recap.
 export function history(q: string, limit: number, offset: number) {
@@ -98,6 +120,7 @@ export function history(q: string, limit: number, offset: number) {
   const total = (db.query(`SELECT count(*) AS n FROM sessions ${where}`).get(params) as any).n;
   const rows = db.query(`SELECT * FROM sessions ${where} ORDER BY last_at DESC LIMIT $limit OFFSET $offset`)
     .all({ ...params, $limit: limit, $offset: offset }) as any[];
+  const now = Date.now();
   return {
     total,
     sessions: rows.map((r) => ({
@@ -109,6 +132,7 @@ export function history(q: string, limit: number, offset: number) {
       first: r.first_at,
       last: r.last_at,
       status: r.status === "done" ? (r.outcome ?? "done") : r.status,
+      needsYou: rowNeedsYou(r, now),
       recap: r.recap ?? undefined,
       ask: r.ask ?? undefined,
       error: r.error ?? undefined,
@@ -124,7 +148,7 @@ export function history(q: string, limit: number, offset: number) {
 // After a week a session leaves the main view, a day later it leaves memory. It stays
 // in the database, so History keeps it.
 export function forgetOld() {
-  persist();
+  persist(true); // a sweep of every session, in case a change came without a bump
   const now = Date.now();
   const drop = (sid: string) => {
     sessions.delete(sid);

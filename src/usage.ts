@@ -104,24 +104,35 @@ exit $code
 `;
 export const claudeCli = () =>
   [join(homedir(), ".local/bin/claude"), join(homedir(), ".claude/local/claude"), "/opt/homebrew/bin/claude", "/usr/local/bin/claude"].find((p) => existsSync(p));
+// Whether to look again, given when the hook last wrote (logAt) and when the last good
+// reading came (usageAt). Only while the hook is in use: without it the user never agreed
+// to any of this. Only after something happened on this Mac since that reading: with no
+// session at work the share can't have moved here. And not when a terminal session's own
+// status line just saved one.
+export function probeDue(now: number, logAt: number, usageAt: number | null) {
+  if (now - logAt > WEEK_MS) return false;
+  if (usageAt == null) return true;
+  return logAt > usageAt && now - usageAt >= PROBE_EVERY - 2 * 60_000;
+}
+
 let probing = false;
 let probeAfter = 0; // a wait after Claude Code asked to trust the folder
 // status is the status line to run; server.ts finds it next to itself.
 export function probeUsage(status: string) {
   // Only the real app: tests and the demo point CSM_DIR at a temp folder.
   if (process.env.CSM_DIR || probing || Date.now() < probeAfter) return;
-  // Only while the hook is in use: without it the user never agreed to any of this.
+  let logAt: number;
   try {
-    if (Date.now() - statSync(LOG).mtimeMs > WEEK_MS) return;
+    logAt = statSync(LOG).mtimeMs;
   } catch {
     return;
   }
+  if (!probeDue(Date.now(), logAt, usage?.at ?? null)) return;
   const cli = claudeCli();
   if (!cli || !existsSync("/usr/bin/expect") || !existsSync(status)) {
     console.log(`Usage check skipped: ${!cli ? "no claude command" : !existsSync(status) ? "no status line" : "no expect"}.`);
     return;
   }
-  if (usage && Date.now() - usage.at < PROBE_EVERY - 2 * 60_000) return; // fresh from a terminal session
   try {
     mkdirSync(PROBE_DIR, { recursive: true, mode: 0o700 });
     writeFileSync(join(DIR, "probe.exp"), PROBE_SCRIPT);

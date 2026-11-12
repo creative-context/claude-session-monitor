@@ -101,8 +101,34 @@ export const taskChanged = new Map<string, number>(); // when a task was last re
 
 export const sessions = new Map<string, Session>();
 export let version = 0; // bumps on every change, so the stream only sends when needed
-export const bump = () => {
+
+// What changed since the last write to the database: the sessions a bump named, or all
+// of them when it didn't say. persist() looks only at these.
+export const dirty = new Set<string>();
+export let allDirty = true; // the first write looks at everything
+export function clean() {
+  dirty.clear();
+  allDirty = false;
+}
+
+// The server listens here to send the change to the page and to plan the next write,
+// instead of polling the version.
+let listener: ((write: boolean) => void) | undefined;
+export const onBump = (fn: ((write: boolean) => void) | undefined) => {
+  listener = fn;
+};
+
+// A change: of the session given, or of any (all are looked at before the next write).
+export const bump = (s?: Session | string) => {
   version++;
+  if (s == null) allDirty = true;
+  else dirty.add(typeof s === "string" ? s : s.sid);
+  listener?.(true);
+};
+// A change only the page sees, with nothing to write: the clock moved a task or a usage window.
+export const bumpView = () => {
+  version++;
+  listener?.(false);
 };
 
 // The Claude app's own session IDs (as in its "#local_…" links) → Claude Code's.

@@ -1029,10 +1029,10 @@
     return d.toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", ...(sameYear ? {} : { year: "numeric" }) });
   }
 
-  // The one rule for "needs you" comes from the server, so the window, the Dock badge
-  // and the menu bar always agree: blocked on you, or a question or an error from the
-  // last day.
-  const needsYou = (s) => s.needsYou ?? (s.status === "waiting" || ((s.status === "asks" || s.status === "error") && now() - s.last < DAY));
+  // The one rule for "needs you" is the server's, so the window, the Dock badge and the
+  // menu bar always agree: blocked on you, or a question or an error from the last day.
+  // Every session, History row and task it sends says whether it needs you.
+  const needsYou = (s) => s.needsYou === true;
   const isFresh = (s) => (s.status === "waiting" || s.status === "asks" || s.status === "error") && needsYou(s) && now() - (s.since || s.last) < FRESH_MS;
 
   // The server calls a workflow it can't name "Workflow"; that name says nothing.
@@ -1057,7 +1057,7 @@
   const blockedText = (b) => `Didn't run ${when(b.since)}: ${blockedWhy(b)}`;
   const blockedHint = (b) => (b.reason === "per_task_limit" && b.run ? "It runs once that one is closed." : "The Claude app keeps trying every minute.");
   function blockedCards(st = state) {
-    return (st.tasks || []).filter((t) => t.blocked && !t.blocked.queued).map((t) => ({
+    return (st.tasks || []).filter((t) => t.needsYou && t.blocked).map((t) => ({
       sid: `task:${t.id}`, kind: "task", task: t.id, taskName: t.name, title: t.name,
       project: t.project, cwd: t.cwd, file: t.file, status: "error", needsYou: true,
       since: t.blocked.since, first: t.blocked.since, last: t.blocked.since,

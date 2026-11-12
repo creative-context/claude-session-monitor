@@ -5,7 +5,7 @@ import { DAY_MS, WEEK_MS } from "./config.ts";
 import { type Status, type Agent, type Session, tasks, sessions } from "./state.ts";
 import { relativesOf } from "./desktop.ts";
 import { runName, activeAgents, activeCommands } from "./agents.ts";
-import { madeTasks, reminderView, taskList } from "./tasks.ts";
+import { type Blocked, blockedWords, madeTasks, reminderView, taskList } from "./tasks.ts";
 import { usageView } from "./usage.ts";
 
 // What the card shows. A finished turn splits into done, asks (it ended with a question
@@ -103,5 +103,35 @@ export function snapshot() {
     });
   // A scheduled task the app can't start needs you too, like a session that stopped on an error.
   const taskViews = taskList(now);
-  return { now, needs: list.filter((x) => x.needsYou).length + taskViews.filter((t) => t.blocked && !t.blocked.queued).length, sessions: list, tasks: taskViews, usage: usageView(now) };
+  const attention = attentionOf(list, taskViews, now);
+  return { now, server: SERVER, needs: attention.length, attention, sessions: list, tasks: taskViews, usage: usageView(now) };
+}
+
+// Which server answers: the app starts its own with its version, and replaces one that
+// says another.
+export const SERVER = { version: process.env.CSM_VERSION || "dev", pid: process.pid };
+
+// Everything that needs you, in the window's order, with the words the menu bar shows:
+// sessions waiting on you or asking, then tasks that can't run, then turns that ended on
+// an error. The count on the header, the Dock and the menu bar is its length.
+export type Attention = { kind: "session" | "error" | "blocked"; id: string; title: string; words: string; sid?: string; run?: string; error?: boolean };
+type SessionLike = { sid: string; title: string; status: Shown; needsYou: boolean; wait?: string; ask?: string; error?: string };
+type TaskLike = { id: string; name: string; needsYou: boolean; blocked: Blocked | null };
+const WORDS_MAX = 300;
+export function attentionOf(list: SessionLike[], taskViews: TaskLike[], now: number): Attention[] {
+  const one = (s: SessionLike): Attention => {
+    const error = s.status === "error";
+    const words = s.status === "waiting" ? s.wait || "Waiting for your answer"
+      : error ? s.error || "The turn ended with an error"
+      : s.ask || "It asked you something";
+    return { kind: error ? "error" : "session", id: s.sid, title: s.title, words: words.slice(0, WORDS_MAX), sid: s.sid, error };
+  };
+  const mine = list.filter((s) => s.needsYou);
+  const asking = mine.filter((s) => s.status !== "error").map(one);
+  const errors = mine.filter((s) => s.status === "error").map(one);
+  const blocked = taskViews.filter((t) => t.needsYou && t.blocked).map((t): Attention => ({
+    kind: "blocked", id: t.id, title: t.name, words: blockedWords(t.blocked!, now).slice(0, WORDS_MAX),
+    ...(t.blocked!.run ? { run: t.blocked!.run.sid } : {}), error: true,
+  }));
+  return [...asking, ...blocked, ...errors];
 }

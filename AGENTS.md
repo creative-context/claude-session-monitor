@@ -4,13 +4,13 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 
 ## Layout
 
-- `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`. `hooks/statusline.sh`: the status line that saves the plan's weekly and 5-hour usage to `usage.json`; the server runs Claude Code in a hidden terminal every 10 minutes so it runs (`probeUsage`).
+- `hooks/session-hook.sh` and `hooks/event.jq`: the hook Claude Code runs on every event. It appends one compact line to `~/.claude-session-monitor/events.jsonl`. `hooks/statusline.sh`: the status line that saves the plan's weekly and 5-hour usage to `usage.json`; the server runs Claude Code in a hidden terminal so it runs (`probeUsage`), every 10 minutes at most and only after a hook event since the last reading.
 - `install-hooks.ts`: adds or removes the hook's entries in `~/.claude/settings.json`, after a dated backup.
-- `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page. The file itself is the web server, the timers and startup (only when run, behind `import.meta.main`); its parts live in `src/`, one per job, and import without side effects:
-  - `config.ts` folders and time limits; `state.ts` the types and the shared state (sessions, tasks, the version that bumps on each change).
+- `server.ts`: the Bun server. Reads the events, the end of each transcript and the Claude app's session files and `scheduled-tasks.json`, keeps one small state per session, saves it to `sessions.db`, and streams it to the page. The file itself is the web server, the timers and startup (only when run, behind `import.meta.main`): changes go out on `bump()`, not on a poll, and one 3 s tick does what changes with the clock; each part is wrapped so a throw is logged and the rest goes on; its parts live in `src/`, one per job, and import without side effects:
+  - `config.ts` folders and time limits; `state.ts` the types and the shared state (sessions, tasks, the version that bumps on each change, and the sessions changed since the last write: `bump(s)` names one, `bump()` marks all, `bumpView()` none).
   - `session.ts` the state machine (`apply`); `log.ts` reading, rotating and replaying `events.jsonl`; `turns.ts` process checks and how a turn ended.
   - `db.ts` `sessions.db` and History; `desktop.ts` the Claude app's session files; `agents.ts` subagents, workflows and background commands.
-  - `tasks.ts` scheduled tasks and reminders; `usage.ts` plan usage and its probe; `snapshot.ts` what the page gets, with the "needs you" rule.
+  - `tasks.ts` scheduled tasks and reminders; `usage.ts` plan usage and its probe; `snapshot.ts` what the page gets, with the "needs you" rule and the `attention` list built from it.
 - `closing.ts`: the rules that read a turn's closing message (done, asks you, or passes on another session's question), with its cases in `test/closing.test.ts` (`bun test`).
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.
 - `public/index.html`: the whole page, styles and script: the Obsidian theme's colors in Apple's system fonts (SF Pro, SF Mono), with no font files.
@@ -38,7 +38,8 @@ sh app/build.sh --release  # build and zip for a release
 - **One network request, and only one:** the app's update check in `app/main.swift`, to GitHub's releases API. The usage probe starts Claude Code itself, which connects as it always does; the app adds nothing to that and sends nothing of its own. It only ever opens this repository's release pages. To test it, serve a fake reply such as `{"tag_name": "v9.9.9", "html_url": "…/releases/tag/v9.9.9"}` and point the app at it with `defaults write com.creativecontext.ClaudeSessionMonitor updateFeedURL http://127.0.0.1:4760/latest` (delete the key afterwards).
 - **Tests and the demo never touch the user's data.** They point `CSM_DIR`, `CSM_APP_SESSIONS` and `CSM_PROJECTS` at temp folders.
 - **The app runs its own copy of the server.** After changing `server.ts`, `src/`, `closing.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
-- **One rule for "needs you",** computed in `src/snapshot.ts` and shared by the window, the Dock badge and the menu bar.
+- **One rule for "needs you",** computed in `src/snapshot.ts` and shared by the window, the Dock badge and the menu bar: sessions, History rows and tasks carry `needsYou`, and the state carries `attention`, the list with its words. The page and the app show them and never work them out.
+- **The server ends with its app and survives its own errors.** It exits when `CSM_PARENT_PID` is gone and with code 3 when the port is taken; `/api/state` carries `server: { version, pid }`. Wrap new timers in `safe()`.
 - **Interface copy in American English.** Text reaches 4.5:1 on its surface, motion stays calm, and Reduce Motion keeps only color fades.
 - **No product or personal names, and no other brands,** in code, comments, docs or demo content, beyond the credits in the README. Demo data is made up.
 
