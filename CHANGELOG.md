@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.5.1
 
 - Fix: the usage card's dashed line follows the same rule as the forecast. It waits for the week's first day, as an average of a few hours overstates, and then ends where the pace reaches 100% if that comes before the reset. Before, it drew from the first hours and stopped at 100% on the reset, which read as "you'll end right at the limit".
 - Fix: within a week the share only goes up. A lower number for the same week, from a session that starts again with the last one it saw, no longer takes the card or the week's curve back for a moment.
