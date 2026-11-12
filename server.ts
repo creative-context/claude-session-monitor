@@ -695,6 +695,9 @@ const REQUEST = [
   /\b(quieres que|prefieres|te parece (bien )?que|lo hago yo|lo mando yo|lo envio yo)\b/,
   /\bcon (un|una) ["'“‘][^"'”’]{1,40}["'”’] (lo|la|los|las|te|me|sigo|arranco)\b/,
   /\b(espera|esperan|falta|faltan|necesito|pendientes? de) tu (visto bueno|aprobacion|ok|decision)\b/,
+  // "sigue esperando que elijas versión", "solo falta tu respuesta", "waiting for you to pick one"
+  /\b(espera|esperan|esperamos|esperando|falta|faltan) (a )?(que (elijas|escojas|decidas|confirmes|apruebes|me digas|respondas|contestes)|tu (respuesta|eleccion))\b/,
+  /\b(waiting|waits) (for|on) you to (choose|pick|decide|confirm|approve|answer|reply|say)\b/,
   /\b(awaits?|awaiting|needs?|pending) your (approval|ok|okay|sign-off|go-ahead|decision)\b/,
   /\b(let me know|tell me|should i|do you want|would you like|want me to|shall i|please confirm|your call|say the word|which (one|option|do you)|approve|i need (you|your|to know)|waiting (for|on) (you|your))\b/,
 ];
@@ -720,6 +723,9 @@ const COURTESY = new RegExp(String.raw`\b(${[
   String.raw`happy to help`,
 ].join("|")})\b`);
 
+// What waits on you, said the other way round: "Nada espera tu respuesta", or only if it
+// happens: "Solo te escribo si algo espera tu respuesta".
+const WAITS_NOT = /\b(nada|ninguna?|nothing|none)\b[^.]{0,20}\b(espera|esperan|waits?|waiting)\b|\b(si|if)\b[^,.]{0,40}\b(espera|esperan|waits?|waiting)\b/;
 function closingRequest(text: string): string | undefined {
   // The first request in the closing lines says the most ("which of the two"); the
   // ones after it tend to be the how ("say 'send it' and I send it").
@@ -728,7 +734,7 @@ function closingRequest(text: string): string | undefined {
   const items = closingItems(text).map(lastSentence).filter((s) => !/^(si|if)\b/i.test(s));
   const hit = [...closingSentences(text, 3), ...items].find((s) => {
     const f = fold(s);
-    return !COURTESY.test(f) && REQUEST.some((re) => re.test(f));
+    return !COURTESY.test(f) && !WAITS_NOT.test(f) && REQUEST.some((re) => re.test(f));
   });
   return hit ? hit.slice(0, 160) : undefined;
 }

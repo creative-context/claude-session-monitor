@@ -397,6 +397,12 @@ closing(73, "Here's where it stands:\n\n- The build passes.\n\n- The icons need 
 closing(74, "Listo el cambio.\n\nPendientes:\n- Los textos nuevos esperan tu visto bueno.\n- La versión es la 2.1. El zip sigue igual. No hay commits nuevos.");
 closing(75, "**A tener en cuenta:**\n- **Colores:** en la portada el azul es más oscuro que en el menú. Si prefieres que coincidan, los igualo.\n- **Otras versiones:** siguen en la liga de antes.\n- **Sin commit:** no exporté nada. Estos cambios no están en commit.");
 closing(76, "**Qué cambió:**\n1. **¿Por qué fallaba?** La regla estaba en otra hoja de estilos.\n2. **Pruebas:** 17 de 17, en desarrollo y en build.");
+// 81–84. A closing that says something waits on your choice, without a question mark, asks
+// you; one that says nothing waits, or only if it happens, doesn't.
+closing(81, "Quedó anotado el rechazo. La respuesta al cliente sigue esperando que elijas versión: tal cual, o con la línea nueva.");
+closing(82, "The notes are filed. The invite is still waiting for you to pick a slot.");
+closing(83, "Revisé las tres sesiones. Nada espera tu respuesta.");
+closing(84, "Sigo vigilando. Solo te escribo si algo espera tu respuesta y no lo has visto.");
 
 // 77–80. A turn that ends with a command still running in the background stays active until
 // Claude Code's notice that it ended, a TaskStop, or two hours. 77 gets its notice later on.
@@ -588,8 +594,6 @@ try {
   check("3 answering resumes work", find(s, 3)?.status === "working", find(s, 3));
   check("4 approving resumes work", find(s, 4)?.status === "working", find(s, 4));
   check("5 new prompt clears recap and ask", find(s, 5)?.status === "working" && !find(s, 5)?.ask && !find(s, 5)?.recap, find(s, 5));
-  const kept = readFileSync(join(dir, "usage-history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
-  check("usage: a new share is kept as one more reading", snap.usage?.week?.samples?.at(-1)?.[1] === 45 && kept.at(-1).pct === 45 && kept.filter((r) => r.pct === 42.6).length === 1, kept);
 
   // The interrupt check needs 8 s of quiet
   await Bun.sleep(10_000);
@@ -599,6 +603,9 @@ try {
   check("9 journal result ends the agent, session back to done", find(s, 9)?.status === "done" && find(s, 9)?.agentCount === 0, find(s, 9));
   check("0 SubagentStop ends the agent, session back to done", find(s, 0)?.status === "done" && find(s, 0)?.agentCount === 0, find(s, 0));
   check("77 the notice that its command ended brings it back to done", find(s, 77)?.status === "done" && find(s, 77)?.commandCount === 0, find(s, 77));
+  // Checked after the long wait: the server also reads the usage every 5 s, in case a file event is missed.
+  const kept = readFileSync(join(dir, "usage-history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
+  check("usage: a new share is kept as one more reading", snap.usage?.week?.samples?.at(-1)?.[1] === 45 && kept.at(-1).pct === 45 && kept.filter((r) => r.pct === 42.6).length === 1, kept);
   check("15 a request with no question mark asks you", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("52 a quiet turn whose transcript ended is done", find(s, 52)?.status === "done", find(s, 52));
   check("53 a question quoted in the closing message doesn't ask you", find(s, 53)?.status === "done", find(s, 53));
@@ -644,6 +651,10 @@ try {
   check("74 a point that waits for your OK asks you", find(s, 74)?.status === "asks" && /visto bueno/.test(find(s, 74)?.ask ?? ""), find(s, 74));
   check("75 a point that only adds an option is done", find(s, 75)?.status === "done", find(s, 75));
   check("76 a question a point answers itself is done", find(s, 76)?.status === "done", find(s, 76));
+  check("81 waiting for you to choose, without a question mark, asks you", find(s, 81)?.status === "asks" && /elijas/.test(find(s, 81)?.ask ?? ""), find(s, 81));
+  check("82 waiting for you to pick, in English, asks you", find(s, 82)?.status === "asks", find(s, 82));
+  check("83 nothing waits on you: done", find(s, 83)?.status === "done", find(s, 83));
+  check("84 only if something waits: done", find(s, 84)?.status === "done", find(s, 84));
   check("27 an offer of one thing in English asks you", find(s, 27)?.status === "asks" && /push it/.test(find(s, 27)?.ask ?? ""), find(s, 27));
 
   // Last 7 Days and All Sessions

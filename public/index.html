@@ -2000,10 +2000,15 @@
   const $usage = document.getElementById("usage");
   const USAGE_HIGH = 80;
   // Within a day, the time it resets; further off, the day (and the time, in the tooltip).
+  // On the day the week resets, its next reset is a week off: "next Thu", not "Thu", which
+  // would read as today.
+  const nextDay = (t) => {
+    const day = new Date(t).toLocaleDateString("en-US", { weekday: "short" });
+    return t - now() > DAY && new Date(t).getDay() === new Date(now()).getDay() ? `next ${day}` : day;
+  };
   const resetWords = (t, full) => {
     if (!t) return "";
-    const day = new Date(t).toLocaleDateString("en-US", { weekday: "short" });
-    return t - now() < DAY ? clock(t) : full ? `${day} ${clock(t)}` : day;
+    return t - now() < DAY ? clock(t) : full ? `${nextDay(t)} ${clock(t)}` : nextDay(t);
   };
   // How the week is going: the share used against the share of the week gone by.
   const WEEK = 7 * DAY;
@@ -2050,7 +2055,7 @@
   // "Thu 1 AM", with minutes only when it isn't on the hour.
   const dayTime = (t) => {
     const d = new Date(t);
-    return `${dayName(t)} ${d.toLocaleTimeString("en-US", d.getMinutes() ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" })}`;
+    return `${nextDay(t)} ${d.toLocaleTimeString("en-US", d.getMinutes() ? { hour: "numeric", minute: "2-digit" } : { hour: "numeric" })}`;
   };
 
   // A curve through the readings that never dips or overshoots between them (Fritsch and
@@ -2137,7 +2142,8 @@
       html += `<div class="uc-chart">${weekChart(w, p, fc, chartW)}</div>`;
       const days = (now() - (w.resets - WEEK)) / DAY, left = Math.max(0, 100 - w.pct), daysLeft = (w.resets - now()) / DAY;
       const ahead = Math.round(w.pct - (p.gone ?? 0));
-      html += `<div class="uc-rows">${row(ahead >= 0 ? "Ahead of pace" : "Behind pace", `${Math.abs(ahead)}%`, '<i class="uc-sw"></i>')}${
+      // The column's own words for the pace, and how far over or under the blue line.
+      html += `<div class="uc-rows">${row(p.say, `${Math.abs(ahead)}% ${ahead >= 0 ? "over" : "under"}`, '<i class="uc-sw"></i>')}${
         days >= 1 / 24 ? row("Your pace", `${Math.round(w.pct / days)}% a day`) : ""}${
         daysLeft >= 1 ? row("Left per day", `${Math.round(left / daysLeft)}%`) : row("Left until the reset", `${Math.round(left)}%`)}</div>`;
     }
