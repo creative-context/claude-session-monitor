@@ -112,7 +112,9 @@ export function loadPosition(): Position | undefined {
 let saved = "";
 function writePosition(p: Position) {
   const text = JSON.stringify(p);
-  if (text === saved) return;
+  // The same position as last time is written again if its file went away meanwhile (a
+  // file made anew can get the old inode back on Linux, and then the same text).
+  if (text === saved && existsSync(POSITION)) return;
   try {
     writeFileSync(`${POSITION}.tmp`, text);
     renameSync(`${POSITION}.tmp`, POSITION);
