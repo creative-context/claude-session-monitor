@@ -753,8 +753,8 @@ check("cron too unusual for words gives null", describeCron("0 */3 1-7 * *") ===
 // Vixie cron: a day field starting with * makes both day fields required (Dec 21 is the first Monday on 1, 11, 21 or 31).
 check("cron: */n in the day of the month still needs the weekday too", (() => { const d = new Date(nextRun(parseCron("0 0 */10 * 1")!, thursday)!); return d.getMonth() === 11 && d.getDate() === 21; })());
 check("cron: day of month or day of week, either one", new Date(nextRun(parseCron("0 0 13 * 5")!, thursday)!).getDate() === 23);
-check("cron: 7 is Sunday", new Date(nextRun(parseCron("0 7 * * 7")!, thursday)!).getDay() === 0);
-check("cron: the run before", prevRun(parseCron("0 7 * * 1-5")!, thursday) === new Date(2026, 9, 22, 7).getTime());
+check("cron: 7 is Sunday", new Date(nextRun(parseCron("0 9 * * 7")!, thursday)!).getDay() === 0);
+check("cron: the run before", prevRun(parseCron("0 9 * * 1-5")!, thursday) === new Date(2026, 9, 22, 9).getTime());
 check("cron: a bad expression is null", parseCron("61 * * * *") === null && parseCron("bad") === null && parseCron("* * * *") === null);
 
 // The hook keeps when a reminder fires and its ID, never what it will do. Needs jq.
