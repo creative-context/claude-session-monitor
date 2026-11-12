@@ -6,8 +6,9 @@
 //   bun test/demo.ts --edge   → adds the edge cases: long text, a usage limit, a stopped
 //                               session, one closed mid-turn, many agents, an idle one
 //   bun test/demo.ts --hot    → a week running hot: the forecast and its card; --limit, a week used up
+//   bun test/demo.ts --gif    → only four sessions, for docs/demo.gif: a line on stdin plays its story
 
-import { appendFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCron, prevRun } from "../cron.ts";
@@ -15,6 +16,7 @@ import { parseCron, prevRun } from "../cron.ts";
 const args = process.argv.slice(2);
 const PORT = Number(args.find((a) => /^\d+$/.test(a)) ?? 4748);
 const EDGE = args.includes("--edge");
+const GIF = args.includes("--gif");
 const dir = mkdtempSync(join(tmpdir(), "csm-demo-"));
 const log = join(dir, "events.jsonl");
 writeFileSync(log, "");
@@ -91,7 +93,7 @@ ev(s, now - 22 * MIN, { ev: "UserPromptSubmit", prompt: "Nightly data audit", cw
 ev(s, now - 21 * MIN, { ev: "Stop", cwd: project("analytics"), tp });
 const auditRun = s;
 
-finished("Onboarding email copy", project("marketing-site"), now - 26 * MIN,
+const onboarding = finished("Onboarding email copy", project("marketing-site"), now - 26 * MIN,
   "Wrote three subject lines and a short body. The draft is in emails/onboarding.md.");
 
 // Done, and set to look again on its own later: it stays in Active until then.
@@ -99,6 +101,7 @@ s = finished("Check the staging deploy", project("web-app"), now - 35 * MIN,
   "The deploy is rolling out to staging. I'll look at the error rate again in an hour.");
 ev(s, now - 35 * MIN - 2000, { ev: "PostToolUse", tool: "CronCreate", cwd: project("web-app"),
   x: { id: "a1b2c3d4", at: now + 55 * MIN, cron: "0 12 * * *", rec: false } });
+const staging = s;
 
 s = id();
 const tpErr = join(dir, `${s}.jsonl`);
@@ -324,6 +327,35 @@ writeFileSync(join(dir, "usage.json"), JSON.stringify({
     if (pct !== last) lines.push(JSON.stringify({ at: t + step, pct, resets })), (last = pct);
   }
   writeFileSync(join(dir, "usage-history.jsonl"), lines.join("\n") + "\n");
+}
+
+// --gif: keep four sessions and the audit's task, with no usage, then wait for the cue.
+// The checkout fix stops on a permission; three and a half seconds later the audit's
+// agents finish and it closes its turn.
+if (GIF) {
+  const keep = new Set([checkout, auditRun, onboarding, staging]);
+  const lines = readFileSync(log, "utf8").split("\n").filter((l) => l && keep.has(JSON.parse(l).sid));
+  writeFileSync(log, lines.join("\n") + "\n");
+  for (const f of readdirSync(appDir)) {
+    if (f === "scheduled-tasks.json") continue;
+    if (!keep.has(JSON.parse(readFileSync(join(appDir, f), "utf8")).cliSessionId)) rmSync(join(appDir, f));
+  }
+  writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile.filter((t) => t.id === "data-audit") }));
+  rmSync(join(dir, "usage.json"));
+  rmSync(join(dir, "usage-history.jsonl"));
+  let played = false;
+  process.stdin.on("data", () => {
+    if (played) return;
+    played = true;
+    const at = Date.now();
+    ev(checkout, at, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("web-app") });
+    setTimeout(() => {
+      const end = Date.now();
+      for (const agentId of ["demo1", "demo2"]) appendFileSync(join(runDir, "journal.jsonl"), JSON.stringify({ type: "result", agentId, result: "ok" }) + "\n");
+      ev(auditRun, end - 500, { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap: "All 12 tables match last night's counts." }, cwd: project("analytics"), tp });
+      ev(auditRun, end, { ev: "Stop", cwd: project("analytics"), tp });
+    }, 3500);
+  });
 }
 
 const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
