@@ -238,6 +238,7 @@ export function start() {
   safe("scanAllAgents", scanAllAgents)();
   safe("checkTurns", checkTurns)(); // sessions that ended while the server was off
   safe("relinkRelays", relinkRelays)(); // which of them pass on another session's question
+  safe("checkRelayed", checkRelayed)(); // and which of those were answered meanwhile
   safe("persist", persist)();
   onBump((write) => {
     sendSoon();

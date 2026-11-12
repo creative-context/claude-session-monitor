@@ -352,6 +352,30 @@ for (const [n, other, answered, close] of [
   }));
 }
 
+// 120. Like 89, but 121 asked, then got your answer and finished: 120 is answered, and stays
+// so after a restart, though the app's note on its turn still asks for the pick.
+{
+  const at = Date.now() - 5 * 60_000;
+  // Its transcript as it ends: the question, your answer, and its turn on it.
+  const tp121 = transcript("t121.jsonl", [said("Two ways to start. Which one do you want first?"),
+    { type: "user", message: { content: "The second one" } }, said("Started with the second one.")]);
+  ev(id(121), { ev: "UserPromptSubmit", prompt: "Plan the design", tp: tp121, t: at - 60_000 });
+  ev(id(121), { ev: "Stop", tp: tp121, t: at - 30_000 });
+  writeFileSync(join(appDir, `local_${id(121)}.json`), JSON.stringify({
+    sessionId: `local_${id(121)}`, cliSessionId: id(121), title: "Draft review 121", originCwd: "/tmp/demo", createdAt: at - 60_000, lastActivityAt: at + 90_000,
+  }));
+  const tp120 = transcript("t120.jsonl", [said(`La sesión del borrador espera que escojas una de las dos portadas: ${link(121)}.\n\nAparte, las pruebas pasan.`)]);
+  ev(id(120), { ev: "UserPromptSubmit", prompt: "¿Cómo vamos?", tp: tp120, t: at });
+  ev(id(120), { ev: "Stop", tp: tp120, t: at + 1000 });
+  writeFileSync(join(appDir, `local_${id(120)}.json`), JSON.stringify({
+    sessionId: `local_${id(120)}`, cliSessionId: id(120), title: "Notes 120", originCwd: "/tmp/demo", createdAt: at - 60_000, lastActivityAt: at + 1000,
+    lastTurnEdgeAt: at + 1000, lastAssistantUuid: "u-last",
+    postTurnSummary: { status_category: "blocked", needs_action: "choose which to start with", summarizes_uuid: "u-last" },
+  }));
+  ev(id(121), { ev: "UserPromptSubmit", prompt: "The second one", tp: tp121, t: at + 60_000 });
+  ev(id(121), { ev: "Stop", tp: tp121, t: at + 90_000 });
+}
+
 // 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
 // in the file name); 45 names a session the app no longer has.
 for (const [n, file, extra] of [
@@ -670,6 +694,7 @@ try {
   check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
   check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
   check("87 a question it passes on, which the other session shows itself, shows only there", find(s, 87)?.status === "done" && find(s, 87)?.needsYou === false && find(s, 88)?.status === "asks", [find(s, 87), find(s, 88)]);
+  check("120 a passed-on pick that was answered in its session is done", find(s, 120)?.status === "done" && find(s, 120)?.needsYou === false, find(s, 120));
   check("89 the app's note on a closing that passes on another session's pick shows only there", find(s, 89)?.status === "done" && find(s, 89)?.needsYou === false, find(s, 89));
   check("61 an app note that says to answer in another session, named in words, is that session's", find(s, 61)?.status === "done", find(s, 61));
   check("62 an app note that asks for the OK, or for more changes, still asks", find(s, 62)?.status === "asks", find(s, 62));
@@ -740,6 +765,7 @@ try {
   check("33 after a restart, All Sessions still knows the tasks it set up",
     (await history("noon check")).sessions.find((x: any) => x.sid === id(33))?.made?.length === 2);
   check("usage: an older, lower share for the same week doesn't take the week back", snap.usage?.week?.pct === 45 && !snap.usage.week.samples.some((x: number[]) => x[1] === 12), snap.usage?.week);
+  check("120 after a restart, the answered pick stays answered", find(s, 120)?.status === "done" && find(s, 120)?.needsYou === false, find(s, 120));
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
 } finally {
   server.kill();

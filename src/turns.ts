@@ -111,11 +111,17 @@ export function closingContext(s: Session): [Other[], string[]] {
 }
 
 // A turn that asks you something on behalf of a session it links to is answered once that
-// session gets a message after the turn ended: you went there and answered.
+// session gets a message after the turn ended: you went there and answered. Or once that
+// session has moved on since and asks you nothing now: after a restart its messages from
+// before aren't read again, and the Claude app's note on this turn still asks.
+const askingNow = (x: Session) => x.status === "waiting" || (x.status === "done" && x.outcome === "asks");
 export function checkRelayed() {
   for (const s of sessions.values()) {
     if (s.status !== "done" || s.outcome !== "asks" || !s.relayed?.length) continue;
-    if (s.relayed.some((sid) => (sessions.get(sid)?.lastPrompt ?? 0) > s.since)) {
+    if (s.relayed.some((sid) => {
+      const x = sessions.get(sid);
+      return !!x && ((x.lastPrompt ?? 0) > s.since || (x.since > s.since && !askingNow(x)));
+    })) {
       s.outcome = "done";
       s.askText = undefined;
       s.relayed = undefined;

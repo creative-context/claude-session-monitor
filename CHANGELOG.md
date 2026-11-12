@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.3
+
+- Fix: a session that passes on another session's question no longer needs you again after the app restarts, once you answered in that other session. The Claude app's note on its turn still asks, and on a restart the monitor no longer knew you had answered. Now a passed-on question also counts as answered once its session has moved on and asks you nothing.
+
 ## 0.6.2
 
 - Fix: a session that was already waiting for you when the app updated gets its card's words read again with the new rules, so a request cut short before 0.6.1 shows whole without waiting for its next turn.
