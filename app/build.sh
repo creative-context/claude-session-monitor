@@ -29,7 +29,7 @@ cp app/Info.plist "$APP/Contents/Info.plist"
 # The server, the page and the hook, inside the app.
 SERVER="$APP/Contents/Resources/server"
 mkdir -p "$SERVER"
-cp server.ts cron.ts install-hooks.ts "$SERVER/"
+cp server.ts closing.ts cron.ts install-hooks.ts "$SERVER/"
 cp -R public hooks "$SERVER/"
 chmod 755 "$SERVER/hooks/session-hook.sh" "$SERVER/hooks/statusline.sh"
 # The app's license travels with it.

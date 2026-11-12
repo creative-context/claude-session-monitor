@@ -12,6 +12,7 @@ import {
 import { Database } from "bun:sqlite";
 import { homedir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { classifyClosing, fold, type Other, relayTargets } from "./closing.ts";
 import { describeCron, nextRun, parseCron, prevRun } from "./cron.ts";
 
 const PORT = Number(process.env.CSM_PORT ?? 4747);
@@ -621,196 +622,20 @@ function readLastTurn(tp: string): LastTurn {
   return { kind: "none" };
 }
 
-// The last sentences of a closing message's last paragraph.
-function closingSentences(text: string, count: number): string[] {
-  // Quoted lines ("> …") are what the session quotes, such as a message it sent for you;
-  // a question in them isn't one for you.
-  const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "").replace(/[*_`#>]/g, "").trim();
-  const last = clean.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).at(-1) ?? "";
-  const sentences = (last.match(/[^.!?\n]+[.!?]+|[^.!?\n]+$/g) ?? []).map((s) => s.trim()).filter(Boolean);
-  return sentences.slice(-count);
-}
-
-// The question a closing message ends on: one of the last two sentences of its last
-// paragraph ("¿…?" works too). A question earlier in the text doesn't count, and neither
-// does a short courtesy one ("¿Algo más?", "Anything else I can help with?").
-// When the message ends on a list ("Lo que queda:" and its points), a question that ends
-// one of its items counts too: "1. **La segunda parte.** … ¿La arranco?".
-function closingQuestion(text: string): string | undefined {
-  const open = (s: string) => s.endsWith("?") && !courtesyQuestion(s);
-  const q = closingSentences(text, 2).reverse().find(open) ?? closingItems(text).map(lastSentence).find(open);
-  return q && q.length > 3 ? q.slice(0, 160) : undefined;
-}
-
-// The items of the list a closing message ends on, each with its lines joined. Its items may
-// sit apart, with blank lines between them; the list starts after its lead-in.
-function closingItems(text: string): string[] {
-  const lines = closingLines(text);
-  const inList = (l: string) => LIST_ITEM.test(l) || /^\s+\S/.test(l);
-  let i = lines.length - 1;
-  while (i >= 0 && !lines[i].trim()) i--;
-  const items: string[] = [];
-  let cur: string[] = [];
-  for (; i >= 0; i--) {
-    const l = lines[i];
-    if (!l.trim()) {
-      let j = i - 1;
-      while (j >= 0 && !lines[j].trim()) j--;
-      if (j < 0 || !inList(lines[j])) break;
-      continue;
-    }
-    if (!inList(l)) break;
-    cur.unshift(l.trim());
-    if (LIST_ITEM.test(l) && !/^\s{2}/.test(l)) {
-      items.unshift(cur.join(" ")); // a top-level item; indented lines above it are its own
-      cur = [];
-    }
-  }
-  return items;
-}
-const lastSentence = (item: string) =>
-  (markless(item).replace(LIST_ITEM, "").match(/[^.!?\n]+[.!?]+|[^.!?\n]+$/g) ?? []).map((s) => s.trim()).filter(Boolean).at(-1) ?? "";
-
-// A question from a list item reads better with the item's bold lead: "La segunda parte,
-// el menú. ¿La arranco?".
-function askWithLead(text: string, ask: string): string {
-  const item = closingItems(text).find((it) => markless(it).includes(ask));
-  const lead = item?.match(/^\s*(?:\d+[.)]|[-•+*])\s+\*\*([^*]{3,80})\*\*/)?.[1].trim();
-  if (!lead || lead.includes(ask) || ask.includes(lead)) return ask;
-  return `${/[.!?:]$/.test(lead) ? lead : `${lead}.`} ${ask}`.slice(0, 160);
-}
-function courtesyQuestion(s: string): boolean {
-  return COURTESY.test(fold(s)) && s.split(/\s+/).length <= 6;
-}
-
-// Requests without a question mark ("Solo me falta saber cuál prefieres", "Con un
-// 'adelante' lo hago", "Let me know which one"). Courtesy closings, open offers for
-// anything more ("si necesitas algo más, avísame", "si quieres seguir con otro ajuste,
-// dime", "if you want another change, let me know"), don't count. An offer of one
-// thing ("si quieres que lo suba, dime") does.
-const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
-const REQUEST = [
-  /\b(me falta saber|solo falta|necesito (saber|que)|falta que (me )?(digas|confirmes|decidas|elijas|apruebes))\b/,
-  /\b(dime|dimelo|confirmame|avisame|decide|elige|escoge|aprueba|indicame|me dices|me confirmas|me avisas)\b/,
-  /\b(quieres que|prefieres|te parece (bien )?que|lo hago yo|lo mando yo|lo envio yo)\b/,
-  /\bcon (un|una) ["'“‘][^"'”’]{1,40}["'”’] (lo|la|los|las|te|me|sigo|arranco)\b/,
-  /\b(espera|esperan|falta|faltan|necesito|pendientes? de) tu (visto bueno|aprobacion|ok|decision)\b/,
-  // "sigue esperando que elijas versión", "solo falta tu respuesta", "waiting for you to pick one"
-  /\b(espera|esperan|esperamos|esperando|falta|faltan) (a )?(que (elijas|escojas|decidas|confirmes|apruebes|me digas|respondas|contestes)|tu (respuesta|eleccion))\b/,
-  /\b(waiting|waits) (for|on) you to (choose|pick|decide|confirm|approve|answer|reply|say)\b/,
-  /\b(awaits?|awaiting|needs?|pending) your (approval|ok|okay|sign-off|go-ahead|decision)\b/,
-  /\b(let me know|tell me|should i|do you want|would you like|want me to|shall i|please confirm|your call|say the word|which (one|option|do you)|approve|i need (you|your|to know)|waiting (for|on) (you|your))\b/,
-];
-const COURTESY = new RegExp(String.raw`\b(${[
-  String.raw`si (necesitas|quieres|gustas|te late|ocupas) (algo|cualquier|otr[oa]s?|mas|seguir|hacer otr[oa]s?|ver otr[oa]s?)`,
-  String.raw`cualquier (cosa|duda|otr[oa])`,
-  String.raw`(algo|otra cosa) mas`,
-  String.raw`(quieres|necesitas) que (haga|cambie|ajuste|revise|vea|agregue|mueva) (algo|otr[oa]s?|mas)`,
-  String.raw`en que mas`,
-  String.raw`que mas (necesitas|quieres|hago|ocupas|puedo|te ayudo)`,
-  String.raw`(dime|avisame|cuentame) (como (se ve|queda|te va|funciona)|si algo (no|se ve|falla|truena|sale mal))`,
-  String.raw`(quedo|sigo) (atento|pendiente|a la orden)`,
-  String.raw`cuando (quieras|gustes|lo necesites|te late)`,
-  String.raw`whenever you(['’]re ready| want| like| need)`,
-  String.raw`if (you|you['’]?d|you would) (need|want|like|have) (anything|any|something|another|more|other|to (keep going|continue))`,
-  String.raw`if there['’]?s anything`,
-  String.raw`(anything|what) else`,
-  String.raw`any (other|more)`,
-  String.raw`any questions`,
-  String.raw`(let me know|tell me) how it (looks|goes|works|went)`,
-  String.raw`if (anything|something) (looks|seems|feels) (off|wrong|odd|weird|broken)`,
-  String.raw`if (anything|something) (breaks|is unclear)`,
-  String.raw`happy to help`,
-].join("|")})\b`);
-
-// What waits on you, said the other way round: "Nada espera tu respuesta", or only if it
-// happens: "Solo te escribo si algo espera tu respuesta".
-const WAITS_NOT = /\b(nada|ninguna?|nothing|none)\b[^.]{0,20}\b(espera|esperan|waits?|waiting)\b|\b(si|if)\b[^,.]{0,40}\b(espera|esperan|waits?|waiting)\b/;
-function closingRequest(text: string): string | undefined {
-  // The first request in the closing lines says the most ("which of the two"); the
-  // ones after it tend to be the how ("say 'send it' and I send it").
-  // The last sentence of each point of a closing list too ("…esperan tu visto bueno."), unless
-  // it starts with a condition: "Si prefieres el otro, lo cambio" is a note beside the point.
-  const items = closingItems(text).map(lastSentence).filter((s) => !/^(si|if)\b/i.test(s));
-  const hit = [...closingSentences(text, 3), ...items].find((s) => {
-    const f = fold(s);
-    return !COURTESY.test(f) && !WAITS_NOT.test(f) && REQUEST.some((re) => re.test(f));
-  });
-  return hit ? hit.slice(0, 160) : undefined;
-}
-
-// Once a turn has ended, tell apart "done", "asks you" and "error". Waits a moment
-// after Stop so the closing message is in the transcript.
 // The Claude app's own session IDs (as in its "#local_…" links) → Claude Code's.
 const localToCli = new Map<string, string>();
 
-// Sessions a text links to, as the Claude app writes them: [title](#local_…). The cleaned
-// text of a closing message has lost the "_" too.
-function linkedSessions(text: string): string[] {
-  return [...text.matchAll(/local_?([0-9a-f-]{36})/g)].map((m) => localToCli.get(`local_${m[1]}`)).filter((x): x is string => Boolean(x));
-}
-
-// Words that say another session is the one waiting for you: "La sesión [X] te hace tres
-// preguntas:", "Contéstale en esa sesión.", "can't start until you answer", "is waiting for you".
-const RELAY = new RegExp(String.raw`\b(${[
-  String.raw`en esa sesion`,
-  String.raw`contesta(le|les|la|las|lo|los)|responde(le|les)`,
-  String.raw`te (espera|esta esperando|pregunta|hace \S+ preguntas?|necesita)`,
-  String.raw`(esta|estan|sigue|siguen) esperando`,
-  String.raw`espera tu respuesta`,
-  String.raw`necesita que (decidas|contestes|respondas|elijas|apruebes|confirmes)`,
-  String.raw`in (that|its|their) session`,
-  String.raw`(is|are) (still )?waiting (for|on) (you|your)`,
-  String.raw`waits for you`,
-  String.raw`until you (answer|reply|decide|confirm|choose)`,
-  String.raw`(answer|reply) (it |them )?there`,
-].join("|")})\b`);
-const LIST_ITEM = /^\s*(\d+[.)]|[-•+*])\s/;
-const markless = (line: string) => line.replace(/[*_`#>]/g, "");
-const closingLines = (text: string) => text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "").split("\n");
-// The links nearest above line i, from line i itself up.
-function linksAbove(lines: string[], i: number): string[] {
-  for (let j = i; j >= 0; j--) {
-    const ids = linkedSessions(lines[j]);
-    if (ids.length) return ids;
-  }
-  return [];
-}
-
-// The linked sessions whose question a closing message passes on to you, when its question
-// (`ask`, from the last paragraph) is theirs: its own sentence links one ("The [Draft review]
-// session can't start until you answer: …?") or says so, a later sentence of the paragraph
-// says so without naming another session ("…? Contéstale en esa sesión."), or the question
-// is in a list whose lead-in says so ("La sesión [X] te hace tres preguntas:"). Otherwise
-// the question is this session's own, even when the message links another one elsewhere.
-function relayedTo(text: string, ask: string): string[] {
-  const lines = closingLines(text);
-  const at = lines.findLastIndex((l) => markless(l).includes(ask));
-  if (at < 0) return [];
-  const sentences = markless(lines[at]).match(/[^.!?\n]+[.!?]+|[^.!?\n]+$/g) ?? [];
-  const k = sentences.findIndex((x) => x.trim().startsWith(ask));
-  const own = sentences[k] ?? "";
-  if (linkedSessions(own).length) return linkedSessions(own);
-  if (RELAY.test(fold(own))) return linksAbove(lines, at);
-  const rest: string[] = sentences.slice(k + 1);
-  for (let j = at + 1; j < lines.length && lines[j].trim(); j++) rest.push(markless(lines[j]));
-  for (const x of rest) {
-    if (linkedSessions(x).length) break; // that names something else
-    if (RELAY.test(fold(x))) return linksAbove(lines, at);
-  }
-  if (!LIST_ITEM.test(lines[at]) && !/^\s+\S/.test(lines[at])) return [];
-  let j = at - 1;
-  while (j >= 0 && (LIST_ITEM.test(lines[j]) || /^\s+\S/.test(lines[j]))) j--;
-  while (j >= 0 && !lines[j].trim()) j--; // a lead-in paragraph right before the list
-  if (j < 0 || LIST_ITEM.test(lines[j])) return [];
-  const lead = markless(lines[j]);
-  return RELAY.test(fold(lead)) || (lead.trim().endsWith(":") && linkedSessions(lead).length) ? linksAbove(lines, j) : [];
-}
-
-// Every linked session a closing message says is waiting for you, anywhere in it.
-function relaysIn(text: string): string[] {
-  const lines = closingLines(text);
-  return [...new Set(lines.flatMap((l, i) => (RELAY.test(fold(markless(l))) ? linksAbove(lines, i) : [])))];
+// What the closing rules read a message against: every other session, with the app's ID
+// for it and its names (titles and folder), and this session's own names.
+function closingContext(s: Session): [Other[], string[]] {
+  const namesOf = (sid: string) => {
+    const x = sessions.get(sid);
+    return [x?.title, appTitles.get(sid), x?.cwd ? basename(x.cwd) : undefined].filter((n): n is string => Boolean(n));
+  };
+  const localOf = new Map([...localToCli].map(([local, sid]) => [sid, local]));
+  const sids = new Set([...sessions.keys(), ...localToCli.values()]);
+  sids.delete(s.sid);
+  return [[...sids].map((sid) => ({ sid, local: localOf.get(sid), names: namesOf(sid) })), namesOf(s.sid)];
 }
 
 // A turn that asks you something on behalf of a session it links to is answered once that
@@ -827,24 +652,26 @@ function checkRelayed() {
   }
 }
 
+// Once a turn has ended, tell apart "done", "asks you" and "error". Waits a moment
+// after Stop so the closing message is in the transcript.
 function classifyTurn(s: Session) {
   s.classified = true;
   const last: LastTurn = s.tp && existsSync(s.tp) ? readLastTurn(s.tp) : { kind: "none" };
   try {
     scanCommands(s); // now, so a command that ended during the turn doesn't show for a moment
   } catch {}
-  s.relays = last.kind === "text" ? relaysIn(last.text!) : undefined;
+  const closing = last.kind === "text" ? classifyClosing(last.text!, ...closingContext(s)) : undefined;
+  s.relays = closing?.relays;
   s.relayed = undefined;
   if (last.kind === "error") {
     s.outcome = "error";
     s.errorText = last.text?.slice(0, 160);
   } else if (s.ask) {
     s.outcome = "asks"; // the question in the app's next-step box
-  } else if (last.kind === "text" && (closingQuestion(last.text!) ?? closingRequest(last.text!))) {
-    const q = (closingQuestion(last.text!) ?? closingRequest(last.text!))!;
+  } else if (closing?.ask) {
     s.outcome = "asks";
-    s.askText = askWithLead(last.text!, q);
-    s.relayed = relayedTo(last.text!, q);
+    s.askText = closing.askText;
+    s.relayed = closing.relayed;
   } else {
     s.outcome = "done";
   }
@@ -1143,11 +970,13 @@ function applyAppAsk(s: Session) {
     s.outcome = "asks";
     s.askText = a.text;
     // It passes on a linked session's question when the closing says that session waits
-    // for you and the note names it.
-    s.relayed = (s.relays ?? []).filter((sid) => {
+    // for you and the note names it, or the note itself says it waits there ("Answer
+    // billing-api's questions in its session").
+    const named = (s.relays ?? []).filter((sid) => {
       const t = titleOf(sid);
       return saysTitle(a.text!, t) || sessionNames(a.text!).some((ws) => hasWords(t, ws));
     });
+    s.relayed = [...new Set([...named, ...relayTargets(a.text, ...closingContext(s))])];
     version++;
   } else if (!a.text && s.outcome === "asks" && !s.ask && !(s.askText ?? "").includes("?")) {
     // The app read the whole turn as done; a request without a question mark was a guess.
