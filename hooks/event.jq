@@ -2,6 +2,8 @@
 # line stays well under 4 KB, which keeps appends from parallel sessions whole.
 
 def cut($n): if type == "string" then (gsub("\\s+"; " ") | .[0:$n]) else null end;
+# Paths keep their spaces; only the length is capped.
+def clip($n): if type == "string" then .[0:$n] else . end;
 
 (if (.tool_input | type) == "object" then .tool_input else {} end) as $i
 | (if (.tool_response | type) == "object" then .tool_response else {} end) as $r
@@ -10,8 +12,8 @@ def cut($n): if type == "string" then (gsub("\\s+"; " ") | .[0:$n]) else null en
     pid: $pid,
     ev: .hook_event_name,
     sid: .session_id,
-    cwd: .cwd,
-    tp: .transcript_path,
+    cwd: (.cwd | clip(400)),
+    tp: (.transcript_path | clip(400)),
     pm: .permission_mode,
     agent: .agent_id,
     tool: .tool_name,
@@ -39,7 +41,7 @@ def cut($n): if type == "string" then (gsub("\\s+"; " ") | .[0:$n]) else null en
       elif .hook_event_name != "PreToolUse" then null
       elif .tool_name == "mcp__ccd_turn__update_plan" then {
         items: (if ($i.items | type) == "array"
-                then [$i.items[] | {c: (.content | cut(90)), s: .status}]
+                then [$i.items[0:20][] | {c: (.content | cut(90)), s: .status}]
                 else null end),
         advance: $i.advance,
         done: $i.done,

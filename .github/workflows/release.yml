@@ -34,6 +34,9 @@ jobs:
         with:
           ref: ${{ env.TAG }}
       - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.14
+      - run: bun test
       - run: bun test/scenarios.ts
       - name: The version in Info.plist matches the tag
         run: |

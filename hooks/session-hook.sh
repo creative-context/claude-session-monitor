@@ -17,7 +17,10 @@ for JQ in /usr/bin/jq /opt/homebrew/bin/jq /usr/local/bin/jq; do
 done
 [ -x "$JQ" ] || exit 0
 
-"$JQ" -c --argjson pid "${PPID:-0}" -f "$(dirname "$0")/event.jq" \
+# The folder of this script, without a subprocess; "." when $0 has no slash.
+case "$0" in */*) HERE="${0%/*}" ;; *) HERE=. ;; esac
+
+"$JQ" -c --argjson pid "${PPID:-0}" -f "$HERE/event.jq" \
   >> "$DIR/events.jsonl" 2>/dev/null
 
 exit 0

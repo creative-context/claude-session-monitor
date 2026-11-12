@@ -9,11 +9,12 @@
 // It saves a dated copy of settings.json first, touches nothing but its own
 // entries, and writes the new file atomically so Claude never reads half a file.
 
-import { copyFileSync, existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { copyFileSync, existsSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
 
-const SETTINGS = join(homedir(), ".claude", "settings.json");
+// CSM_SETTINGS points the installer at another settings file (the tests use it).
+const SETTINGS = process.env.CSM_SETTINGS || join(homedir(), ".claude", "settings.json");
 const flag = process.argv.indexOf("--hook");
 const HOOK = flag > 0 && process.argv[flag + 1] ? resolve(process.argv[flag + 1]) : resolve(import.meta.dir, "hooks", "session-hook.sh");
 const MARK = "session-hook.sh";
@@ -40,24 +41,36 @@ const settings = JSON.parse(raw);
 if (existsSync(SETTINGS)) {
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   copyFileSync(SETTINGS, `${SETTINGS}.csm-backup-${stamp}`);
+  // Keep the 5 newest backups. The stamp sorts by date, so the names are enough.
+  const prefix = `${basename(SETTINGS)}.csm-backup-`;
+  const old = readdirSync(dirname(SETTINGS)).filter((f) => f.startsWith(prefix)).sort().slice(0, -5);
+  for (const f of old) rmSync(join(dirname(SETTINGS), f), { force: true });
 }
 
 const hooks: Record<string, Entry[]> =
   settings.hooks && !Array.isArray(settings.hooks) ? settings.hooks : {};
 
 // Drop any earlier entry of ours, keep everything else as it was.
+// Anything that is not the shape we know (an entry or its hooks that is not an array)
+// is left exactly as it is.
 for (const event of Object.keys(hooks)) {
+  if (!Array.isArray(hooks[event])) continue;
   hooks[event] = hooks[event]
-    .map((e) => ({ ...e, hooks: e.hooks.filter((h) => !h.command?.includes(MARK)) }))
-    .filter((e) => e.hooks.length > 0);
+    .map((e) => (e && Array.isArray(e.hooks) ? { ...e, hooks: e.hooks.filter((h) => !h?.command?.includes(MARK)) } : e))
+    .filter((e) => !(e && Array.isArray(e.hooks)) || e.hooks.length > 0);
   if (hooks[event].length === 0) delete hooks[event];
 }
 
 if (!uninstall) {
   // Claude Code runs the command through a shell, so a path with spaces is quoted.
   const command = { type: "command", command: /\s/.test(HOOK) ? `"${HOOK}"` : HOOK, timeout: 5 };
-  for (const event of TOOL_EVENTS) (hooks[event] ??= []).push({ matcher: "*", hooks: [command] });
-  for (const event of OTHER_EVENTS) (hooks[event] ??= []).push({ hooks: [command] });
+  // An event whose value is not an array is not ours to change, so it gets no entry.
+  const add = (event: string, entry: Entry) => {
+    if (hooks[event] !== undefined && !Array.isArray(hooks[event])) return;
+    (hooks[event] ??= []).push(entry);
+  };
+  for (const event of TOOL_EVENTS) add(event, { matcher: "*", hooks: [command] });
+  for (const event of OTHER_EVENTS) add(event, { hooks: [command] });
 }
 
 let status = "";
