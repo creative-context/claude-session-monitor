@@ -27,11 +27,12 @@ export function openDatabase() {
   const cols = (db.query("PRAGMA table_info(sessions)").all() as any[]).map((c) => c.name);
   if (!cols.includes("task")) db.exec("ALTER TABLE sessions ADD COLUMN task TEXT");
   if (!cols.includes("sched")) db.exec("ALTER TABLE sessions ADD COLUMN sched TEXT"); // its reminders and the tasks it set up
+  if (!cols.includes("wait")) db.exec("ALTER TABLE sessions ADD COLUMN wait TEXT"); // what a waiting session waits on
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
-    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched)
-    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched)
+    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait)
+    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait)
     ON CONFLICT(sid) DO UPDATE SET
       title = coalesce(excluded.title, title), prompt = coalesce(excluded.prompt, prompt),
       project = coalesce(excluded.project, project), cwd = coalesce(excluded.cwd, cwd),
@@ -39,7 +40,8 @@ export function openDatabase() {
       first_at = min(first_at, excluded.first_at), last_at = max(last_at, excluded.last_at),
       status = excluded.status, outcome = excluded.outcome, recap = excluded.recap, ask = excluded.ask,
       error = excluded.error, note = excluded.note, model = coalesce(excluded.model, model),
-      pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task), sched = excluded.sched`);
+      pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task), sched = excluded.sched,
+      wait = excluded.wait`);
 }
 
 export const rowOf = (s: Session) => ({
@@ -51,7 +53,15 @@ export const rowOf = (s: Session) => ({
   $note: s.note ?? null, $model: s.model ?? null, $pid: s.pid ?? null, $archived: s.archived ? 1 : 0,
   $task: s.task ?? null,
   $sched: s.reminders?.length || s.made?.length ? JSON.stringify({ r: s.reminders ?? [], m: s.made ?? [] }) : null,
+  // The log resumes where it stopped, so a wait it read before a restart isn't read again.
+  $wait: s.status === "waiting" ? JSON.stringify({ w: s.wait, k: s.waitKind, a: s.waitAgent, p: s.waitPrev }) : null,
 });
+const waitOf = (v: unknown): Partial<Session> => {
+  try {
+    const w = typeof v === "string" ? JSON.parse(v) : null;
+    return w ? { wait: w.w ?? undefined, waitKind: w.k ?? undefined, waitAgent: w.a ?? undefined, waitPrev: w.p ?? undefined } : {};
+  } catch { return {}; }
+};
 export const schedOf = (v: unknown): { r?: Reminder[]; m?: Session["made"] } => {
   try { return typeof v === "string" ? JSON.parse(v) : {}; } catch { return {}; }
 };
@@ -95,6 +105,7 @@ export function loadRecent() {
       note: r.note ?? undefined, outcome: r.outcome ?? undefined, classified: Boolean(r.outcome),
       archived: false, task: r.task ?? undefined,
       reminders: schedOf(r.sched).r, made: schedOf(r.sched).m,
+      ...(status === "waiting" ? waitOf(r.wait) : {}),
     });
   }
 }
