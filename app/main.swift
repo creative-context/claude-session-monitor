@@ -6,7 +6,7 @@
 // page (http://127.0.0.1:4747/?embed) fills it and reflows to any size, like a web page.
 // The toolbar holds the view switch, search and the sound switch, plus the connection
 // status while the server doesn't answer. A menu bar item and the Dock icon show how
-// many sessions need you.
+// many sessions need you, as the page reports it.
 
 import AppKit
 import ServiceManagement
@@ -128,18 +128,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var sizeMenus: [NSMenu] = []
     var server: Process?
     var serverStartedAt = Date.distantPast
+    var launching = false // looking at what answers on the port before starting
+    var restartPending = false
+    var crashes = 0 // in a row, for the wait before the next restart
+    var portTaken = 0
+    var bunLogged = false
     var quitting = false
     var pageLoaded = false
+    var pageSendsStatus = false // the loaded page posts its counts; until then, poll
+    var lastStatusAt = Date.distantPast
 
     // MARK: launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        startServer()
+        launchServer()
         buildMainMenu()
         buildWindow()
         buildStatusItem()
         // Open at Login is off until you turn it on in the menu bar item's menu.
-        Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+        // The page tells the app its counts as they change; this is the fallback.
+        let tick = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
+            Task { @MainActor in self.statusTick() }
+        }
+        tick.tolerance = 0.5
+        NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
             Task { @MainActor in self.refreshStatus() }
         }
         refreshStatus()
@@ -193,47 +205,248 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         ["/usr/bin/jq", "/opt/homebrew/bin/jq", "/usr/local/bin/jq"].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    // Starts `bun server.ts` from the app's own copy. If another copy already holds the
-    // port, this one exits right away and the window uses the running one.
+    // A line in the server's log, which the app also writes to, and in the system log.
+    // Opened for appending each time, so the server's own lines are never overwritten.
+    nonisolated static var logPath: String { "\(NSHomeDirectory())/.claude-session-monitor/server.log" }
+
+    nonisolated static func log(_ text: String) {
+        NSLog("\(appName): \(text)")
+        let fd = openLog()
+        guard fd >= 0 else { return }
+        let line = "\(ISO8601DateFormatter().string(from: Date())) app: \(text)\n"
+        _ = line.withCString { write(fd, $0, strlen($0)) }
+        close(fd)
+    }
+
+    nonisolated static func openLog() -> Int32 {
+        let dir = (logPath as NSString).deletingLastPathComponent
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        return open(logPath, O_WRONLY | O_APPEND | O_CREAT, 0o644)
+    }
+
+    // Starts the server, unless one already answers on the port. One of this version is
+    // used as it is. An older one, or one that doesn't say its version, is stopped first,
+    // but only if it is an app's own copy of the server: a server run by hand from a
+    // checkout is left alone, and the window uses it.
+    func launchServer() {
+        guard !launching, !restartPending, server == nil, !quitting else { return }
+        launching = true
+        var req = URLRequest(url: stateURL)
+        req.timeoutInterval = 1
+        let mine = currentVersion
+        URLSession.shared.dataTask(with: req) { data, response, _ in
+            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+                Task { @MainActor in
+                    self.launching = false
+                    self.startServer()
+                }
+                return
+            }
+            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+            let info = json?["server"] as? [String: Any]
+            let version = info?["version"] as? String
+            let given = (info?["pid"] as? NSNumber).map { pid_t($0.int32Value) }
+            if version == mine {
+                Task { @MainActor in
+                    self.launching = false
+                    self.portTaken = 0
+                    Self.log("a server of this version (\(mine)) already answers on port \(port); using it")
+                }
+                return
+            }
+            DispatchQueue.global(qos: .utility).async {
+                let pid = given ?? Self.portHolder()
+                let what = "version \(version ?? "unknown"), pid \(pid.map { String($0) } ?? "unknown")"
+                guard let pid, pid > 1, pid != getpid(), Self.isAppServer(pid) else {
+                    Task { @MainActor in
+                        self.launching = false
+                        Self.log("port \(port) is held by a server that isn't an app's own (\(what)); using it")
+                    }
+                    return
+                }
+                Self.log("stopping an app's server of another version (\(what)) to start \(mine)")
+                let stopped = Self.stop(pid)
+                Task { @MainActor in
+                    self.launching = false
+                    if stopped {
+                        self.startServer()
+                    } else {
+                        Self.log("the old server (pid \(pid)) still holds port \(port)")
+                        self.scheduleLaunch(after: 30)
+                    }
+                }
+            }
+        }.resume()
+    }
+
+    // Starts the app's own copy of the server, with the app's version and pid: the server
+    // quits on its own when the app is gone, so a crash or a force quit leaves no orphan.
     func startServer() {
+        guard server == nil, !quitting else { return }
         guard let bun = bunPath, let dir = serverDir else {
-            NSLog("\(appName): bun or the server files not found")
+            Self.log("bun or the server files not found")
             return
+        }
+        if !bunLogged {
+            bunLogged = true
+            DispatchQueue.global(qos: .utility).async {
+                Self.log("bun \(bun), version \(Self.bunVersion(bun) ?? "unknown")")
+            }
         }
         let p = Process()
         p.executableURL = URL(fileURLWithPath: bun)
-        p.arguments = ["server.ts"]
+        p.arguments = [dir.appendingPathComponent("server.ts").path]
         p.currentDirectoryURL = dir
-        let logDir = "\(NSHomeDirectory())/.claude-session-monitor"
-        try? FileManager.default.createDirectory(atPath: logDir, withIntermediateDirectories: true)
-        let log = "\(logDir)/server.log"
-        if !FileManager.default.fileExists(atPath: log) { FileManager.default.createFile(atPath: log, contents: nil) }
-        if let h = FileHandle(forWritingAtPath: log) {
-            h.seekToEndOfFile()
+        var env = ProcessInfo.processInfo.environment
+        env["CSM_VERSION"] = currentVersion
+        env["CSM_PARENT_PID"] = String(getpid())
+        p.environment = env
+        let fd = Self.openLog()
+        if fd >= 0 {
+            let h = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
             p.standardOutput = h
             p.standardError = h
         }
-        p.terminationHandler = { _ in
-            Task { @MainActor in self.serverExited() }
+        p.terminationHandler = { proc in
+            let pid = proc.processIdentifier
+            let code = proc.terminationStatus
+            let signaled = proc.terminationReason == .uncaughtSignal
+            Task { @MainActor in self.serverExited(pid: pid, code: code, signaled: signaled) }
         }
         do {
             try p.run()
             server = p
             serverStartedAt = Date()
         } catch {
-            NSLog("\(appName): could not start the server: \(error)")
+            Self.log("could not start the server: \(error)")
+            scheduleLaunch(after: 30)
         }
     }
 
-    // Restart a server that dies. One that quits within seconds most likely found the
-    // port taken by another copy, so wait longer before trying again.
-    func serverExited() {
+    // Exit code 3 is the server's "port taken": another copy answers, so look at it again
+    // in a while. Any other exit is a crash: restart it, waiting longer after each crash
+    // in a row (2 s up to a minute). One that ran for a minute starts the count again.
+    func serverExited(pid: pid_t, code: Int32, signaled: Bool) {
+        guard server?.processIdentifier == pid else { return }
         server = nil
         if quitting { return }
-        let quick = Date().timeIntervalSince(serverStartedAt) < 3
-        DispatchQueue.main.asyncAfter(deadline: .now() + (quick ? 30 : 2)) {
-            if self.server == nil && !self.quitting { self.startServer() }
+        setLive(false)
+        let ran = Date().timeIntervalSince(serverStartedAt)
+        if ran > 60 { crashes = 0; portTaken = 0 }
+        let delay: TimeInterval
+        if !signaled && code == 3 {
+            portTaken += 1
+            delay = min(30, 5 * pow(2, Double(portTaken - 1)))
+            Self.log("port \(port) is taken; looking again in \(Int(delay)) s")
+        } else {
+            crashes += 1
+            delay = min(60, 2 * pow(2, Double(crashes - 1)))
+            Self.log("the server stopped (\(signaled ? "signal" : "exit code") \(code)) after \(Int(ran)) s; restarting in \(Int(delay)) s")
         }
+        scheduleLaunch(after: delay)
+    }
+
+    func scheduleLaunch(after delay: TimeInterval) {
+        guard !restartPending else { return }
+        restartPending = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+            self.restartPending = false
+            self.launchServer()
+        }
+    }
+
+    // `bun --version`, for the log.
+    nonisolated static func bunVersion(_ bun: String) -> String? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: bun)
+        p.arguments = ["--version"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
+    }
+
+    // The pid listening on the port, from lsof.
+    nonisolated static func portHolder() -> pid_t? {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
+        p.arguments = ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
+        let out = Pipe()
+        p.standardOutput = out
+        p.standardError = FileHandle.nullDevice
+        guard (try? p.run()) != nil else { return nil }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        let text = String(data: data, encoding: .utf8) ?? ""
+        return text.split(whereSeparator: \.isNewline).compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }.first
+    }
+
+    // A process's arguments, exactly as it got them (paths with spaces included).
+    nonisolated static func arguments(of pid: pid_t) -> [String]? {
+        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
+        var size = 0
+        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return nil }
+        var buf = [UInt8](repeating: 0, count: size)
+        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return nil }
+        let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
+        var i = 4
+        while i < size && buf[i] != 0 { i += 1 } // the executable's path
+        while i < size && buf[i] == 0 { i += 1 }
+        var args: [String] = []
+        while args.count < argc && i < size {
+            let start = i
+            while i < size && buf[i] != 0 { i += 1 }
+            args.append(String(decoding: buf[start..<i], as: UTF8.self))
+            i += 1
+        }
+        return args
+    }
+
+    // A process's working folder.
+    nonisolated static func workingFolder(of pid: pid_t) -> String? {
+        var info = proc_vnodepathinfo()
+        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
+        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
+        return withUnsafePointer(to: &info.pvi_cdir.vip_path) {
+            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
+        }
+    }
+
+    // True for `bun …/server.ts` (or server.js) inside an app bundle's
+    // Contents/Resources/server/: an app's own server, of any version. Older apps start
+    // it with a relative path from that folder, so the working folder resolves it.
+    nonisolated static func isAppServer(_ pid: pid_t) -> Bool {
+        guard let args = arguments(of: pid), let first = args.first,
+              (first as NSString).lastPathComponent == "bun",
+              let script = args.dropFirst().first(where: { !$0.hasPrefix("-") }) else { return false }
+        var path = script
+        if !path.hasPrefix("/") {
+            guard let cwd = workingFolder(of: pid) else { return false }
+            path = (cwd as NSString).appendingPathComponent(path)
+        }
+        path = (path as NSString).standardizingPath
+        let name = (path as NSString).lastPathComponent
+        return ["server.ts", "server.js"].contains(name)
+            && (path as NSString).deletingLastPathComponent.hasSuffix(".app/Contents/Resources/server")
+    }
+
+    // Asks a server to quit and waits for the port to be free: 5 s, then it is killed.
+    nonisolated static func stop(_ pid: pid_t) -> Bool {
+        let free = { (seconds: Double) -> Bool in
+            let until = Date().addingTimeInterval(seconds)
+            while Date() < until {
+                if portHolder() == nil { return true }
+                usleep(250_000)
+            }
+            return portHolder() == nil
+        }
+        kill(pid, SIGTERM)
+        if free(5) { return true }
+        if isAppServer(pid) { kill(pid, SIGKILL) }
+        return free(2)
     }
 
     // MARK: window
@@ -540,8 +753,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     //            spoken note for VoiceOver with what changed
     //   view     it switched views itself (its empty state links to All Sessions)
     //   menu     a right click on a session: the app's own menu for it
+    //   status   what needs you and how many work, for the Dock badge and the menu bar,
+    //            whenever it changes, even while the window is hidden
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
         guard let body = message.body as? [String: Any] else { return }
+        if let status = body["status"] as? [String: Any] { applyPageStatus(status) }
         if body["alert"] != nil, soundOn { NSSound(named: "Glass")?.play() }
         if let text = body["announce"] as? String, !text.isEmpty {
             NSAccessibility.post(element: window as Any, notification: .announcementRequested, userInfo: [
@@ -718,6 +934,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
             Task { @MainActor in
                 if ok {
+                    self.pageSendsStatus = false // the new page says so again
                     self.web.load(URLRequest(url: stripURL))
                 } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.loadWhenReady() }
@@ -737,6 +954,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     nonisolated func webView(_ webView: WKWebView, didFailProvisionalNavigation navigation: WKNavigation!, withError error: Error) {
         Task { @MainActor in
             DispatchQueue.main.asyncAfter(deadline: .now() + 2) { self.loadWhenReady() }
+        }
+    }
+
+    // The web view stays on the local server: the page there gets the app's bridge, so
+    // nothing else may load in it. This project's release pages open in the browser;
+    // anything else is dropped.
+    nonisolated static func isLocalPage(_ url: URL) -> Bool {
+        if url.absoluteString == "about:blank" { return true }
+        return url.scheme == "http" && url.host == "127.0.0.1" && url.port == port
+    }
+
+    nonisolated func webView(_ webView: WKWebView, decidePolicyFor navigationAction: WKNavigationAction,
+                             decisionHandler: @escaping @MainActor (WKNavigationActionPolicy) -> Void) {
+        MainActor.assumeIsolated {
+            guard let url = navigationAction.request.url, !Self.isLocalPage(url) else { return decisionHandler(.allow) }
+            if url.scheme == "https", url.absoluteString.hasPrefix(self.releasesHome + "/") || url.absoluteString == self.releasesHome {
+                NSWorkspace.shared.open(url)
+            } else {
+                Self.log("blocked a navigation away from the local page")
+            }
+            decisionHandler(.cancel)
         }
     }
 
@@ -939,9 +1177,47 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         needsMenuItems = items
     }
 
+    // The server's own list of what needs you, with its words, when it sends one.
+    nonisolated func attentionEntries(_ value: Any?) -> [NeedsEntry]? {
+        guard let list = value as? [[String: Any]] else { return nil }
+        let one = { (text: String) in text.split(whereSeparator: \.isNewline).first.map(String.init) ?? text }
+        let isSession = { (id: String) in UUID(uuidString: id) != nil } // what the Claude app can open
+        return list.map { a in
+            let kind = a["kind"] as? String ?? ""
+            let id = a["id"] as? String ?? ""
+            let sid = [a["sid"] as? String, a["run"] as? String, id].compactMap { $0 }.first(where: isSession) ?? ""
+            let error = a["error"] as? Bool ?? ["error", "task", "blocked"].contains(kind)
+            let fallback = kind == "task" ? "Scheduled task" : "Session"
+            return NeedsEntry(title: a["title"] as? String ?? fallback, why: one(a["words"] as? String ?? ""), sid: sid, error: error)
+        }
+    }
+
+    // A 2 s tick. While the page posts its counts and the server answers, it asks the
+    // server only once a minute; before that (an older page, or while offline), every tick.
+    func statusTick() {
+        let every: TimeInterval = pageSendsStatus && liveState == true ? 60 : 2
+        if Date().timeIntervalSince(lastStatusAt) >= every - 0.5 { refreshStatus() }
+    }
+
+    // The page's counts, sent as they change. Without the list, the server has the words.
+    func applyPageStatus(_ status: [String: Any]) {
+        pageSendsStatus = true
+        lastStatusAt = Date()
+        setLive(true)
+        let needs = (status["needs"] as? NSNumber)?.intValue ?? 0
+        let working = (status["working"] as? NSNumber)?.intValue ?? 0
+        if let entries = attentionEntries(status["attention"]) {
+            paintNeedsMenu(entries)
+        } else {
+            refreshStatus()
+        }
+        paintStatus(needs: needs, working: working, ok: true)
+    }
+
     // The count of what needs you comes from the server, the same number the window
     // shows: blocked on you, or a question or an error from the last day. In orange.
     func refreshStatus() {
+        lastStatusAt = Date()
         URLSession.shared.dataTask(with: stateURL) { data, _, _ in
             var waiting = 0
             var working = 0
@@ -950,23 +1226,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
                let sessions = json["sessions"] as? [[String: Any]] {
                 waiting = json["needs"] as? Int ?? 0
                 working = sessions.filter { $0["status"] as? String == "working" }.count
-                entries = self.needsEntries(json)
+                entries = self.attentionEntries(json["attention"]) ?? self.needsEntries(json)
             }
             let ok = data != nil
             Task { @MainActor in
                 self.setLive(ok)
                 if let entries { self.paintNeedsMenu(entries) }
-                NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : nil
-                guard let button = self.statusItem?.button else { return }
-                button.attributedTitle = waiting > 0
-                    ? NSAttributedString(string: " \(waiting)", attributes: [
-                        .foregroundColor: NSColor(srgbRed: 0.98, green: 0.55, blue: 0, alpha: 1),
-                        .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)])
-                    : NSAttributedString(string: "")
-                let needs = waiting == 1 ? "1 needs you" : "\(waiting) need you" // sessions, and tasks that can't run
-                button.toolTip = ok ? "\(appName)\n\(needs) · \(working) working" : "\(appName): server offline"
+                self.paintStatus(needs: waiting, working: working, ok: ok)
+                // Nobody answers and nothing is starting: start the server again.
+                if !ok && self.server == nil { self.launchServer() }
             }
         }.resume()
+    }
+
+    func paintStatus(needs waiting: Int, working: Int, ok: Bool) {
+        NSApp.dockTile.badgeLabel = waiting > 0 ? "\(waiting)" : nil
+        guard let button = statusItem?.button else { return }
+        button.attributedTitle = waiting > 0
+            ? NSAttributedString(string: " \(waiting)", attributes: [
+                .foregroundColor: NSColor(srgbRed: 0.98, green: 0.55, blue: 0, alpha: 1),
+                .font: NSFont.monospacedDigitSystemFont(ofSize: 13, weight: .semibold)])
+            : NSAttributedString(string: "")
+        let needs = waiting == 1 ? "1 needs you" : "\(waiting) need you" // sessions, and tasks that can't run
+        button.toolTip = ok ? "\(appName)\n\(needs) · \(working) working" : "\(appName): server offline"
     }
 
     // MARK: login item
@@ -1242,12 +1524,21 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         guard let source = serverDir?.appendingPathComponent("hooks") else { throw CocoaError(.fileNoSuchFile) }
         let fm = FileManager.default
         try fm.createDirectory(at: hookDir, withIntermediateDirectories: true)
+        // Each file is written next to the old one and renamed over it in one step, so a
+        // hook that runs meanwhile finds the old file or the new one, never none.
         for name in ["session-hook.sh", "event.jq", "statusline.sh"] {
             let from = source.appendingPathComponent(name)
             let to = hookDir.appendingPathComponent(name)
             if fm.contentsEqual(atPath: from.path, andPath: to.path) { continue }
-            try? fm.removeItem(at: to)
-            try fm.copyItem(at: from, to: to)
+            let temp = hookDir.appendingPathComponent(".\(name).\(UUID().uuidString)")
+            do {
+                try fm.copyItem(at: from, to: temp)
+                if name.hasSuffix(".sh") { try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: temp.path) }
+                guard rename(temp.path, to.path) == 0 else { throw CocoaError(.fileWriteUnknown) }
+            } catch {
+                try? fm.removeItem(at: temp)
+                throw error
+            }
         }
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookFile.path)
         try fm.setAttributes([.posixPermissions: 0o755], ofItemAtPath: hookDir.appendingPathComponent("statusline.sh").path)
