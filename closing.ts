@@ -213,7 +213,7 @@ function linkedSessions(text: string, ctx: Ctx): string[] {
 // Sessions a text names: a whole title, the short name before a title's colon or dash
 // ("billing-api" in "billing-api: retry rules"), or its folder. Only read where the text
 // says that session is waiting for you, and never this session's own names.
-const nameWords = (name: string) => fold(name).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 || /^\d+$/.test(w));
+export const nameWords = (name: string) => fold(name).split(/[^\p{L}\p{N}]+/u).filter((w) => w.length >= 3 || /^\d+$/.test(w));
 function namesOf(names: string[]): string[] {
   return names.flatMap((n) => {
     const base = n.includes("/") ? n.replace(/\/+$/, "").split("/").at(-1) ?? "" : n;
