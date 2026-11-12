@@ -38,6 +38,10 @@ config.userContentController.addUserScript(utc)
 let web = WKWebView(frame: window.contentLayoutRect, configuration: config)
 web.pageZoom = scale
 window.contentView = web
+// Fully transparent and click-through, behind every other window: nothing shows on your
+// screen. (Off-screen would count as hidden, and the page draws nothing while hidden.)
+window.alphaValue = 0
+window.ignoresMouseEvents = true
 window.orderBack(nil)
 
 final class Shot: NSObject, WKNavigationDelegate {
