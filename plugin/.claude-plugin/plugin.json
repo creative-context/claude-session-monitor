@@ -1,0 +1,7 @@
+{
+  "name": "session-usage",
+  "version": "0.1.0",
+  "description": "Saves the plan's weekly and 5-hour usage for Claude Session Monitor, with nothing on screen.",
+  "license": "MIT",
+  "repository": "https://github.com/creative-context/claude-session-monitor"
+}

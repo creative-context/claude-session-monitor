@@ -1,0 +1,13 @@
+{
+  "name": "claude-session-monitor",
+  "owner": {
+    "name": "claude-session-monitor contributors"
+  },
+  "plugins": [
+    {
+      "name": "session-usage",
+      "source": "./plugin",
+      "description": "Saves the plan's weekly and 5-hour usage for Claude Session Monitor, with nothing on screen."
+    }
+  ]
+}

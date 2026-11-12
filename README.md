@@ -72,6 +72,16 @@ Sessions show up as soon as they do something. Open at Login is off until you tu
 
 The app tells you when a newer version is out, with a notification and a notice in the window, and **Check for Updates…** in its menu looks right away. To update, download the new version and put it in Applications in place of the old one.
 
+### The usage plugin (optional)
+
+The weekly usage comes faster, and without the app ever opening Claude Code in a hidden terminal, with a small Claude Code plugin. Each time Claude Code measures your plan's limits, in a terminal or in the Claude app, it saves the two percentages for the app. It shows nothing, adds no command, and makes no request. In a terminal session:
+
+```
+/plugin install session-usage --marketplace creative-context/claude-session-monitor
+```
+
+Answer `y` to add the marketplace and choose the user scope, so every session loads it. In the Claude app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `creative-context/claude-session-monitor`, then **Add plugin**. It's in `plugin/` in this repository.
+
 ### Build from source
 
 ```bash
@@ -116,7 +126,7 @@ A side session, one the Claude app started from another session, says which one 
 mkdir -p ~/.claude-session-monitor/probe && cd ~/.claude-session-monitor/probe && claude --setting-sources project --strict-mcp-config
 ```
 
-Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal.
+Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal. With the [usage plugin](#the-usage-plugin-optional), none of this is needed: every session hands the app its numbers, and the hidden check doesn't run while they're fresh.
 
 **Compact view.** In a window narrower than 640 points, as on a laptop screen on its own, Active turns into rows: a dot in the state's color, the title and time, the question or what the session is doing, its folder and relations on one line, and the plan's bar, on the same tinted backgrounds as the cards. The weekly usage becomes one line above it, and the view switch keeps only its icons. Under 300 points it becomes a strip for the side of the screen: how many sessions need you, the week in two lines, and each session's dot, title, time and question. The window goes down to 171 points wide at 100% zoom, and proportionally more when the page is zoomed in.
 
@@ -169,7 +179,9 @@ It never stores whole conversations.
 
 **What it sends:** once a day, and when you choose Check for Updates…, a request to GitHub's public API for the newest release of this app. It carries nothing about you or your sessions. GitHub sees your IP address, as with any web page. Turn the daily check off in Settings › Updates.
 
-**What it starts:** every 10 minutes, while the hook is active and you have used Claude Code since the last check, Claude Code itself, for a few seconds, to read your usage (see What it shows). Claude Code connects to Anthropic as it always does when it starts, with your own sign-in, and keeps its own record of the folder as it does for any folder you open; the app adds nothing to that and sends nothing of its own. If the folder isn't allowed yet, it tries again six hours later.
+**The usage plugin**, when you install it, writes only `usage.json`: the same two percentages and resets as the status line, when Claude Code measures them, and only if the app's folder exists. It reads nothing else and sends nothing.
+
+**What it starts:** every 10 minutes at most, while the hook is active, you have used Claude Code since the last check and the numbers are more than a few minutes old, Claude Code itself, for a few seconds, to read your usage (see What it shows). Claude Code connects to Anthropic as it always does when it starts, with your own sign-in, and keeps its own record of the folder as it does for any folder you open; the app adds nothing to that and sends nothing of its own. If the folder isn't allowed yet, it tries again six hours later.
 
 ## How it works
 

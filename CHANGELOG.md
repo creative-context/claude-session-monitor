@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- An optional Claude Code plugin, `session-usage`, gives the app your weekly usage from every session, terminal or Claude app, the moment Claude Code measures it. It shows nothing and sends nothing, and with it the app no longer opens Claude Code in a hidden terminal to read the numbers. Install it with `/plugin install session-usage --marketplace creative-context/claude-session-monitor`.
+
 ## 0.5.0
 
 - Fix: closings that only report no longer need you. "El servidor elige el puerto libre", "The logs tell me…", a question the message answers itself ("¿Por qué fallaba? Porque…") and "I couldn't approve it" read as done. A request counts when it speaks to you: at the start of a sentence ("Elige una", "Tell me which"), as "dime" or "avísame", or as a question you answer ("¿Lo subo a main?").
