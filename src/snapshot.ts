@@ -20,7 +20,17 @@ export const needsYou = (shown: Shown, last: number, now: number) =>
 
 // A session whose own turn ended but still has subagents or a workflow running is
 // busy: the card says so instead of "Done". A question or an error still wins.
+// A session asks you itself: waiting on you, or a closing that asks.
+const asksItself = (x: Session | undefined) =>
+  !!x && !x.archived && (x.status === "waiting" || (x.status === "done" && x.outcome === "asks"));
+
 export function shownStatus(s: Session, agents: Agent[]): Shown {
+  // It passes on another session's question that the other one already shows: the
+  // question is that session's, so it shows there once, not here too.
+  if (s.status === "done" && s.outcome === "asks" && s.relayed?.some((sid) => {
+    const x = sessions.get(sid);
+    return asksItself(x) && !x!.relayed?.includes(s.sid);
+  })) return "done";
   if (s.status === "done" && s.outcome === "asks") return "asks";
   if (s.status === "done" && s.outcome === "error") return "error";
   return (s.status === "done" || s.status === "idle") && (agents.length || activeCommands(s).length) ? "working" : s.status;

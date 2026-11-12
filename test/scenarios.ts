@@ -328,6 +328,20 @@ for (const [n, other, answered, close] of [
   }));
 }
 
+// 87. It passes on 88's question, and 88 shows that question itself: it shows once, in 88.
+{
+  const at = Date.now() - 5 * 60_000;
+  const tp88 = transcript("t88.jsonl", [said("Two ways to start. Which one do you want first?")]);
+  ev(id(88), { ev: "UserPromptSubmit", prompt: "Plan the design", tp: tp88, t: at - 60_000 });
+  ev(id(88), { ev: "Stop", tp: tp88, t: at - 30_000 });
+  writeFileSync(join(appDir, `local_${id(88)}.json`), JSON.stringify({
+    sessionId: `local_${id(88)}`, cliSessionId: id(88), title: "Draft review 88", originCwd: "/tmp/demo", createdAt: at - 60_000, lastActivityAt: at - 30_000,
+  }));
+  const tp87 = transcript("t87.jsonl", [said(`The design session is waiting for you to pick where to start: ${link(88)}.`)]);
+  ev(id(87), { ev: "UserPromptSubmit", prompt: "Where are we?", tp: tp87, t: at });
+  ev(id(87), { ev: "Stop", tp: tp87, t: at + 1000 });
+}
+
 // 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
 // in the file name); 45 names a session the app no longer has.
 for (const [n, file, extra] of [
@@ -643,6 +657,7 @@ try {
   check("56 an app note that only invites the next text is an open offer: done", find(s, 56)?.status === "done", find(s, 56));
   check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
   check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
+  check("87 a question it passes on, which the other session shows itself, shows only there", find(s, 87)?.status === "done" && find(s, 87)?.needsYou === false && find(s, 88)?.status === "asks", [find(s, 87), find(s, 88)]);
   check("61 an app note that says to answer in another session, named in words, is that session's", find(s, 61)?.status === "done", find(s, 61));
   check("62 an app note that asks for the OK, or for more changes, still asks", find(s, 62)?.status === "asks", find(s, 62));
   check("63 an app note that asks which option, or another, still asks", find(s, 63)?.status === "asks", find(s, 63));
