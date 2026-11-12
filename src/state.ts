@@ -84,7 +84,7 @@ export type Session = {
 
 // A shell command running in the background: Claude Code wakes the session up when it ends.
 // Its ID, when it started and its short description, never the command itself.
-export type Command = { id: string; at: number; detail?: string };
+export type Command = { id: string; at: number; detail?: string; monitor?: boolean; until?: number }; // until: when a Monitor expires
 
 // A reminder a session set for itself (ScheduleWakeup, CronCreate). Only when and how
 // often, never what it will do. They live in the session's process, so they go when it

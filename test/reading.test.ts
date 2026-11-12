@@ -211,6 +211,62 @@ describe("agent scan", () => {
     expect(A.activeAgents(s)).toEqual([]);
     expect(shownStatus(s, A.activeAgents(s))).toBe("done");
   });
+
+  test("an agent's command can end in its session's queue instead of its own transcript", () => {
+    const { s, sub } = sessionWithAgents("bgqueue");
+    const side = (row: object) => JSON.stringify({ isSidechain: true, timestamp: new Date().toISOString(), ...row }) + "\n";
+    writeFileSync(join(sub, "agent-e1.jsonl"),
+      side({ type: "assistant", message: { content: [{ type: "tool_use", id: "tu1", name: "Bash", input: { command: "sleep 600", description: "Wait for the made-up suite" } }], stop_reason: "tool_use" } }) +
+      side({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "tu1", content: "Command running in background with ID: bge1. Output is being written to: /tmp/x" }] } }) +
+      side({ type: "assistant", message: { content: [{ type: "text", text: "Waiting." }], stop_reason: "end_turn" } }));
+    S.apply({ sid: "bgqueue", ev: "SubagentStop", agent: "e1", t: Date.now() } as any);
+    A.scanAllAgents();
+    expect(A.activeAgents(s).map((x) => x.id)).toEqual(["e1"]);
+    appendFileSync(s.tp!, JSON.stringify({ type: "queue-operation", operation: "enqueue", content: "<task-notification>\n<task-id>bge1</task-id>\n<status>completed</status>\n</task-notification>" }) + "\n");
+    A.scanAllAgents();
+    expect(A.activeAgents(s)).toEqual([]);
+  });
+});
+
+describe("background work in a transcript", () => {
+  const at = new Date().toISOString();
+  const call = (id: string, name: string, input: object) =>
+    JSON.stringify({ type: "assistant", timestamp: at, message: { content: [{ type: "tool_use", id, name, input }] } }) + "\n";
+  const result = (id: string, text: string, data?: object) =>
+    JSON.stringify({ type: "user", timestamp: at, ...(data ? { toolUseResult: data } : {}), message: { content: [{ type: "tool_result", tool_use_id: id, content: text }] } }) + "\n";
+  const queued = (body: string) => JSON.stringify({ type: "queue-operation", operation: "enqueue", content: `<task-notification>\n${body}\n</task-notification>` }) + "\n";
+  const file = (name: string, text: string) => {
+    const f = join(PROJECTS, name);
+    writeFileSync(f, text);
+    return f;
+  };
+
+  test("a command moved to the background after its timeout, said only in the text, counts", () => {
+    const f = file("timeout.jsonl", call("t1", "Bash", { command: "make", description: "Build the made-up site" }) +
+      result("t1", "Command did not complete within its 120s timeout and was moved to the background (ID: bto1). Output is being written to: /tmp/x"));
+    expect(A.openCommands(f).map((c) => [c.id, c.detail])).toEqual([["bto1", "Build the made-up site"]]);
+  });
+
+  test("a Monitor counts until it ends or expires; its events don't end it", () => {
+    const started = call("m1", "Monitor", { description: "Watch the made-up queue", command: "tail -f q.log" }) +
+      result("m1", "Monitor started (task bmo1, expires in 15m unless the source ends first).", { taskId: "bmo1", timeoutMs: 900000, persistent: false });
+    const event = queued("<task-id>bmo1</task-id>\n<summary>Monitor event: \"Watch the made-up queue\"</summary>\n<event>job 4 exit 0</event>");
+    const f = file("monitor.jsonl", started + event);
+    const [m] = A.openCommands(f);
+    expect([m.id, m.monitor, m.until! - m.at]).toEqual(["bmo1", true, 900000]);
+    expect(A.openCommands(file("monitor-done.jsonl", started + event + queued("<task-id>bmo1</task-id>\n<status>completed</status>")))).toEqual([]);
+    expect(A.openCommands(file("monitor-gone.jsonl", started + queued("<task-id>bmo1</task-id>\n<event>[Monitor expired after 15m with no events delivered.]</event>")))).toEqual([]);
+  });
+
+  test("a session watching a Monitor after its turn shows working, until the watch expires", () => {
+    const tp = file("watching.jsonl", call("m2", "Monitor", { description: "Watch the made-up deploy" }) +
+      result("m2", "Monitor started (task bmo2, expires in 15m).", { taskId: "bmo2", timeoutMs: 900000 }));
+    const s = newSession("watching", { tp });
+    A.scanCommands(s);
+    expect(A.activeCommands(s).map((c) => c.detail)).toEqual(["Watch the made-up deploy"]);
+    s.commands![0].until = Date.now() - 1; // its 15 minutes are up
+    expect(A.activeCommands(s)).toEqual([]);
+  });
 });
 
 describe("usage readings", () => {
