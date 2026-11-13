@@ -28,58 +28,6 @@ extension NSToolbarItem.Identifier {
     static let sound = NSToolbarItem.Identifier("sound")
 }
 
-// The page fills the window, title bar included, and a web view never lets a click there
-// move the window. So the header row in the title bar drags the window like a title bar,
-// except over the controls the page reports (the counts, for one). A double click does
-// what System Settings says a title bar double click does.
-final class PageView: WKWebView {
-    var holes: [CGRect] = [] // in the page's CSS pixels
-    var titlebarHeight: CGFloat = 0 // in points, from the top
-
-    // WebKit doesn't tell the page when the pointer leaves an inactive window, and it
-    // replays the last pointer position on layout changes, so the related-sessions
-    // spotlight could stay on or turn on by itself. This tracking area works in any
-    // window state and tells the page when the pointer comes and goes.
-    private var exitArea: NSTrackingArea?
-    override func updateTrackingAreas() {
-        super.updateTrackingAreas()
-        if let exitArea { removeTrackingArea(exitArea) }
-        let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
-        addTrackingArea(area)
-        exitArea = area
-    }
-    override func mouseEntered(with event: NSEvent) {
-        super.mouseEntered(with: event)
-        if event.trackingArea === exitArea {
-            evaluateJavaScript("window.csm?.pointer?.(true)", completionHandler: nil)
-        }
-    }
-    override func mouseExited(with event: NSEvent) {
-        super.mouseExited(with: event)
-        if event.trackingArea === exitArea {
-            evaluateJavaScript("window.csm?.pointer?.(false)", completionHandler: nil)
-        }
-    }
-
-    override func mouseDown(with event: NSEvent) {
-        var p = convert(event.locationInWindow, from: nil)
-        if !isFlipped { p.y = bounds.height - p.y }
-        let css = CGPoint(x: p.x / pageZoom, y: p.y / pageZoom)
-        guard p.y <= titlebarHeight, !holes.contains(where: { $0.contains(css) }), let window else {
-            return super.mouseDown(with: event)
-        }
-        if event.clickCount == 2 {
-            switch UserDefaults.standard.string(forKey: "AppleActionOnDoubleClick") {
-            case "Minimize": window.performMiniaturize(nil)
-            case "None": break
-            default: window.performZoom(nil)
-            }
-        } else {
-            window.performDrag(with: event)
-        }
-    }
-}
-
 // A release on GitHub: its tag ("v0.4.0") and its page.
 struct Release: Sendable {
     let version: String
@@ -126,14 +74,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var needsMenuKey = ""
     var availableUpdate: Release?
     var sizeMenus: [NSMenu] = []
-    var server: Process?
-    var serverStartedAt = Date.distantPast
-    var launching = false // looking at what answers on the port before starting
-    var restartPending = false
-    var crashes = 0 // in a row, for the wait before the next restart
-    var portTaken = 0
-    var bunLogged = false
-    var quitting = false
+    // The local server: run, replaced and restarted by the family's app kit (ShellKit.swift).
+    var keeper: ServerKeeper!
     var pageLoaded = false
     var pageSendsStatus = false // the loaded page posts its counts; until then, poll
     var lastStatusAt = Date.distantPast
@@ -141,7 +83,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     // MARK: launch
 
     func applicationDidFinishLaunching(_ notification: Notification) {
-        launchServer()
+        ShellLog.appName = appName
+        ShellLog.path = Self.logPath
+        keeper = ServerKeeper(.init(port: port, version: currentVersion, versionEnv: "CSM_VERSION", parentEnv: "CSM_PARENT_PID"))
+        keeper.onExit = { [weak self] in self?.setLive(false) }
+        keeper.launch()
         buildMainMenu()
         buildWindow()
         buildStatusItem()
@@ -173,8 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     }
 
     func applicationWillTerminate(_ notification: Notification) {
-        quitting = true
-        server?.terminate()
+        keeper.terminate()
     }
 
     // Clicking the Dock icon (or opening the app again) brings the window back.
@@ -188,266 +133,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     // MARK: server
 
     // The server, bundled into server.js, the page and the hook travel inside the app (build.sh puts them there).
-    var serverDir: URL? {
-        guard let dir = Bundle.main.resourceURL?.appendingPathComponent("server"),
-              FileManager.default.fileExists(atPath: dir.appendingPathComponent("server.js").path) else { return nil }
-        return dir
-    }
-
-    var bunPath: String? {
-        let home = NSHomeDirectory()
-        return ["/opt/homebrew/bin/bun", "/usr/local/bin/bun", "\(home)/.bun/bin/bun"]
-            .first { FileManager.default.isExecutableFile(atPath: $0) }
-    }
+    var serverDir: URL? { ServerKeeper.serverDir }
+    var bunPath: String? { ServerKeeper.bunPath }
 
     // The hook needs jq; recent macOS ships it.
     var jqPath: String? {
         ["/usr/bin/jq", "/opt/homebrew/bin/jq", "/usr/local/bin/jq"].first { FileManager.default.isExecutableFile(atPath: $0) }
     }
 
-    // A line in the server's log, which the app also writes to, and in the system log.
-    // Opened for appending each time, so the server's own lines are never overwritten.
+    // The server's log, which the app also writes to (ShellLog).
     nonisolated static var logPath: String { "\(NSHomeDirectory())/.claude-session-monitor/server.log" }
-
-    nonisolated static func log(_ text: String) {
-        NSLog("\(appName): \(text)")
-        let fd = openLog()
-        guard fd >= 0 else { return }
-        let line = "\(ISO8601DateFormatter().string(from: Date())) app: \(text)\n"
-        _ = line.withCString { write(fd, $0, strlen($0)) }
-        close(fd)
-    }
-
-    nonisolated static func openLog() -> Int32 {
-        let dir = (logPath as NSString).deletingLastPathComponent
-        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
-        return open(logPath, O_WRONLY | O_APPEND | O_CREAT, 0o644)
-    }
-
-    // Starts the server, unless one already answers on the port. One of this version is
-    // used as it is. An older one, or one that doesn't say its version, is stopped first,
-    // but only if it is an app's own copy of the server: a server run by hand from a
-    // checkout is left alone, and the window uses it.
-    func launchServer() {
-        guard !launching, !restartPending, server == nil, !quitting else { return }
-        launching = true
-        var req = URLRequest(url: stateURL)
-        req.timeoutInterval = 1
-        let mine = currentVersion
-        URLSession.shared.dataTask(with: req) { data, response, _ in
-            guard (response as? HTTPURLResponse)?.statusCode == 200 else {
-                Task { @MainActor in
-                    self.launching = false
-                    self.startServer()
-                }
-                return
-            }
-            let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
-            let info = json?["server"] as? [String: Any]
-            let version = info?["version"] as? String
-            let given = (info?["pid"] as? NSNumber).map { pid_t($0.int32Value) }
-            if version == mine {
-                Task { @MainActor in
-                    self.launching = false
-                    self.portTaken = 0
-                    Self.log("a server of this version (\(mine)) already answers on port \(port); using it")
-                }
-                return
-            }
-            DispatchQueue.global(qos: .utility).async {
-                let pid = given ?? Self.portHolder()
-                let what = "version \(version ?? "unknown"), pid \(pid.map { String($0) } ?? "unknown")"
-                guard let pid, pid > 1, pid != getpid(), Self.isAppServer(pid) else {
-                    Task { @MainActor in
-                        self.launching = false
-                        Self.log("port \(port) is held by a server that isn't an app's own (\(what)); using it")
-                    }
-                    return
-                }
-                Self.log("stopping an app's server of another version (\(what)) to start \(mine)")
-                let stopped = Self.stop(pid)
-                Task { @MainActor in
-                    self.launching = false
-                    if stopped {
-                        self.startServer()
-                    } else {
-                        Self.log("the old server (pid \(pid)) still holds port \(port)")
-                        self.scheduleLaunch(after: 30)
-                    }
-                }
-            }
-        }.resume()
-    }
-
-    // Starts the app's own copy of the server, with the app's version and pid: the server
-    // quits on its own when the app is gone, so a crash or a force quit leaves no orphan.
-    func startServer() {
-        guard server == nil, !quitting else { return }
-        guard let bun = bunPath, let dir = serverDir else {
-            Self.log("bun or the server files not found")
-            return
-        }
-        if !bunLogged {
-            bunLogged = true
-            DispatchQueue.global(qos: .utility).async {
-                Self.log("bun \(bun), version \(Self.bunVersion(bun) ?? "unknown")")
-            }
-        }
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: bun)
-        p.arguments = [dir.appendingPathComponent("server.js").path]
-        p.currentDirectoryURL = dir
-        var env = ProcessInfo.processInfo.environment
-        env["CSM_VERSION"] = currentVersion
-        env["CSM_PARENT_PID"] = String(getpid())
-        p.environment = env
-        let fd = Self.openLog()
-        if fd >= 0 {
-            let h = FileHandle(fileDescriptor: fd, closeOnDealloc: true)
-            p.standardOutput = h
-            p.standardError = h
-        }
-        p.terminationHandler = { proc in
-            let pid = proc.processIdentifier
-            let code = proc.terminationStatus
-            let signaled = proc.terminationReason == .uncaughtSignal
-            Task { @MainActor in self.serverExited(pid: pid, code: code, signaled: signaled) }
-        }
-        do {
-            try p.run()
-            server = p
-            serverStartedAt = Date()
-        } catch {
-            Self.log("could not start the server: \(error)")
-            scheduleLaunch(after: 30)
-        }
-    }
-
-    // Exit code 3 is the server's "port taken": another copy answers, so look at it again
-    // in a while. Any other exit is a crash: restart it, waiting longer after each crash
-    // in a row (2 s up to a minute). One that ran for a minute starts the count again.
-    func serverExited(pid: pid_t, code: Int32, signaled: Bool) {
-        guard server?.processIdentifier == pid else { return }
-        server = nil
-        if quitting { return }
-        setLive(false)
-        let ran = Date().timeIntervalSince(serverStartedAt)
-        if ran > 60 { crashes = 0; portTaken = 0 }
-        let delay: TimeInterval
-        if !signaled && code == 3 {
-            portTaken += 1
-            delay = min(30, 5 * pow(2, Double(portTaken - 1)))
-            Self.log("port \(port) is taken; looking again in \(Int(delay)) s")
-        } else {
-            crashes += 1
-            delay = min(60, 2 * pow(2, Double(crashes - 1)))
-            Self.log("the server stopped (\(signaled ? "signal" : "exit code") \(code)) after \(Int(ran)) s; restarting in \(Int(delay)) s")
-        }
-        scheduleLaunch(after: delay)
-    }
-
-    func scheduleLaunch(after delay: TimeInterval) {
-        guard !restartPending else { return }
-        restartPending = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-            self.restartPending = false
-            self.launchServer()
-        }
-    }
-
-    // `bun --version`, for the log.
-    nonisolated static func bunVersion(_ bun: String) -> String? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: bun)
-        p.arguments = ["--version"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        return String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines)
-    }
-
-    // The pid listening on the port, from lsof.
-    nonisolated static func portHolder() -> pid_t? {
-        let p = Process()
-        p.executableURL = URL(fileURLWithPath: "/usr/sbin/lsof")
-        p.arguments = ["-nP", "-iTCP:\(port)", "-sTCP:LISTEN", "-t"]
-        let out = Pipe()
-        p.standardOutput = out
-        p.standardError = FileHandle.nullDevice
-        guard (try? p.run()) != nil else { return nil }
-        let data = out.fileHandleForReading.readDataToEndOfFile()
-        p.waitUntilExit()
-        let text = String(data: data, encoding: .utf8) ?? ""
-        return text.split(whereSeparator: \.isNewline).compactMap { pid_t($0.trimmingCharacters(in: .whitespaces)) }.first
-    }
-
-    // A process's arguments, exactly as it got them (paths with spaces included).
-    nonisolated static func arguments(of pid: pid_t) -> [String]? {
-        var mib: [Int32] = [CTL_KERN, KERN_PROCARGS2, pid]
-        var size = 0
-        guard sysctl(&mib, 3, nil, &size, nil, 0) == 0, size > 4 else { return nil }
-        var buf = [UInt8](repeating: 0, count: size)
-        guard sysctl(&mib, 3, &buf, &size, nil, 0) == 0, size > 4 else { return nil }
-        let argc = Int(buf.withUnsafeBytes { $0.load(as: Int32.self) })
-        var i = 4
-        while i < size && buf[i] != 0 { i += 1 } // the executable's path
-        while i < size && buf[i] == 0 { i += 1 }
-        var args: [String] = []
-        while args.count < argc && i < size {
-            let start = i
-            while i < size && buf[i] != 0 { i += 1 }
-            args.append(String(decoding: buf[start..<i], as: UTF8.self))
-            i += 1
-        }
-        return args
-    }
-
-    // A process's working folder.
-    nonisolated static func workingFolder(of pid: pid_t) -> String? {
-        var info = proc_vnodepathinfo()
-        let size = Int32(MemoryLayout<proc_vnodepathinfo>.size)
-        guard proc_pidinfo(pid, PROC_PIDVNODEPATHINFO, 0, &info, size) == size else { return nil }
-        return withUnsafePointer(to: &info.pvi_cdir.vip_path) {
-            $0.withMemoryRebound(to: CChar.self, capacity: Int(MAXPATHLEN)) { String(cString: $0) }
-        }
-    }
-
-    // True for `bun …/server.ts` (or server.js) inside an app bundle's
-    // Contents/Resources/server/: an app's own server, of any version. Older apps start
-    // it with a relative path from that folder, so the working folder resolves it.
-    nonisolated static func isAppServer(_ pid: pid_t) -> Bool {
-        guard let args = arguments(of: pid), let first = args.first,
-              (first as NSString).lastPathComponent == "bun",
-              let script = args.dropFirst().first(where: { !$0.hasPrefix("-") }) else { return false }
-        var path = script
-        if !path.hasPrefix("/") {
-            guard let cwd = workingFolder(of: pid) else { return false }
-            path = (cwd as NSString).appendingPathComponent(path)
-        }
-        path = (path as NSString).standardizingPath
-        let name = (path as NSString).lastPathComponent
-        return ["server.ts", "server.js"].contains(name)
-            && (path as NSString).deletingLastPathComponent.hasSuffix(".app/Contents/Resources/server")
-    }
-
-    // Asks a server to quit and waits for the port to be free: 5 s, then it is killed.
-    nonisolated static func stop(_ pid: pid_t) -> Bool {
-        let free = { (seconds: Double) -> Bool in
-            let until = Date().addingTimeInterval(seconds)
-            while Date() < until {
-                if portHolder() == nil { return true }
-                usleep(250_000)
-            }
-            return portHolder() == nil
-        }
-        kill(pid, SIGTERM)
-        if free(5) { return true }
-        if isAppServer(pid) { kill(pid, SIGKILL) }
-        return free(2)
-    }
+    nonisolated static func log(_ text: String) { ShellLog.write(text) }
 
     // MARK: window
 
@@ -482,6 +178,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         let config = WKWebViewConfiguration()
         config.userContentController.add(self, name: "strip") // the page asks for the alert sound
         web = PageView(frame: .zero, configuration: config)
+        // WebKit doesn't tell the page when the pointer leaves an inactive window, and it
+        // replays the last pointer position on layout changes, so the related-sessions
+        // spotlight could stay on or turn on by itself: the view tells the page.
+        web.pointerFunction = "window.csm?.pointer"
         web.setValue(false, forKey: "drawsBackground")
         web.navigationDelegate = self
         web.autoresizingMask = [.width, .height]
@@ -1234,7 +934,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
                 if let entries { self.paintNeedsMenu(entries) }
                 self.paintStatus(needs: waiting, working: working, ok: ok)
                 // Nobody answers and nothing is starting: start the server again.
-                if !ok && self.server == nil { self.launchServer() }
+                if !ok && self.keeper.process == nil { self.keeper.launch() }
             }
         }.resume()
     }

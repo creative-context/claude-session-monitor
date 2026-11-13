@@ -1,4 +1,4 @@
-// mac-app-kit 0.1.0 (server-kit.ts). Vendored: don't edit here. Change it in the kit and vendor again.
+// mac-app-kit 0.2.0 (server-kit.ts). Vendored: don't edit here. Change it in the kit and vendor again.
 // The local server's life, shared by the family's Mac apps. Each app's server.ts keeps its
 // own data and routes; this holds what they all do the same way:
 //   - it listens on 127.0.0.1 only and answers only its own host name (no DNS rebinding);

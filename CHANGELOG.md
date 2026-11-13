@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.6
+
+- The app's shared shell parts now come from the family's app kit, mac-app-kit 0.2.0, vendored as `app/ShellKit.swift`. That covers the server's log, running, replacing and restarting the local server, and the page view that drags the window from its header. Nothing changes in what the app does; the server part moves to kit 0.2.0 too, unchanged.
+
 ## 0.6.5
 
 - The server's life (the host check, exit 3 when the port is taken, stopping with the app, `safe()`, `/api/state` and the stream, the page's files and the 3 s tick) now comes from the family's app kit, mac-app-kit 0.1.0, vendored as `src/server-kit.ts`. Nothing changes in what it does: `bun test`, `bun test/scenarios.ts` and `bun test/lifecycle.ts` pass unchanged.

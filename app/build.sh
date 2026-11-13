@@ -19,7 +19,7 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 for arch in arm64 x86_64; do
   swiftc -O -swift-version 5 -target "$arch-apple-macos14.0" \
     -framework AppKit -framework WebKit -framework ServiceManagement -framework UserNotifications \
-    app/main.swift -o "build/ClaudeSessionMonitor-$arch"
+    app/main.swift app/ShellKit.swift -o "build/ClaudeSessionMonitor-$arch"
 done
 lipo -create build/ClaudeSessionMonitor-arm64 build/ClaudeSessionMonitor-x86_64 \
   -output "$APP/Contents/MacOS/ClaudeSessionMonitor"
