@@ -1,4 +1,4 @@
-/* mac-app-design 0.2.0 (icons.js). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.2.1 (icons.js). Vendored: don't edit here. Change it in the design repo and vendor again. */
 // The family's icons: drawn on a 24 px grid, all in the same 1.25 px stroke (base.css sets it).
 // One source for both apps. In a page:
 //   DesignIcons.svg("folder")        an inline <svg class="i"> string

@@ -1,4 +1,4 @@
-// mac-app-kit 0.2.0 (ShellKit.swift). Vendored: don't edit here. Change it in the kit and vendor again.
+// mac-app-kit 0.2.1 (ShellKit.swift). Vendored: don't edit here. Change it in the kit and vendor again.
 // The native shell's shared parts for the family's Mac apps, compiled with each app's own
 // main.swift (build.sh passes both to swiftc):
 //   - ShellLog: one line in the server's log (server.log), which the app also writes to;

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.7
+
+- `kit.json` and `public/design.json` now name where their copies come from: the repos `creative-context/mac-app-kit` and `creative-context/mac-app-design`, and the commit each was taken at (kit and design 0.2.1). Only the vendored files' header lines change; nothing changes in what the app does or shows.
+
 ## 0.6.6
 
 - The app's shared shell parts now come from the family's app kit, mac-app-kit 0.2.0, vendored as `app/ShellKit.swift`. That covers the server's log, running, replacing and restarting the local server, and the page view that drags the window from its header. Nothing changes in what the app does; the server part moves to kit 0.2.0 too, unchanged.
