@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.5
+
+- The server's life (the host check, exit 3 when the port is taken, stopping with the app, `safe()`, `/api/state` and the stream, the page's files and the 3 s tick) now comes from the family's app kit, mac-app-kit 0.1.0, vendored as `src/server-kit.ts`. Nothing changes in what it does: `bun test`, `bun test/scenarios.ts` and `bun test/lifecycle.ts` pass unchanged.
+
 ## 0.6.4
 
 - The page's tokens, shared components and icons now come from the family's design system, mac-app-design 0.2.0, vendored next to it, instead of living inside the page. Nothing changes on screen: every element's computed style was compared before and after in WebKit, in four window sizes, in a browser and inside the app, in each view and popover, with the demo's edge cases.

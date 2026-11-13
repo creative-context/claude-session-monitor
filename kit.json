@@ -1,0 +1,7 @@
+{
+  "name": "mac-app-kit",
+  "version": "0.1.0",
+  "files": {
+    "src/server-kit.ts": "5707399b98186ce0b78c16abe1e0715b058010ff738d94e3e8fada3f11ac7249"
+  }
+}

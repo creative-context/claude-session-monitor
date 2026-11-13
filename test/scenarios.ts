@@ -842,6 +842,10 @@ check("cron: a bad expression is null", parseCron("61 * * * *") === null && pars
   const edited = Object.entries(manifest.files as Record<string, string>)
     .filter(([file, hash]) => new Bun.CryptoHasher("sha256").update(readFileSync(join(pub, file), "utf8")).digest("hex") !== hash).map(([f]) => f);
   check("design system: the vendored files weren't edited", edited.length === 0, edited);
+  const kit = JSON.parse(readFileSync(join(import.meta.dir, "..", "kit.json"), "utf8"));
+  const kitEdited = Object.entries(kit.files as Record<string, string>)
+    .filter(([file, hash]) => new Bun.CryptoHasher("sha256").update(readFileSync(join(import.meta.dir, "..", file), "utf8")).digest("hex") !== hash).map(([f]) => f);
+  check("app kit: the vendored server kit wasn't edited", kitEdited.length === 0, kitEdited);
 }
 
 console.log(failed ? `\n${failed} failed` : "\nAll passed");
