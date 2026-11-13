@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.8
+
+- When Bun, jq or the server files are missing, the alert now says "Claude Session Monitor can't start" instead of "needs a bit more". It still lists what is missing and how to get it.
+
 ## 0.6.7
 
 - `kit.json` and `public/design.json` now name where their copies come from: the repos `creative-context/mac-app-kit` and `creative-context/mac-app-design`, and the commit each was taken at (kit and design 0.2.1). Only the vendored files' header lines change; nothing changes in what the app does or shows.

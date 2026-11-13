@@ -1204,7 +1204,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         if serverDir == nil { missing.append("The server files are missing from the app. Download it again.") }
         guard !missing.isEmpty else { return false }
         let alert = NSAlert()
-        alert.messageText = "\(appName) needs a bit more"
+        alert.messageText = "\(appName) can't start"
         alert.informativeText = missing.joined(separator: "\n\n") + "\n\nThen open the app again."
         alert.addButton(withTitle: "OK")
         if bunPath == nil { alert.addButton(withTitle: "Open bun.sh") }
