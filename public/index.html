@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" data-density="compact">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -207,10 +207,9 @@
   .group:not(.active) .card.done { --tint: var(--color-background-card); }
   .group:not(.active) .card.done { --meta: var(--color-text-secondary); }
   .card .detail .cur { font-weight: 500; color: var(--csm-text-on-tint); }
-  @media (max-height: 600px) {
-    .card:has(.bar) .tags { display: none; } /* the plan's bar takes the folder's place */
-    .card .bar { margin-top: auto; padding-bottom: 6px; } /* at the foot of the card, where the folder would be */
-  }
+  /* Cards are always compact (130 px), so the plan's bar takes the folder's place, at the foot of the card. */
+  .card:has(.bar) .tags { display: none; }
+  .card .bar { margin-top: auto; padding-bottom: 6px; }
   /* A reminder's time and a "+1" never shrink; a long task name gives way first. */
   .tags .tag.sched { flex: none; }
   .tags .tag.made { flex: 0 100000 auto; min-width: 64px; }

@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.9
+
+- Cards are always compact, in any window: titles at 13.5 points on one line, 130-point cards, and the plan's bar in the folder's place. A tall window used to switch to bigger titles on two lines.
+
 ## 0.6.8
 
 - When Bun, jq or the server files are missing, the alert now says "Claude Session Monitor can't start" instead of "needs a bit more". It still lists what is missing and how to get it.
