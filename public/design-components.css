@@ -1,4 +1,4 @@
-/* mac-app-design 0.10.0 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.10.1 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Components: the pieces both apps draw, with their states. Class names are the first
    app's, so nothing renames; a few aliases name a state by its meaning (needs, soft). */
 
@@ -346,18 +346,19 @@ header .spacer { flex: 1; }
 /* Two bands, the first and the last child of the box that scrolls (.up, .down), instead of a hard
    line at its edge. Each sticks to its edge and takes no room, and clicks pass through it to the
    row under it. The page shows one (.on) only while there's something past that edge.
-   --fade-color is the surface under the list, solid for the first 36% of the band. A band sticks
+   --fade-color is the surface under the list: solid only at the very edge, then a soft ease to
+   nothing, so the rows dim rather than vanish. A band sticks
    inside the box's padding, so a box with padding at an end moves that band out by it (top or
    bottom: minus the padding). In a box that lays out with gap, put the bands around an inner
    wrapper, or the gap shows. */
-.scroll-fade { display: block; position: sticky; z-index: 2; height: var(--fade-size, 46px); pointer-events: none;
+.scroll-fade { display: block; position: sticky; z-index: 2; height: var(--fade-size, 32px); pointer-events: none;
   opacity: 0; transition: opacity 120ms var(--ease-standard); }
 .scroll-fade.on { opacity: 1; }
-.scroll-fade.up { top: 0; margin-bottom: calc(-1 * var(--fade-size, 46px));
-  background: linear-gradient(to bottom, var(--fade-color, var(--color-background-body)) 36%, transparent); }
-.scroll-fade.down { bottom: 0; margin-top: calc(-1 * var(--fade-size, 46px));
-  background: linear-gradient(to top, var(--fade-color, var(--color-background-body)) 36%, transparent); }
-.pop > .scroll-fade { --fade-color: var(--color-surface-raised); --fade-size: 32px; margin-inline: -6px; }
+.scroll-fade.up { top: 0; margin-bottom: calc(-1 * var(--fade-size, 32px));
+  background: linear-gradient(to bottom, var(--fade-color, var(--color-background-body)), color-mix(in srgb, var(--fade-color, var(--color-background-body)) 45%, transparent) 40%, transparent); }
+.scroll-fade.down { bottom: 0; margin-top: calc(-1 * var(--fade-size, 32px));
+  background: linear-gradient(to top, var(--fade-color, var(--color-background-body)), color-mix(in srgb, var(--fade-color, var(--color-background-body)) 45%, transparent) 40%, transparent); }
+.pop > .scroll-fade { --fade-color: var(--color-surface-raised); --fade-size: 24px; margin-inline: -6px; }
 .pop > .scroll-fade.up { top: -6px; }
 .pop > .scroll-fade.down { bottom: -6px; }
 

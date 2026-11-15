@@ -22,12 +22,12 @@
   /* The page fills its window and reflows to any size: the header, then the views,
      which scroll when their content doesn't fit. */
   .strip { display: flex; flex-direction: column; gap: 12px; height: 100%; padding: 12px 16px 0; }
-  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -8px; padding: 0 8px 16px; scroll-padding-block: 46px; }
+  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -8px; padding: 0 8px 16px; scroll-padding-block: 32px; }
   /* Where the view scrolls out of sight, it fades into the window (the design system's
      .scroll-fade), over the side gutters too; a card brought into view clears the fade. */
   .content > .scroll-fade { margin-inline: -8px; }
   .content > .scroll-fade.down { bottom: -16px; }
-  #pop { scroll-padding-block: 32px; }
+  #pop { scroll-padding-block: 24px; }
   .view[hidden] { display: none; }
 
   /* In the app (?embed) the window has a transparent title bar: the header sits on the
