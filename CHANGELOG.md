@@ -1,5 +1,9 @@
 # Changelog
 
+## 0.6.10
+
+- The usage card's first row says it plainly: "Extra left 15%" when you're under an even pace, "Over pace 20%" when you're past it, and "On pace, exactly" on the line. It used to repeat the column's words with "15% under", which could read as a contradiction.
+
 ## 0.6.9
 
 - Cards are always compact, in any window: titles at 13.5 points on one line, 130-point cards, and the plan's bar in the folder's place. A tall window used to switch to bigger titles on two lines.

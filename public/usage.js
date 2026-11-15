@@ -60,14 +60,15 @@
     return end <= 100 ? { at: w.resets, pct: end, early } : { at: start + (100 / w.pct) * gone, pct: 100, early };
   }
 
-  // The card's rows under the chart, as [label, value]: how far over or under the even pace,
+  // The card's rows under the chart, as [label, value]: in plain words, how much you have
+  // left beyond an even pace ("Extra left 15%") or how far past it you are ("Over pace 20%"),
   // the pace so far a day, and the most a day that lasts until the reset, in the same unit.
   // The pace a day waits for the first day, like the forecast: a few hours make a poor day.
   function paceRows(w, p, now) {
     if (!w?.resets) return [];
     const diff = w.pct - (p.gone ?? 0), off = Math.round(diff);
     const days = (now - (w.resets - WEEK)) / DAY, left = Math.max(0, 100 - w.pct), daysLeft = (w.resets - now) / DAY;
-    const rows = [[p.say, off === 0 ? "on the line" : `${Math.abs(off)}% ${diff > 0 ? "over" : "under"}`]];
+    const rows = [off === 0 ? ["On pace", "exactly"] : [off > 0 ? "Over pace" : "Extra left", `${Math.abs(off)}%`]];
     if (days >= 1) rows.push(["Your pace", `${Math.round(w.pct / days)}% a day`]);
     rows.push(daysLeft >= 1 ? ["To last the week", `${Math.floor(left / daysLeft)}% a day`] : ["Left until the reset", `${Math.round(left)}%`]);
     return rows;

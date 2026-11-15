@@ -1639,7 +1639,7 @@
         html += `<div class="uc-out${p.key === "limit" ? " limit" : ""}"><div class="l">Runs out around</div><div class="t">${whenWords(fc.at)}</div><div class="l">${before} before the reset</div></div>`;
       }
       html += `<div class="uc-chart">${weekChart(w, p, chartW)}</div>`;
-      // The column's own words for the pace, and how far over or under the blue line; then
+      // How much is left beyond the blue line, or how far past it; then
       // the pace a day against what a day can take until the reset.
       html += `<div class="uc-rows">${U.paceRows(w, p, now()).map(([k, v], i) => row(k, v, i ? "" : '<i class="uc-sw"></i>')).join("")}</div>`;
     }

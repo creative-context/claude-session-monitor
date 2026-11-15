@@ -100,22 +100,22 @@ describe("projection", () => {
 
 describe("paceRows", () => {
   const rows = (w: { pct: number; resets: number | null }) => U.paceRows(w, U.pace(w, NOW), NOW);
-  test("12.5 hours in, a hair under: on the line, no pace a day yet, the rest a day", () => {
+  test("12.5 hours in, a hair under: exactly on pace, no pace a day yet, the rest a day", () => {
     const w = week(7, NOW - 12.5 * HOUR + WEEK);
-    expect(rows(w)).toEqual([["On pace", "on the line"], ["To last the week", "14% a day"]]);
+    expect(rows(w)).toEqual([["On pace", "exactly"], ["To last the week", "14% a day"]]);
   });
-  test("over or under comes from the unrounded share", () => {
-    expect(rows(week(48.6))[0]).toEqual(["On pace", "1% under"]);
-    expect(rows(week(50.4))[0]).toEqual(["On pace", "on the line"]);
-    expect(rows(week(49.6))[0]).toEqual(["On pace", "on the line"]);
-    expect(rows(week(51.2))[0]).toEqual(["On pace", "1% over"]);
+  test("extra left or over pace, in plain words, rounded to whole points", () => {
+    expect(rows(week(48.6))[0]).toEqual(["Extra left", "1%"]);
+    expect(rows(week(50.4))[0]).toEqual(["On pace", "exactly"]);
+    expect(rows(week(49.6))[0]).toEqual(["On pace", "exactly"]);
+    expect(rows(week(51.2))[0]).toEqual(["Over pace", "1%"]);
   });
   test("after the first day, the pace a day and what a day can take, in the same unit", () => {
     // 70% in 3.5 days: 20% a day; 30% left over 3.5 days is 8.57, so 8% a day lasts.
-    expect(rows(week(70))).toEqual([["Running hot", "20% over"], ["Your pace", "20% a day"], ["To last the week", "8% a day"]]);
+    expect(rows(week(70))).toEqual([["Over pace", "20%"], ["Your pace", "20% a day"], ["To last the week", "8% a day"]]);
   });
   test("on the last day, what's left until the reset", () => {
-    expect(rows(week(80, NOW + 12 * HOUR))).toEqual([["On pace", "13% under"], ["Your pace", "12% a day"], ["Left until the reset", "20%"]]);
+    expect(rows(week(80, NOW + 12 * HOUR))).toEqual([["Extra left", "13%"], ["Your pace", "12% a day"], ["Left until the reset", "20%"]]);
   });
   test("nothing without a reset time", () => {
     expect(rows(week(50, null))).toEqual([]);
