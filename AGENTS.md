@@ -21,8 +21,9 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `app/main.swift`: the native app. `app/build.sh` builds it universal and puts the server, bundled into one `server.js` with `bun build`, the page, the hook and its installer into it.
 - `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots. `test/page.ts`: the page in WebKit on the demo (Playwright from the `mac-app-design` clone), in every window size, with a screenshot of each state; run it after changing the page.
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
+- `README.md` and `docs/`: the README is short (what it is, features in a line each, install, use, a privacy summary, uninstall, develop, license). `docs/guide.md` holds everything the app shows and its optional pieces, `docs/privacy.md` every file it reads, keeps, changes, sends and starts, and `docs/architecture.md` how it's built, the tools and the lessons from other projects.
 - `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome on a Mac, for SF Pro (the command is at the top of the file). Edit the HTML, never the PNG.
-- `docs/screenshot.png`: the page on the demo data running hot (`bun test/demo.ts --hot`), drawn in WebKit at 2× with the weekly usage card open, by `docs/screenshot.swift` (the command is at the top of the file).
+- `docs/screenshot.png`: shown in the guide; the page on the demo data running hot (`bun test/demo.ts --hot`), drawn in WebKit at 2× with the weekly usage card open, by `docs/screenshot.swift` (the command is at the top of the file).
 - `docs/demo.gif`: the README's top animation, 880 px wide, recorded in WebKit by `docs/demo-gif.swift` (the command is at the top of the file), which runs `bun test/demo.ts --gif` in UTC and cues its story: a session turns Needs you and moves first, then another one finishes. Needs ffmpeg.
 
 ## Commands
@@ -38,19 +39,20 @@ sh app/build.sh --release  # build and zip for a release
 ## Rules
 
 - **The hook never blocks or breaks a session.** No network, nothing on stdout, always exit 0, and only hook events that every Claude Code version in use knows.
-- **Privacy is a contract.** Read and store only what the README's Privacy section lists, and update that section with any new read. Never read or store a scheduled task's text, its permissions or a whole conversation.
+- **Privacy is a contract.** Read and store only what `docs/privacy.md` lists, and update it with any new read; the README's three-point summary stays true. Never read or store a scheduled task's text, its permissions or a whole conversation.
 - **One network request, and only one:** the app's update check in `app/main.swift`, to GitHub's releases API. The usage probe starts Claude Code itself, which connects as it always does; the app adds nothing to that and sends nothing of its own. It only ever opens this repository's release pages. To test it, serve a fake reply such as `{"tag_name": "v9.9.9", "html_url": "…/releases/tag/v9.9.9"}` and point the app at it with `defaults write com.creativecontext.ClaudeSessionMonitor updateFeedURL http://127.0.0.1:4760/latest` (delete the key afterwards).
 - **Tests and the demo never touch the user's data.** They point `CSM_DIR`, `CSM_APP_SESSIONS` and `CSM_PROJECTS` at temp folders.
 - **The app runs its own copy of the server.** After changing `server.ts`, `src/`, `closing.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
 - **One rule for "needs you",** computed in `src/snapshot.ts` and shared by the window, the Dock badge and the menu bar: sessions, History rows and tasks carry `needsYou`, and the state carries `attention`, the list with its words. The page and the app show them and never work them out.
 - **The server ends with its app and survives its own errors.** It exits when `CSM_PARENT_PID` is gone and with code 3 when the port is taken; `/api/state` carries `server: { version, pid }`. Wrap new timers in `safe()`.
 - **The look of shared pieces lives in the design system.** A token, a component or an icon changes in `mac-app-design` first, then it's vendored here with `bun ../mac-app-design/tools/vendor.ts public`, and `bun ../mac-app-design/tools/compare.ts` (Playwright, WebKit) shows what changed on screen against the page before. Session Monitor's look is the design system's reference: a change that isn't meant to change this page must compare with no differences. `bun test/scenarios.ts` checks the vendored files weren't edited.
+- **The README stays short,** about 600 words. What a feature does goes in `docs/guide.md`, not the README; the README's features list changes only when what the app is changes. Keep each fact in one place and link to it.
 - **Interface copy in American English.** Text reaches 4.5:1 on its surface, motion stays calm, and Reduce Motion keeps only color fades.
-- **No product or personal names, and no other brands,** in code, comments, docs or demo content, beyond the credits in the README. Demo data is made up.
+- **No product or personal names, and no other brands,** in code, comments, docs or demo content, beyond the credits in the README and `docs/architecture.md`. Demo data is made up.
 
 ## Releasing
 
-1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `app/Info.plist`, the version line, badge and zip name in `README.md`, and add a `## x.y.z` section to `CHANGELOG.md`.
+1. Bump `CFBundleShortVersionString` and `CFBundleVersion` in `app/Info.plist` and add a `## x.y.z` section to `CHANGELOG.md`.
 2. Commit, push, and wait for CI to pass on `main`.
 3. Publish the release on that commit, with its CHANGELOG section as the notes:
    `gh release create vx.y.z --target <commit> --title vx.y.z --notes-file <notes>`.

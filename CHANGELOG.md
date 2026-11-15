@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- A short README, like other Mac apps': what it is, the features in a line each, install, use, privacy in three points, uninstall, develop. The rest moved, with nothing cut: what the app shows to `docs/guide.md`, the full privacy contract to `docs/privacy.md`, and how it's built to `docs/architecture.md`. Its version badge reads the latest release, so the README no longer changes at each version.
 - Where a view scrolls out of sight, it fades into the window instead of ending at a hard line: at the bottom while there's more below (Earlier today, History, Scheduled), and at the top once you've scrolled down. The count popover does the same in its own color when its list scrolls. The fade is subtle: the rows past the edge dim rather than vanish. Nothing fades when everything fits, and a click on a faded row still opens it. The fade is the design system's (`mac-app-design` 0.10.1, which brings no other change to this page).
 - `test/page.ts`: the page in WebKit on the demo, in every window size, in a browser and in the app: where the fades show, that clicks go through them, and that nothing spills sideways, with a screenshot of each state.
 
