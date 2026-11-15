@@ -1,13 +1,13 @@
 {
   "name": "mac-app-design",
-  "version": "0.2.1",
+  "version": "0.10.0",
   "repo": "creative-context/mac-app-design",
-  "commit": "94992cd6b5d0",
+  "commit": "a6f06e08ec79",
   "files": {
-    "design-tokens.css": "3c841c0579928be7b5502f1556fda438897e7862cfe893126e480d2a4129f26d",
-    "design-base.css": "30d5f0491b76800c84bee69f3dc99247d58fcb425301767733adf7f716b7a933",
-    "design-components.css": "4014076f5da7e3735ce8c963529a1578d50412f67799df0d8ce255a61fea693b",
-    "design-dataviz.css": "76a484db29c77de1b395398feaa80c116208d9a7fa8aaec07c9c0aa9125e5526",
-    "design-icons.js": "97a34d94ea7eddef8e831894f4f2a70941498745c9fe58f1c98889f5fe189cc8"
+    "design-tokens.css": "5467e5f213ac74f185432da4e4ba09d082d6dd2f7aa34e26c77c6cf8fc135763",
+    "design-base.css": "3a31424dbae0dd2e697b9c959632501f95e28b904983691df15a4463ef1350e4",
+    "design-components.css": "5a49e17c7b526a478555a1a0111e05a705c80988e9956ab40987dbd7dddb34b1",
+    "design-dataviz.css": "7b788198a96b39caf0a0c238082bb10a75f0206f00703791c1617e06f72c0530",
+    "design-icons.js": "eeafe4188e4f84f9a072893f8ba48bbccacd63f3d8e0ba94495480b97c64488c"
   }
 }

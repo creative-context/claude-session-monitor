@@ -19,7 +19,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `public/anime-layout.js`: anime.js's layout module (`createLayout`), MIT, built from the npm package with `bun build` (its header says how). It animates Last 7 Days; the page works without it. Never load it from a CDN: the app makes one network request only.
 - `plugin/` and `.claude-plugin/marketplace.json`: the optional usage plugin (`session-usage`), a Claude Code mod that writes `usage.json` each time Claude Code measures the plan's limits. Nothing on screen, no timer, no process, no network. Check it with `claude plugin validate plugin`.
 - `app/main.swift`: the native app. `app/build.sh` builds it universal and puts the server, bundled into one `server.js` with `bun build`, the page, the hook and its installer into it.
-- `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots.
+- `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots. `test/page.ts`: the page in WebKit on the demo (Playwright from the `mac-app-design` clone), in every window size, with a screenshot of each state; run it after changing the page.
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
 - `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome on a Mac, for SF Pro (the command is at the top of the file). Edit the HTML, never the PNG.
 - `docs/screenshot.png`: the page on the demo data running hot (`bun test/demo.ts --hot`), drawn in WebKit at 2× with the weekly usage card open, by `docs/screenshot.swift` (the command is at the top of the file).
@@ -29,6 +29,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 
 ```bash
 bun test/scenarios.ts      # port 4749
+bun test/page.ts           # port 4751, the page in WebKit
 bun test/demo.ts           # port 4748, or 4747 to show it in the app. --edge adds edge cases, --hot a week running hot
 sh app/build.sh --install  # build, copy to ~/Applications, reopen
 sh app/build.sh --release  # build and zip for a release

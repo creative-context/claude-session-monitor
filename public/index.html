@@ -22,7 +22,12 @@
   /* The page fills its window and reflows to any size: the header, then the views,
      which scroll when their content doesn't fit. */
   .strip { display: flex; flex-direction: column; gap: 12px; height: 100%; padding: 12px 16px 0; }
-  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -8px; padding: 0 8px 16px; }
+  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -8px; padding: 0 8px 16px; scroll-padding-block: 46px; }
+  /* Where the view scrolls out of sight, it fades into the window (the design system's
+     .scroll-fade), over the side gutters too; a card brought into view clears the fade. */
+  .content > .scroll-fade { margin-inline: -8px; }
+  .content > .scroll-fade.down { bottom: -16px; }
+  #pop { scroll-padding-block: 32px; }
   .view[hidden] { display: none; }
 
   /* In the app (?embed) the window has a transparent title bar: the header sits on the
@@ -411,10 +416,12 @@
     <label class="search"><span class="sr"></span><input id="q" type="search" placeholder="Search all sessions" aria-label="Search all sessions"></label>
   </nav>
   <div class="content" id="content">
+    <i class="scroll-fade up" aria-hidden="true"></i>
     <div id="banner"></div>
     <section id="week" class="view" aria-label="Last 7 days"></section>
     <section id="history" class="view" aria-label="All sessions" hidden></section>
     <section id="scheduled" class="view" aria-label="Scheduled tasks" hidden></section>
+    <i class="scroll-fade down" aria-hidden="true"></i>
   </div>
   <div id="announce" class="sr" aria-live="polite"></div>
 </main>
@@ -460,6 +467,22 @@
   const $link = document.getElementById("link");
   const $sound = document.getElementById("sound");
   const $q = document.getElementById("q");
+
+  // Where a list scrolls out of view it fades into its surface instead of a hard line (the
+  // design system's .scroll-fade): each end's band shows only while there's more past it.
+  const FADES = `<i class="scroll-fade up" aria-hidden="true"></i>`, FADES_END = `<i class="scroll-fade down" aria-hidden="true"></i>`;
+  function fades(box) {
+    const up = box.querySelector(":scope > .scroll-fade.up"), down = box.querySelector(":scope > .scroll-fade.down");
+    if (!up || !down) return;
+    up.classList.toggle("on", box.scrollTop > 1);
+    down.classList.toggle("on", box.scrollTop + box.clientHeight < box.scrollHeight - 1);
+  }
+  $content.addEventListener("scroll", () => fades($content), { passive: true });
+  if ("ResizeObserver" in window) {
+    const sizes = new ResizeObserver(() => fades($content));
+    sizes.observe($content);
+    for (const el of $content.children) sizes.observe(el);
+  }
   const $announce = document.getElementById("announce");
   document.querySelector('[data-view="week"]').title = "Last 7 Days";
   document.querySelector('[data-view="week"]').innerHTML = `${ICON.grid}<span>Last 7 Days</span>`;
@@ -1888,6 +1911,7 @@
   const POP_DELAY = 250; // a pause before the first card, so passing over the header opens nothing
   const POP_GRACE = 150; // time to move from a count into its card
   const POP_MAX = 8;
+  $pop.addEventListener("scroll", () => fades($pop), { passive: true });
 
   const openSession = (sid) => fetch(`/api/open/${encodeURIComponent(sid)}`, { method: "POST", headers: { "x-csm": "1" } });
   const still = (icon) => icon.replace(/ (spin|pulse|bot)"/, '"');
@@ -1956,7 +1980,8 @@
 
   function fillPop() {
     const html = popHtml(popKind);
-    if ($pop._html !== html) { $pop.innerHTML = html; $pop._html = html; }
+    if ($pop._html !== html) { $pop.innerHTML = FADES + html + FADES_END; $pop._html = html; }
+    fades($pop);
   }
 
   // Under its count, kept inside the window.

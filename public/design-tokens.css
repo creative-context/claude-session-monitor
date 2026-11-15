@@ -1,4 +1,4 @@
-/* mac-app-design 0.2.1 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.10.0 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Tokens: colors, type, space, shape and motion for the family's Mac apps.
    Dark only. The Obsidian theme's names and values stay as they are;
    the --csm-* names are the family's own, kept from the first app so nothing renames. */
@@ -83,7 +83,7 @@
   --viz-track-strong: #FFFFFF1C;
   --viz-now: var(--color-text-accent);
   --viz-done: var(--color-success);
-  --turn-you: #FB8C00;
+  --turn-you: #E6E6E8;         /* neutral: orange stays for "needs you", a state, not whose it is */
   --turn-claude: #6FA6E8;
   --turn-others: #8A8F98;      /* text and icons */
   --turn-others-fill: #62666D; /* fills: far enough from blue (ΔE 22.8) to tell apart in a bar */

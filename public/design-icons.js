@@ -1,4 +1,4 @@
-/* mac-app-design 0.2.1 (icons.js). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.10.0 (icons.js). Vendored: don't edit here. Change it in the design repo and vendor again. */
 // The family's icons: drawn on a 24 px grid, all in the same 1.25 px stroke (base.css sets it).
 // One source for both apps. In a page:
 //   DesignIcons.svg("folder")        an inline <svg class="i"> string
@@ -41,6 +41,8 @@
     "alarm": "<circle cx=\"12\" cy=\"13\" r=\"7.5\"/><path d=\"M12 9.5v4\"/><path d=\"M12 16.5h.01\"/><path d=\"M4.5 3.5 2.5 5.5\"/><path d=\"m19.5 3.5 2 2\"/>",
     "wake": "<circle cx=\"12\" cy=\"13\" r=\"7.5\"/><path d=\"M12 9.5V13l2.5 1.5\"/><path d=\"M4.5 3.5 2.5 5.5\"/><path d=\"m19.5 3.5 2 2\"/>",
     "calendarPlus": "<rect x=\"3.5\" y=\"5\" width=\"17\" height=\"15.5\" rx=\"2\"/><path d=\"M3.5 10h17\"/><path d=\"M8 3v4\"/><path d=\"M16 3v4\"/><path d=\"M12 12.5v5\"/><path d=\"M9.5 15h5\"/>",
+    "book": "<path d=\"M12 7.5v12.5\"/><path d=\"M3 5h5.5A3.5 3.5 0 0 1 12 8.5V20a2.5 2.5 0 0 0-2.5-2.5H3z\"/><path d=\"M21 5h-5.5A3.5 3.5 0 0 0 12 8.5V20a2.5 2.5 0 0 1 2.5-2.5H21z\"/>",
+    "mappin": "<path d=\"M12 21s-6.5-5.5-6.5-11a6.5 6.5 0 0 1 13 0c0 5.5-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.5\"/>",
     "branch": "<circle cx=\"6\" cy=\"6\" r=\"2.5\"/><circle cx=\"6\" cy=\"18\" r=\"2.5\"/><circle cx=\"18\" cy=\"8\" r=\"2.5\"/><path d=\"M6 8.5v7\"/><path d=\"M18 10.5c0 4-3 5.5-9.5 6.5\"/>",
     "chev": "<path d=\"m6 9 6 6 6-6\"/>",
     "close": "<path d=\"M6 6l12 12\"/><path d=\"M18 6 6 18\"/>",
@@ -53,6 +55,7 @@
     "mail": "<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3.5 7 8.5 6 8.5-6\"/>",
     "chat": "<path d=\"M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z\"/>",
     "plus": "<path d=\"M12 5v14\"/><path d=\"M5 12h14\"/>",
+    "play": "<path d=\"M8 5.5v13a.6.6 0 0 0 .9.5l10.2-6.5a.6.6 0 0 0 0-1L8.9 5a.6.6 0 0 0-.9.5z\"/>",
     "circle": "<circle cx=\"12\" cy=\"12\" r=\"9\"/>",
     "open": "<path d=\"M14 4h6v6\"/><path d=\"m20 4-9 9\"/><path d=\"M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4\"/>"
   };

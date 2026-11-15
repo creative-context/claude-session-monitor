@@ -202,6 +202,7 @@ It never stores whole conversations.
 bun test                 # unit tests: the closing rules, the usage words, the log, the readers, the server's state
 bun test/scenarios.ts    # end-to-end checks of the tricky cases, against a server with its own temp folder
 bun test/lifecycle.ts    # starts, stops, restarts, a taken port, the app going away, the log rotating
+bun test/page.ts         # the page in WebKit on the demo: the fades at a view's edges (Playwright from ../mac-app-design)
 bun test/demo.ts         # a server with made-up sessions and tasks on http://127.0.0.1:4748, for screenshots
 bun test/demo.ts --edge  # the same, plus edge cases: long text, a usage limit, many agents
 bun test/demo.ts --hot   # the same, with a week running hot (--limit: a week used up)
