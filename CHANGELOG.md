@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The README and the guide say how to get Claude Code if you don't have it yet: install it in Terminal, with its installer or Homebrew, then run `claude` once and sign in with your Claude account in the browser.
+
 ## 0.7.0
 
 - A short README, like other Mac apps': what it is, the features in a line each, install, use, privacy in three points, uninstall, develop. The rest moved, with nothing cut: what the app shows to `docs/guide.md`, the full privacy contract to `docs/privacy.md`, and how it's built to `docs/architecture.md`. Its version badge reads the latest release, so the README no longer changes at each version.

@@ -15,17 +15,28 @@ Everything Claude Session Monitor shows, and the optional pieces.
 
 ## Install in detail
 
-**Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code, [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
+**Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code signed in with a Claude plan that includes it (Pro, Max, Team or Enterprise), [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
 
 **Status:** 0.x. It reads files Claude Code and the Claude app keep but don't document, so a future version of either can take some detail away.
 
-1. Download the zip from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
-2. Open it. The app isn't notarized, so the first time macOS says it can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
+1. If you don't have Claude Code yet, install it in Terminal with its installer, or with Homebrew:
+
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   ```
+
+   ```bash
+   brew install --cask claude-code
+   ```
+
+   Then run `claude` once and sign in with your Claude account in the browser it opens. [Claude Code's setup page](https://code.claude.com/docs/en/setup) has the other ways to install it. The app finds `claude` where these installers put it (`~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin`, `/usr/local/bin`), even when you open the app from Finder, and starts it only to read your [weekly usage](#weekly-usage).
+2. Download the zip from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
+3. Open it. The app isn't notarized, so the first time macOS says it can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
 
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Claude Session Monitor.app"
    ```
-3. The app asks to connect Claude Code. **Install Hook** adds the hook to `~/.claude/settings.json`, and a status line for your weekly usage if you have none. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
+4. The app asks to connect Claude Code. **Install Hook** adds the hook to `~/.claude/settings.json`, and a status line for your weekly usage if you have none. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
 
 Sessions show up as soon as they do something. Open at Login is off until you turn it on in Settings.
 

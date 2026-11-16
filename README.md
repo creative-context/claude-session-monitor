@@ -36,11 +36,15 @@ Everything it shows is in the [guide](docs/guide.md).
 
 ## Install
 
-Requires macOS 14 or later, Claude Code, [Bun](https://bun.sh) and `jq` (macOS 15 ships it; on 14, `brew install jq`).
+Requires macOS 14 or later, Claude Code signed in with a Claude plan that includes it (Pro, Max, Team or Enterprise), [Bun](https://bun.sh) and `jq` (macOS 15 ships it; on 14, `brew install jq`).
 
-1. Download the zip from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
-2. Open it. The app isn't notarized, so the first time, open **System Settings › Privacy & Security** and click **Open Anyway**.
-3. Click **Install Hook** when the app asks. It adds the hook to `~/.claude/settings.json`, after saving a copy.
+1. If you don't have Claude Code yet, install it in Terminal, then run `claude` once and sign in with your Claude account in the browser. [The guide](docs/guide.md#install-in-detail) has Homebrew and the other ways.
+   ```bash
+   curl -fsSL https://claude.ai/install.sh | bash
+   ```
+2. Download the zip from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
+3. Open it. The app isn't notarized, so the first time, open **System Settings › Privacy & Security** and click **Open Anyway**.
+4. Click **Install Hook** when the app asks. It adds the hook to `~/.claude/settings.json`, after saving a copy.
 
 Sessions show up as soon as they do something. The app tells you when a new version is out.
 
