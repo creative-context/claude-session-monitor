@@ -3,6 +3,7 @@
 ## Unreleased
 
 - The README and the guide say how to get Claude Code if you don't have it yet: install it in Terminal, with its installer or Homebrew, then run `claude` once and sign in with your Claude account in the browser.
+- The README's banner shows the week's usage beside the cards, with its card open: the week as a curve against an even week.
 
 ## 0.7.0
 

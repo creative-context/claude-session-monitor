@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Claude Session Monitor: a Mac app that shows your Claude Code sessions as they run, and which ones need you. Beside the title, its Active zone: two sessions that need you, one with an error, one working and one with agents working" width="100%">
+  <img src="docs/banner.png" alt="Claude Session Monitor: a Mac app that shows your Claude Code sessions as they run, and which ones need you. Beside the title, its Active zone: two sessions that need you, one with an error, one working and one with agents working, and at the right the week's usage, half used and on pace, with its card open: the week as a curve along the even-week diagonal, 4% extra left" width="100%">
 </p>
 
 <h1 align="center">Claude Session Monitor</h1>
