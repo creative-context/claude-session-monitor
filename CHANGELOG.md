@@ -4,6 +4,7 @@
 
 - The README and the guide say how to get Claude Code if you don't have it yet: install it in Terminal, with its installer or Homebrew, then run `claude` once and sign in with your Claude account in the browser.
 - The README's banner shows the week's usage beside the cards, with its card open: the week as a curve against an even week.
+- More closings count as needing you: a step asked with its object attached ("escríbela en la terminal", "Léelos antes de que los publique"), a choice left to you ("it's up to you", "Tú decides cuál"), and another session left waiting for your answer ("se quedó esperando que le digas…"), which you answer in that session.
 
 ## 0.7.0
 

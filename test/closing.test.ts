@@ -75,6 +75,11 @@ const rows: [string, Row][] = [
   ["what should, then the current value", { text: "What should the default be? Right now it's 30 seconds.", is: "asks" }],
   ["confirma, as an imperative", { text: "Ya está. Confirma el PR cuando puedas.", is: "asks" }],
   ["you need to approve", { text: "The release is staged. You need to approve the deploy before it goes out.", is: "asks" }],
+  ["escríbela, an imperative to do a step", { text: "Me falta la clave de la cuenta de pruebas para seguir; escríbela en la terminal cuando puedas.", is: "asks", ask: /escríbela/ }],
+  ["léelos, an imperative to review", { text: "Quedaron listos los textos. Léelos antes de que los publique, sobre todo el segundo.", is: "asks", ask: /Léelos/ }],
+  ["it's up to you", { text: "I think the second option is cleaner, but it's up to you.", is: "asks" }],
+  ["tú decides", { text: "Las dos versiones pasan las pruebas. Tú decides cuál se queda.", is: "asks" }],
+  ["the same verbs said of a script", { text: "Listo. El script lee los archivos y escribe el reporte en la carpeta.", is: "done" }],
 
   // The end-to-end scenarios, ported.
   ["11 a closing question", { text: "Here is the draft.\n\nIt has 180 words. ¿Lo publico en el blog? Cuando me confirmes, lo subo.", is: "asks", ask: "¿Lo publico en el blog?" }],
@@ -115,7 +120,8 @@ const rows: [string, Row][] = [
   ["relay: short name, question form", { text: "Listo el cambio. ¿Puedes responder las dos preguntas de billing-api en su sesión?", is: "relayed", relayed: ["cli-billing"], others: byName }],
   ["relay: short id, English", { text: "The client change is done. Next, answer billing-api's two questions in its session (local_1a2b3c4d).", is: "relayed", relayed: ["cli-billing"] }],
   ["relay: short name, English", { text: "The client change is done. You still need to answer billing-api's two questions in its own session.", is: "relayed", relayed: ["cli-billing"], others: byName }],
-  ["relay: short name, English, waiting", { text: "Done here. billing-api is waiting for you to answer two questions in its session.", is: "relayed", relayed: ["cli-billing"], others: byName }],
+  ["relay: a session left waiting, by its title", { text: "Terminé lo mío. La sesión Draft review 58 se quedó esperando que le digas qué portada usar.", is: "relayed", relayed: ["cli-draft"] }],
+  ["relay: short name, English, waiting",{ text: "Done here. billing-api is waiting for you to answer two questions in its session.", is: "relayed", relayed: ["cli-billing"], others: byName }],
   ["not a relay: this session's own name", { text: "Terminé el cambio. ¿Subo billing-api a main?", is: "asks", others: byName, own: ["billing-api"] }],
   ["not a relay: a name with no word of waiting", { text: "Ya quedó la parte de billing-api. ¿Subo los cambios?", is: "asks", others: byName }],
 ];

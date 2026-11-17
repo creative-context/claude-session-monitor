@@ -137,13 +137,16 @@ function courtesyQuestion(s: string): boolean {
 const REQUEST = [
   /\b(me falta saber|solo falta|necesito (saber|que)|falta que (me )?(digas|confirmes|decidas|elijas|apruebes))\b/,
   /\b(dime|dimelo|confirmame|avisame|indicame|me dices|me confirmas|me avisas)\b/,
-  /\b(confirma|aprueba|elige|escoge|decide|contesta|responde|revisa|manda|pasa)(me|lo|la|los|las|melo|mela)\b/,
+  // With the object stuck to it, so "El script lee los archivos" doesn't count but "Léelos" does.
+  /\b(confirma|aprueba|elige|escoge|decide|contesta|responde|revisa|manda|pasa|escribe|lee|abre|prueba|corre|agrega|pega)(me|lo|la|los|las|melo|mela)\b/,
+  // The choice left to you: "it's up to you", "Tú decides cuál".
+  /\b(up to you|tu (decides|eliges|escoges))\b/,
   /\bcual(es)? (prefieres|quieres|te gusta|eliges|escoges)\b/,
   /\bo (lo|la|los|las) (hago|mando|envio|publico|subo) yo\b/,
   /\bcon (un|una) ["'“‘][^"'”’]{1,40}["'”’] (lo|la|los|las|te|me|sigo|arranco)\b/,
   /\b(espera|esperan|falta|faltan|necesito|pendientes? de) tu (visto bueno|aprobacion|ok|decision)\b/,
   // "sigue esperando que elijas versión", "solo falta tu respuesta", "waiting for you to pick one"
-  /\b(espera|esperan|esperamos|esperando|falta|faltan) (a )?(que (elijas|escojas|decidas|confirmes|apruebes|me digas|respondas|contestes)|tu (respuesta|eleccion))\b/,
+  /\b(espera|esperan|esperamos|esperando|falta|faltan) (a )?(que (elijas|escojas|decidas|confirmes|apruebes|me digas|le digas|respondas|contestes)|tu (respuesta|eleccion))\b/,
   /\b(waiting|waits) (for|on) you to (choose|pick|decide|confirm|approve|answer|reply|say)\b/,
   /\b(awaits?|awaiting|needs?|pending) your (approval|ok|okay|sign-off|go-ahead|decision)\b/,
   // It's your turn: "Te toca responder", "Lo que queda de tu lado", "over to you".
@@ -235,7 +238,7 @@ const RELAY = new RegExp(String.raw`\b(${[
   String.raw`en (esa|su) (propia )?sesion`,
   String.raw`contesta(le|les|la|las|lo|los)|responde(le|les)`,
   String.raw`te (espera|esta esperando|pregunta|hace \S+ preguntas?|necesita)`,
-  String.raw`(esta|estan|sigue|siguen) esperando`,
+  String.raw`(esta|estan|sigue|siguen|quedo|quedaron) esperando`,
   String.raw`espera tu respuesta`,
   String.raw`esperan? (a )?que (elijas|escojas|decidas|confirmes|apruebes|contestes|respondas|le digas)`,
   String.raw`necesita que (decidas|contestes|respondas|elijas|apruebes|confirmes)`,
