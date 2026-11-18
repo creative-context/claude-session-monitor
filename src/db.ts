@@ -7,7 +7,7 @@ import { type Status, type Session, type Reminder, tasks, sessions, dirty, allDi
 import { relativesOf } from "./desktop.ts";
 import { madeTasks } from "./tasks.ts";
 import { activeAgents } from "./agents.ts";
-import { type Shown, needsYou, shownStatus } from "./snapshot.ts";
+import { type Shown, needsYou, sessionNeedsYou, shownStatus } from "./snapshot.ts";
 
 // Every session is kept in ~/.claude-session-monitor/sessions.db: the main view shows
 // the last 7 days, History shows all of it. Only what the cards show is stored (titles,
@@ -115,7 +115,7 @@ export function loadRecent() {
 export function rowNeedsYou(r: { sid: string; status: string | null; outcome: string | null; last_at: number; archived: number }, now: number) {
   if (r.archived) return false;
   const s = sessions.get(r.sid);
-  if (s) return !s.archived && needsYou(shownStatus(s, activeAgents(s)), s.last, now);
+  if (s) return !s.archived && sessionNeedsYou(s, shownStatus(s, activeAgents(s)), now);
   const shown = (r.status === "done" ? r.outcome ?? "done" : r.status) as Shown;
   return shown !== "waiting" && needsYou(shown, r.last_at, now);
 }

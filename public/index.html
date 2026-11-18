@@ -280,6 +280,28 @@
   .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
   .top .time { margin-left: auto; }
 
+  /* ---------- answers: a question's buttons at the card's foot ----------
+     The session's own answers take the folder's place: the first, filled, is the one it
+     proposes; the second is quiet and gives way when long. 2 px taller than a tag, so the
+     gap above gives 2 px and the card keeps its height. A click sends it; one that can't
+     be sent from here carries the open mark and opens the session. */
+  .card > .ans, .card > .sentline { margin-top: auto; padding-top: max(0px, calc(var(--card-tags-gap) - 2px)); display: flex; align-items: center; gap: 6px; min-width: 0; }
+  .card .a-b { box-sizing: border-box; flex: 0 1 auto; min-width: 0; height: 22px; padding: 0 9px; display: inline-flex; align-items: center; gap: 4px;
+    border-radius: var(--radius-element); font-size: var(--csm-text-meta); line-height: 22px; font-weight: var(--font-weight-medium); white-space: nowrap;
+    transition: background-color var(--duration-fast) var(--ease-standard); }
+  .card .a-b > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .card .a-b svg.i { width: 12px; height: 12px; flex: none; opacity: 0.8; }
+  .ans .pri { flex: 0 0 auto; max-width: 62%; background: #F7F8F8; color: var(--color-on-light); }
+  .ans .pri:hover { background: #FFFFFF; }
+  .ans .sec, .sentline .a-b { background: #FFFFFF26; color: var(--color-text-primary); }
+  .ans .sec:hover, .sentline .a-b:hover { background: #FFFFFF33; }
+  /* Sent: the card turns to work in blue, and for 5 s the answer can be taken back. */
+  .card.sent .detail, .card.sent .detail b { color: var(--color-text-primary); }
+  .card > .sentline { height: 22px; box-sizing: content-box; font-size: var(--csm-text-meta); color: var(--meta); white-space: nowrap; }
+  .sentline .say { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .sentline .a-b { flex: none; }
+  .sentline .count { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+
 
 
 
@@ -370,6 +392,8 @@
     .card .tags .tag > span { overflow: hidden; text-overflow: ellipsis; }
     .card .tags .tag svg { opacity: 0.75; }
     .card .tags .tag[data-show-task]:hover { background: none; }
+    /* A question's answers sit under it, in the tags' place: the row grows only then. */
+    .card > .ans, .card > .sentline { grid-column: 2 / 4; grid-row: 3; margin-top: 8px; padding: 0; }
   }
 
   /* ---------- strip: a sliver of the screen (under 300 pt, down to 171) ----------
@@ -387,7 +411,7 @@
     .card > .top > .time { grid-column: 2; grid-row: 2; margin: 2px 0 0; justify-self: start; }
     .card > .title { grid-column: 2 / 4; }
     .card > .detail { grid-column: 2 / 4; grid-row: 3; }
-    .card > .bar { grid-row: 4; }
+    .card > .bar, .card > .ans, .card > .sentline { grid-row: 4; }
     .hrow { grid-template-columns: 16px minmax(0, 1fr); padding: 8px 10px; }
     .hrow > .tag, .hrow .hsnip, .hrow > span:empty { display: none; }
     .hrow .htime { grid-column: 2; grid-row: 2; }
@@ -568,10 +592,13 @@
 
   // The server calls a workflow it can't name "Workflow"; that name says nothing.
   const wfNamed = (wf) => Boolean(wf?.name) && wf.name !== "Workflow";
-  const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s);
+  // An answer you sent from its card, waiting its 5 s or on its way: the session is about
+  // to work on it, so the card shows it working, not an old question.
+  const sentOf = (s) => s.status === "asks" && (s.reply?.state === "pending" || s.reply?.state === "sent");
+  const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s) && !sentOf(s);
   // Its own turn is over and something it started goes on: agents, or only a shell command.
   const onlyCommands = (s) => s.background && !s.agentCount && !s.workflows?.length && s.commandCount > 0;
-  const label = (s) => (s.kind === "task" ? "Can't run" : onlyCommands(s) ? "In the background" : s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
+  const label = (s) => (s.kind === "task" ? "Can't run" : sentOf(s) ? "Working" : onlyCommands(s) ? "In the background" : s.background ? "Agents working" : s.status === "asks" && isStale(s) ? "Asked you" : LABEL[s.status] || "Closed");
 
   // A scheduled task the Claude app tried to start and couldn't. It needs you like an error
   // does, so it also gets a card in Active, next to what else needs you.
@@ -600,7 +627,8 @@
   function withBlocked(list, st = state) {
     const extra = blockedCards(st);
     if (!extra.length) return list;
-    const at = list.findIndex((s) => !needsYou(s) || s.status === "error");
+    // A card whose answer you just sent keeps its place, so nothing moves under the pointer.
+    const at = list.findIndex((s) => (!needsYou(s) && !sentOf(s)) || s.status === "error");
     return at < 0 ? [...list, ...extra] : [...list.slice(0, at), ...extra, ...list.slice(at)];
   }
   const statusIcon = (s) => (s.background ? ICON.bot : STATUS_ICON[s.status] || ICON.check);
@@ -608,7 +636,7 @@
   const PDOT = '<span class="pdot" aria-hidden="true"></span>';
   const CALM = '<span class="calm" aria-hidden="true"><i></i><i></i><i></i></span>';
   const cardIcon = (s) => ((s.status === "waiting" || s.status === "asks") && needsYou(s) ? PDOT
-    : s.status === "working" && !s.background ? CALM : statusIcon(s));
+    : (s.status === "working" && !s.background) || sentOf(s) ? CALM : statusIcon(s));
   // How long it has been waiting on you or working: "2m", "1h 5m". Minutes, so it changes
   // once a minute, not every second.
   const spanWords = (s) => `${s.status === "working" ? "working" : "waiting for you"} for ${span2(s.since || s.last).replace(/h/, " hours").replace(/(\d+)m/, "$1 minutes")}`;
@@ -634,6 +662,7 @@
       const why = blockedWhy(s.blocked);
       return wrap(`<b>${esc(`Didn't run ${when(s.blocked.since)}.`)}</b> ${esc(why[0].toUpperCase() + why.slice(1))}.`);
     }
+    if (sentOf(s)) return wrap(`<b>You answered “${esc(s.reply.text)}”</b>`);
     if (s.status === "waiting") return wrap(esc(s.wait || "Waiting for your answer"));
     if (s.status === "asks") return wrap(`<b>${esc(s.ask || "It asked you something")}</b>`);
     if (s.status === "error") return wrap(esc(s.error || "The turn ended with an error"));
@@ -698,6 +727,64 @@
     }
     return `<div class="tags">${out.join("")}</div>`;
   }
+
+  // A question's answers, in the tags' place: the session's own buttons, up to two. A click
+  // sends one (its answers mod takes it to the session); one the app has to do, or any while
+  // no mod is listening, opens the session instead and says why. Once sent: 5 s to undo,
+  // counting down to when it goes; if no mod took it, the card needs you again.
+  const SENT_WORDS = "Sent. The session is working on it.";
+  const answerable = (s) => s.kind !== "task" && s.status === "asks" && s.answers?.length > 0;
+  function answersFoot(s) {
+    const r = s.reply;
+    if (r?.state === "failed") {
+      return `<div class="sentline failed"><span class="say" title="${esc(`“${r.text}” didn't reach the session`)}">Couldn't send</span><span class="a-b" data-open-sid="${esc(s.sid)}" title="Opens the session: answer there"><span>Open</span>${ICON.open}</span></div>`;
+    }
+    if (sentOf(s)) {
+      const left = r.state === "pending" ? Math.ceil((r.due - now()) / 1000) : 0;
+      return left > 0
+        ? `<div class="sentline" data-due="${r.due}"><span class="say">Sent</span><span class="a-b" data-undo title="Take it back before it goes (⌘Z)"><span>Undo</span></span><span class="count">${left} s</span></div>`
+        : `<div class="sentline"><span class="say">${SENT_WORDS}</span></div>`;
+    }
+    return `<div class="ans">${s.answers.map((a, i) => {
+      const opens = Boolean(a.app) || !s.canAnswer;
+      const tip = a.app ? "Only the Claude app can do this" : !s.canAnswer ? "Opens the session: answer there" : `Answer “${a.label}”${i ? "" : " (⌘↩)"}`;
+      return `<span class="a-b ${i ? "sec" : "pri"}${opens ? " opens" : ""}" data-answer="${i}" title="${esc(tip)}"><span>${esc(a.label)}</span>${opens ? ICON.open : ""}</span>`;
+    }).join("")}</div>`;
+  }
+  // VoiceOver: what the answers are, and what a click or ⌘↩ does with the first.
+  function answerWords(s) {
+    if (!answerable(s)) return [];
+    if (s.reply?.state === "failed") return [`Couldn't send your answer “${s.reply.text}”`];
+    if (sentOf(s)) return [s.reply.state === "pending" ? "Sent, Command-Z takes it back" : SENT_WORDS];
+    const first = s.answers[0];
+    return [`Answers: ${s.answers.map((a) => a.label).join(", ")}`,
+      first.app || !s.canAnswer ? "Command-Return opens the session to answer" : `Command-Return answers ${first.label}`];
+  }
+
+  // The 5 s on a sent answer count down in place, then say it went, without a redraw.
+  let countdown;
+  function tickAnswers() {
+    const lines = document.querySelectorAll(".sentline[data-due]");
+    for (const el of lines) {
+      const left = Math.ceil((Number(el.dataset.due) - now()) / 1000);
+      if (left > 0) el.querySelector(".count").textContent = `${left} s`;
+      else el.outerHTML = `<div class="sentline"><span class="say">${SENT_WORDS}</span></div>`;
+    }
+    if (!lines.length) { clearInterval(countdown); countdown = undefined; }
+  }
+  const armCountdown = () => { if (!countdown && document.querySelector(".sentline[data-due]")) countdown = setInterval(tickAnswers, 250); };
+
+  async function answerCard(sid, i) {
+    const s = live.get(sid);
+    const a = s?.answers?.[i];
+    if (!a || a.app || !s.canAnswer || s.reply) return openSession(sid);
+    const r = await fetch(`/api/answer/${encodeURIComponent(sid)}`, {
+      method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ i }),
+    }).catch(() => null);
+    // 409: no mod is there to take it after all. Anything else unexpected: answer there.
+    if (r?.status !== 204) openSession(sid);
+  }
+  const undoAnswer = (sid) => fetch(`/api/answer/${encodeURIComponent(sid)}/undo`, { method: "POST", headers: { "x-csm": "1" } }).catch(() => {});
 
   // "12:00 PM" today, "Tomorrow 8:17 AM", "Mon 9:00 AM": short, for a tag.
   function shortWhen(t) {
@@ -797,7 +884,7 @@
     }
     // "new" and "found" are short-lived marks that a live update must not wipe.
     const keep = ["new", "found", "rel-lit", "rel-self"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
-    const cls = `card ${s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
+    const cls = `card ${sentOf(s) ? "working sent" : s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
     if (el._key === key) return el;
     el._key = key;
@@ -809,19 +896,24 @@
       : s.task ? ` title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}"` : "";
     const inner = `
       <div class="top">
-        ${tag(`${cardIcon(s)}<span>${label(s)}</span>`, `s-${s.status}`)}
+        ${tag(`${cardIcon(s)}<span>${label(s)}</span>`, `s-${sentOf(s) ? "working" : s.status}`)}
         <span class="time"${timeTip}>${s.task ? ICON.calendarClock : lasting ? "" : ICON.clock}${agoText}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
-      ${tags(s)}
-      ${bar(s)}`;
+      ${answerable(s) ? answersFoot(s) : `${tags(s)}${bar(s)}`}`;
+    // A row of free height (the compact view) keeps its height while its answer is out, so
+    // the rows under it stay put and Undo sits where the answers were.
+    const sent = sentOf(s);
+    if (sent && !el._sent && el.isConnected) el.style.minHeight = `${el.offsetHeight}px`;
+    else if (!sent && el._sent) el.style.minHeight = "";
+    el._sent = sent;
     if (el._inner !== inner) {
       el.innerHTML = inner;
       el._inner = inner;
       syncIcons(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s), ...relWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s), ...relWords(s), ...answerWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
     const tip = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
@@ -1434,6 +1526,11 @@
     if (go) return setView(go.dataset.go);
     const made = e.target.closest("[data-show-task]");
     if (made) return showTask(made.dataset.showTask);
+    // A question's answer, or taking one back, on its card.
+    const ans = e.target.closest("[data-answer]");
+    if (ans) return answerCard(ans.closest("[data-sid]").dataset.sid, Number(ans.dataset.answer));
+    const undo = e.target.closest("[data-undo]");
+    if (undo) return undoAnswer(undo.closest("[data-sid]").dataset.sid);
     const rel = e.target.closest("[data-open-sid]");
     if (rel) return openSession(rel.dataset.openSid);
     if (e.target.closest("[data-more]")) return loadHistory(false);
@@ -1517,6 +1614,23 @@
     if (b) return bridge()?.postMessage({ menu: { sid: b.open ?? "", title: b.title, cwd: b.cwd, file: b.file } });
     const s = sessionFor(item.dataset.sid);
     bridge()?.postMessage({ menu: { sid: item.dataset.sid, title: s?.title ?? "", cwd: s?.cwd ?? "" } });
+  });
+
+  // On a card that asks: ⌘↩ gives its first answer (or opens the session when it can't be
+  // sent from here), and ⌘Z takes back one still waiting its 5 s.
+  $content.addEventListener("keydown", (e) => {
+    const card = e.target.closest?.(".card[data-sid]");
+    if (!card || !e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
+    const s = live.get(card.dataset.sid);
+    if (!s || !answerable(s)) return;
+    if (e.key === "Enter") {
+      e.preventDefault();
+      if (s.reply?.state === "failed") openSession(s.sid);
+      else if (!s.reply) answerCard(s.sid, 0);
+    } else if (e.key.toLowerCase() === "z" && s.reply?.state === "pending") {
+      e.preventDefault();
+      undoAnswer(s.sid);
+    }
   });
 
   // Arrow keys move between cards the way they look on screen; Home and End jump to the
@@ -2177,6 +2291,7 @@
     renderWeek();
     if (view === "history") refreshHistory();
     if (view === "scheduled") renderScheduled();
+    armCountdown();
     // Redraw when the first breathing minute of something that needs you runs out.
     clearTimeout(freshTimer);
     const ends = state.sessions.filter(isFresh).map((s) => (s.since || s.last) + FRESH_MS - now());
@@ -2238,7 +2353,7 @@
   // its turn with a question or an error.
   // A blocked task's text says "today" or "yesterday", so its key is when it started instead.
   const alertKey = (s) => s.kind === "task" ? `e:task:${s.blocked.since}` :
-    s.status === "waiting" ? `w:${s.wait}` : s.status === "asks" ? `a:${s.ask}` : s.status === "error" ? `e:${s.error}` : s.status;
+    s.status === "waiting" ? `w:${s.wait}` : s.status === "asks" ? `a:${s.ask}${s.reply?.state === "failed" ? ":unsent" : ""}` : s.status === "error" ? `e:${s.error}` : s.status;
 
   // The app's Dock badge and menu bar show what the header does. They're told on every
   // change, hidden window or not, so the app doesn't have to ask.

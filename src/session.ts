@@ -6,6 +6,7 @@ import { type Status, type Step, type Ev, type Session, sessions, bump } from ".
 import { readRange } from "./log.ts";
 import { readAppFileSoon, readDesktopSoon } from "./desktop.ts";
 import { timeOf } from "./tasks.ts";
+import { answersOf, clearReply, forgetAnswer } from "./answers.ts";
 
 // A repeating reminder stops after 7 days, as Claude Code does.
 const REMINDER_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -80,6 +81,7 @@ export function hydrate(s: Session) {
   let plan: Step[] | undefined;
   let recap: string | undefined;
   let ask: string | undefined;
+  let actions: unknown;
   for (const line of lines) {
     let row: any;
     try {
@@ -93,7 +95,7 @@ export function hydrate(s: Session) {
       const isPrompt = typeof content === "string" ||
         (Array.isArray(content) && content.some((b: any) => b?.type === "text") &&
           !content.some((b: any) => b?.type === "tool_result"));
-      if (isPrompt) recap = ask = undefined;
+      if (isPrompt) recap = ask = actions = undefined;
       continue;
     }
     if (row.type !== "assistant" || !Array.isArray(content)) continue;
@@ -103,6 +105,7 @@ export function hydrate(s: Session) {
       if (b.name === "mcp__ccd_turn__wrap_up") {
         recap = b.input?.recap;
         ask = b.input?.ask;
+        actions = b.input?.actions;
         plan = completeCurrent(plan);
       }
     }
@@ -111,6 +114,12 @@ export function hydrate(s: Session) {
   if (s.status === "done" && !s.recap && !s.ask) {
     s.recap = recap?.slice(0, 300);
     s.ask = ask?.slice(0, 140);
+  }
+  // The answer buttons under the question it still asks (after a restart, only the
+  // transcript has them).
+  if (s.status === "done" && !s.answers && typeof ask === "string" && ask.trim()) {
+    clearReply(s);
+    s.answers = answersOf(actions);
   }
   bump(s);
 }
@@ -215,6 +224,7 @@ export function apply(e: Ev) {
       // A plan with every step done belongs to the last request, not to this one.
       if (s.plan?.length && s.plan.every((st) => st.s === "completed")) s.plan = undefined;
       s.recap = s.ask = s.note = s.tool = s.detail = undefined;
+      forgetAnswer(s); // your answer arrived, or you typed something else
       s.inFlight = 0;
       break;
 
@@ -227,6 +237,8 @@ export function apply(e: Ev) {
       if (e.tool === "mcp__ccd_turn__wrap_up") {
         s.recap = e.x?.recap;
         s.ask = e.x?.ask;
+        clearReply(s); // a new closing leaves no old reply behind
+        s.answers = s.ask ? answersOf(e.x?.acts) : undefined;
         s.plan = completeCurrent(s.plan);
         break;
       }

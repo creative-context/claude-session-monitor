@@ -1,0 +1,4 @@
+# bun test runs the tests in test/. The plugin's own test (plugin/) runs with
+# `claude plugin test plugin`, which has the mod API it needs.
+[test]
+root = "test"

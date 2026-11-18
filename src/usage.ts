@@ -158,7 +158,10 @@ export function probeUsage(status: string) {
   const settings = JSON.stringify({ statusLine: { type: "command", command: `'${status.replace(/'/g, "'\\''")}'` } });
   let p: ReturnType<typeof Bun.spawn>;
   try {
-    p = Bun.spawn(["/usr/bin/expect", join(DIR, "probe.exp"), settings, cli], { cwd: PROBE_DIR, stdin: "ignore", stdout: "ignore", stderr: "ignore" });
+    p = Bun.spawn(["/usr/bin/expect", join(DIR, "probe.exp"), settings, cli], {
+      cwd: PROBE_DIR, stdin: "ignore", stdout: "ignore", stderr: "ignore",
+      env: { ...process.env, CSM_PROBE: "1" }, // the answers mod never runs in it
+    });
   } catch {
     probing = false;
     return;

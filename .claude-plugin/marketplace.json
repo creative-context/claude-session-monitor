@@ -5,9 +5,9 @@
   },
   "plugins": [
     {
-      "name": "session-usage",
+      "name": "session-monitor",
       "source": "./plugin",
-      "description": "Saves the plan's weekly and 5-hour usage for Claude Session Monitor, with nothing on screen."
+      "description": "Claude Session Monitor's side in each session: saves the plan's usage for the app, and sends the answer you click on a session's card. Nothing on screen."
     }
   ]
 }

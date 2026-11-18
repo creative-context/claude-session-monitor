@@ -1,7 +1,10 @@
 # Changelog
 
-## Unreleased
+## 0.8.0
 
+- Answer a session from its card: when a turn ends with the Claude app's next-step question and answer buttons, the Needs you card shows the first two, and a click sends that answer to the session as its next message, after 5 seconds to undo. It goes through the optional plugin, which asks the app's local server for it; without the plugin, and for the app's own actions (Commit, Create PR…), the button opens the session.
+- The optional plugin is now `session-monitor`, one plugin for both jobs: the plan's usage, and the answers you click on a card. If you installed `session-usage`, uninstall it and install `session-monitor` (see the guide).
+- A session whose closing says the side session it's about to start will ask you ("la sesión te va a preguntar…", "the new session will ask you…") no longer needs you once you start that side session: the questions are that one's.
 - The README and the guide say how to get Claude Code if you don't have it yet: install it in Terminal, with its installer or Homebrew, then run `claude` once and sign in with your Claude account in the browser.
 - The README's banner shows the week's usage beside the cards, with its card open: the week as a curve against an even week.
 - More closings count as needing you: a step asked with its object attached ("escríbela en la terminal", "Léelos antes de que los publique"), a choice left to you ("it's up to you", "Tú decides cuál"), and another session left waiting for your answer ("se quedó esperando que le digas…"), which you answer in that session.

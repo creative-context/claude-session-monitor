@@ -8,6 +8,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFile
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeCron, nextRun, parseCron, prevRun } from "../cron.ts";
+import { playMod } from "./answer-mod.ts";
 
 const PORT = 4749; // not the demo's 4748, so both can run at once
 const dir = mkdtempSync(join(tmpdir(), "csm-test-"));
@@ -376,6 +377,27 @@ for (const [n, other, answered, close] of [
   ev(id(121), { ev: "Stop", tp: tp121, t: at + 90_000 });
 }
 
+// 139–141. A closing that says the session it's about to start will ask you, naming none;
+// the app's note asks the questions here. 140 is the side session you then started from
+// 139, so 139 no longer needs you; 141 said the same and started nothing yet, so it still does.
+for (const [n, side] of [[139, 140], [141, 0]] as const) {
+  const at = Date.now() - 4 * 60_000 + n;
+  const tp = transcript(`t${n}.jsonl`, [said("Abrí una tarjeta para la sesión del póster. Antes de dibujar, esa sesión te va a hacer dos preguntas: el color y la portada.")]);
+  ev(id(n), { ev: "UserPromptSubmit", prompt: `Plan the poster ${n}`, tp, t: at });
+  ev(id(n), { ev: "Stop", tp, t: at + 1000 });
+  writeFileSync(join(appDir, `local_${id(n)}.json`), JSON.stringify({
+    sessionId: `local_${id(n)}`, cliSessionId: id(n), title: `Poster ${n}`, originCwd: "/tmp/demo", createdAt: at, lastActivityAt: at + 1000,
+    lastTurnEdgeAt: at + 1000, lastAssistantUuid: "u-last",
+    postTurnSummary: { status_category: "blocked", needs_action: "¿Va en azul o en verde? ¿Lleva portada?", summarizes_uuid: "u-last" },
+  }));
+  if (!side) continue;
+  ev(id(side), { ev: "UserPromptSubmit", prompt: "Design the poster", t: at + 30_000 });
+  writeFileSync(join(appDir, `local_${id(side)}.json`), JSON.stringify({
+    sessionId: `local_${id(side)}`, cliSessionId: id(side), title: `Poster design ${side}`, originCwd: "/tmp/demo", createdAt: at + 30_000,
+    lastActivityAt: at + 30_000, spawnedFrom: { sessionId: `local_${id(n)}` },
+  }));
+}
+
 // 43–45. Side sessions: 44 was started from 43 (the app names 43 by its own ID, here only
 // in the file name); 45 names a session the app no longer has.
 for (const [n, file, extra] of [
@@ -537,10 +559,30 @@ writeFileSync(join(dir, "usage-history.jsonl"), [
   { at: Date.now() - 86400_000, pct: 30, resets: weekResets },
 ].map((r) => JSON.stringify(r)).join("\n") + "\n");
 
+// 130–136. Questions with answer buttons, answered from the card. 130 is undone, 131 sent to a
+// mod that asks by hand, 132 never picked up, 133 has no mod, 134 offers an app action, 136
+// is answered through the helper that plays the mod, and 135's buttons come back from its
+// transcript after a restart.
+const wrap = (n: number, ask: string, acts: object[], extra: object = {}) => {
+  ev(id(n), { ev: "UserPromptSubmit", prompt: `Draft the release note ${n}`, ...extra });
+  ev(id(n), { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap: "The note is drafted.", ask, acts }, ...extra });
+  ev(id(n), { ev: "Stop", ...extra });
+};
+for (const n of [130, 131, 132, 133, 136, 137, 138]) wrap(n, "Should I post the note?", [{ l: "Yes, post it" }, { l: "Not yet" }]);
+wrap(134, "Ready to commit the note?", [{ l: "ignored", a: "commit" }, { l: "Keep editing" }]);
+{
+  const tp = transcript("t135.jsonl", [
+    { type: "user", message: { content: "Draft the release note 135" } },
+    { type: "assistant", message: { content: [{ type: "tool_use", id: "toolu_w135", name: "mcp__ccd_turn__wrap_up",
+      input: { recap: "The note is drafted.", ask: "Should I post the note?", actions: [{ label: "Yes,   post it" }, { action: "verify", label: "x" }, { label: "Third" }] } }] } },
+  ]);
+  wrap(135, "Should I post the note?", [{ l: "Yes, post it" }, { l: "x", a: "verify" }], { tp });
+}
+
 // Never read the real desktop app's sessions or transcripts in a test.
 const start = () => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
-    ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir,
+    ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir, CSM_ANSWER_GIVE_UP_MS: "3000", CSM_ANSWER_ARRIVE_MS: "12000",
     CSM_APP_SESSIONS: join(dir, "app"), CSM_PROJECTS: join(dir, "no-projects"),
   },
   stdout: "ignore",
@@ -658,6 +700,39 @@ try {
     att.every((a, i) => i === 0 || rank[att[i - 1].kind] <= rank[a.kind]) && att.some((a) => a.kind === "error"), att.map((a) => a.kind));
   check("86 an archived session isn't on the main view", !find(s, 86), find(s, 86));
 
+  // Answering from the card. The mod is there for 130 and 136 (the helper), and for 131 and 132
+  // (one ask each by hand; 132's goes away at once).
+  const api = (path: string, init: RequestInit = {}, header = true) =>
+    fetch(`http://127.0.0.1:${PORT}/api/answer/${path}`, { ...init, headers: header ? { "x-csm": "1" } : {} });
+  const send = (n: number, i: number, header = true) => api(id(n), { method: "POST", body: JSON.stringify({ i }) }, header);
+  const mod = playMod({ port: PORT, log, sids: [id(130), id(136)] });
+  const ask131 = api(`${id(131)}/next`);
+  api(`${id(137)}/next`).catch(() => {});
+  api(`${id(138)}/next`).catch(() => {});
+  const gone = new AbortController();
+  api(`${id(132)}/next`, { signal: gone.signal }).catch(() => {});
+  await Bun.sleep(300);
+  gone.abort();
+  s = await state();
+  const a130 = find(s, 130);
+  check("130 the card gets the question's buttons, and the mod is there", a130?.status === "asks" && a130?.answers?.length === 2 &&
+    a130.answers[0].label === "Yes, post it" && !a130.answers[0].app && a130.canAnswer === true && !a130.reply, a130);
+  check("133 with no mod asking, it can't send", find(s, 133)?.canAnswer === false && find(s, 133)?.answers?.length === 2, find(s, 133));
+  check("134 an app action carries its name and the app's words", find(s, 134)?.answers?.[0]?.app === "commit" && find(s, 134)?.answers?.[0]?.label === "Commit" && !find(s, 134)?.answers?.[1]?.app, find(s, 134)?.answers);
+  check("answer: with no mod asking, 409 (the page opens the session)", (await send(133, 0)).status === 409);
+  check("answer: an app action, a button it didn't offer and a session that doesn't ask are refused",
+    (await send(134, 0)).status === 404 && (await send(130, 5)).status === 404 && (await send(1, 0)).status === 404);
+  check("answer: without the header, refused", (await send(130, 0, false)).status === 403 && (await api(`${id(130)}/next`, {}, false)).status === 403);
+  check("answer: 130 sent", (await send(130, 1)).status === 204);
+  s = await state();
+  check("130 a pending answer: you answered, so it doesn't need you", find(s, 130)?.reply?.state === "pending" && find(s, 130)?.reply?.text === "Not yet" &&
+    find(s, 130)?.reply?.due > Date.now() && find(s, 130)?.needsYou === false && !snap.attention.some((x: any) => x.sid === id(130)), find(s, 130));
+  check("answer: undo takes it back", (await api(`${id(130)}/undo`, { method: "POST" })).status === 204);
+  s = await state();
+  check("130 undone, it needs you again", !find(s, 130)?.reply && find(s, 130)?.needsYou === true, find(s, 130));
+  check("answer: 131, 132 and 136 sent", (await send(131, 0)).status === 204 && (await send(132, 1)).status === 204 && (await send(136, 0)).status === 204 &&
+    (await send(137, 0)).status === 204 && (await send(138, 0)).status === 204);
+
   // Answer the question and approve the permission
   ev(id(3), { ev: "PostToolUse", tool: "AskUserQuestion", t: Date.now() });
   ev(id(4), { ev: "PostToolUse", tool: "Bash", t: Date.now() });
@@ -679,6 +754,28 @@ try {
   check("14 an API error with no Stop is caught once it goes quiet", find(s, 14)?.status === "error" && /API Error/.test(find(s, 14)?.error ?? ""), find(s, 14));
   check("9 journal result ends the agent, session back to done", find(s, 9)?.status === "done" && find(s, 9)?.agentCount === 0, find(s, 9));
   check("0 SubagentStop ends the agent, session back to done", find(s, 0)?.status === "done" && find(s, 0)?.agentCount === 0, find(s, 0));
+  // The answers went out 5 s after the click; 132's, with no mod to take it, gave up 3 s later.
+  const got131 = await ask131;
+  check("131 the mod's ask gets the button's words once they're due", got131.status === 200 && (await got131.json()).text === "Yes, post it");
+  check("131 sent: the card says so and doesn't need you", find(s, 131)?.reply?.state === "sent" && find(s, 131)?.needsYou === false, find(s, 131));
+  check("answer: once sent, no undo", (await api(`${id(131)}/undo`, { method: "POST" })).status === 409);
+  check("132 an answer no mod took couldn't be sent: it needs you again", find(s, 132)?.reply?.state === "failed" && find(s, 132)?.needsYou === true &&
+    snap.attention.some((x: any) => x.sid === id(132) && x.words === "Couldn't send your answer"), [find(s, 132), snap.attention.find((x: any) => x.sid === id(132))]);
+  check("136 the mod submitted it and the session works on it", mod.answered.length === 1 && mod.answered[0].text === "Yes, post it" &&
+    find(s, 136)?.status === "working" && find(s, 136)?.title === "Yes, post it" && !find(s, 136)?.answers && !find(s, 136)?.reply, [mod.answered, find(s, 136)]);
+  mod.stop();
+  check("138 handed over, it's marked sent", find(s, 138)?.reply?.state === "sent", find(s, 138));
+  // a new closing, before any prompt came
+  ev(id(138), { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap: "Posted.", ask: "Should I also tag it?", acts: [{ l: "Yes, tag it" }, { l: "No" }] } });
+  ev(id(138), { ev: "Stop" });
+  ev(id(131), { ev: "UserPromptSubmit", prompt: "Yes, post it", t: Date.now() }); // its prompt arrives
+  await Bun.sleep(400);
+  s = await state();
+  check("138 a new closing removes the old reply and shows its own buttons", !find(s, 138)?.reply && find(s, 138)?.answers?.[0]?.label === "Yes, tag it" && find(s, 138)?.needsYou === true, find(s, 138));
+  await Bun.sleep(6000); // 137's answer was handed over 12 s ago and no prompt came
+  s = await state();
+  check("137 an answer handed over that never became a prompt fails, and it needs you again", find(s, 137)?.reply?.state === "failed" && find(s, 137)?.needsYou === true, find(s, 137));
+  check("131 its prompt ends the question and the answer", find(s, 131)?.status === "working" && !find(s, 131)?.answers && !find(s, 131)?.reply, find(s, 131));
   check("77 the notice that its command ended brings it back to done", find(s, 77)?.status === "done" && find(s, 77)?.commandCount === 0, find(s, 77));
   // Checked after the long wait: the server also reads the usage every 5 s, in case a file event is missed.
   const kept = readFileSync(join(dir, "usage-history.jsonl"), "utf8").trim().split("\n").map((l) => JSON.parse(l));
@@ -692,6 +789,8 @@ try {
   check("55 when the app's note names a related session in words, this one doesn't need you", find(s, 43)?.status === "done" && find(s, 43)?.needsYou === false, find(s, 43));
   check("56 an app note that only invites the next text is an open offer: done", find(s, 56)?.status === "done", find(s, 56));
   check("57 a question relayed from a linked session that got a message since is answered", find(s, 57)?.status === "done", find(s, 57));
+  check("139 questions a side session it started will ask are that one's: done here", find(s, 139)?.status === "done", find(s, 139));
+  check("141 the same words with no side session started yet still ask", find(s, 141)?.status === "asks", find(s, 141));
   check("59 one whose linked session got nothing since still asks", find(s, 59)?.status === "asks", find(s, 59));
   check("87 a question it passes on, which the other session shows itself, shows only there", find(s, 87)?.status === "done" && find(s, 87)?.needsYou === false && find(s, 88)?.status === "asks", [find(s, 87), find(s, 88)]);
   check("120 a passed-on pick that was answered in its session is done", find(s, 120)?.status === "done" && find(s, 120)?.needsYou === false, find(s, 120));
@@ -766,6 +865,8 @@ try {
     (await history("noon check")).sessions.find((x: any) => x.sid === id(33))?.made?.length === 2);
   check("usage: an older, lower share for the same week doesn't take the week back", snap.usage?.week?.pct === 45 && !snap.usage.week.samples.some((x: number[]) => x[1] === 12), snap.usage?.week);
   check("120 after a restart, the answered pick stays answered", find(s, 120)?.status === "done" && find(s, 120)?.needsYou === false, find(s, 120));
+  check("135 after a restart, the buttons come back from the transcript", JSON.stringify(find(s, 135)?.answers) === JSON.stringify([{ label: "Yes, post it" }, { label: "Verify", app: "verify" }]) &&
+    find(s, 135)?.canAnswer === false && find(s, 135)?.status === "asks", find(s, 135));
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
 } finally {
   server.kill();
@@ -807,9 +908,12 @@ check("cron: a bad expression is null", parseCron("61 * * * *") === null && pars
   hook({ hook_event_name: "PostToolUse", session_id: "h", tool_name: "CronCreate",
     tool_input: { cron: "0 9 * * *", prompt: secret }, tool_response: [{ type: "text", text: "Scheduled recurring task abcdef12 (0 9 * * *)." }] });
   hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: 7, tool_input: "a string" });
+  hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: "mcp__ccd_turn__wrap_up",
+    tool_input: { recap: "Done.", ask: "Post it?", blocked: true, actions: [{ label: `Yes,\n post it ${"x".repeat(60)}`, extra: secret }, { action: "create_pr", label: "Open" }, { label: "Third" }] } });
+  hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: "mcp__ccd_turn__wrap_up", tool_input: { recap: "Done.", actions: "not a list" } });
   const text = await Bun.file(join(hdir, "events.jsonl")).text().catch(() => "");
   const lines = text.trim().split("\n").filter(Boolean).map((l) => JSON.parse(l));
-  check("hook: one line per event, whatever shape the tool's input or reply has", lines.length === 9, lines.length);
+  check("hook: one line per event, whatever shape the tool's input or reply has", lines.length === 11, lines.length);
   check("hook: never a reminder's prompt or a task's description", !text.includes(secret));
   check("hook: a wakeup's time", lines[0]?.x?.at === 1_800_000_000_000, lines[0]);
   check("hook: a cron job's ID, time and that it runs once", lines[1]?.x?.id === "1386eca0" && lines[1]?.x?.at === 1_800_000_000_000 && lines[1]?.x?.rec === false, lines[1]);
@@ -817,6 +921,9 @@ check("cron: a bad expression is null", parseCron("61 * * * *") === null && pars
   check("hook: a deleted cron job's ID", lines[3]?.x?.id === "1386eca0", lines[3]);
   check("hook: a scheduled task by its title and ID", lines[4]?.d === "Noon check" && lines[5]?.x?.task === "noon-check", [lines[4], lines[5]]);
   check("hook: a cron job's ID from a reply in text blocks", lines[7]?.x?.id === "abcdef12", lines[7]);
+  check("hook: the first two answer buttons, cut to 40 characters, and an app action's name",
+    JSON.stringify(lines[9]?.x?.acts) === JSON.stringify([{ l: `Yes, post it ${"x".repeat(27)}` }, { l: "Open", a: "create_pr" }]), lines[9]?.x);
+  check("hook: buttons that aren't a list are left out", lines[10]?.x?.acts === null, lines[10]?.x);
   rmSync(hdir, { recursive: true, force: true });
 }
 

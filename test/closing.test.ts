@@ -149,6 +149,21 @@ test("a linked session that waits for you to pick is listed, and this one asks n
   expect(r.relays).toEqual(["cli-draft"]);
 });
 
+test("a session it's about to start will ask you: ahead, and this one asks nothing", () => {
+  const es = classifyClosing("Abrí una tarjeta para la sesión del póster. Antes de dibujar, esa sesión te va a hacer dos preguntas: el color y la portada.", others, []);
+  expect(es.ask).toBeUndefined();
+  expect(es.ahead).toBe(true);
+  expect(classifyClosing("I left a card above to start it. The new session will ask you which colors to use.", others, []).ahead).toBe(true);
+  expect(classifyClosing("La sesión te hará dos preguntas antes de arrancar.", others, []).ahead).toBe(true);
+});
+
+test("not ahead: a session it names, or no session at all", () => {
+  expect(classifyClosing(`La sesión ${link} te va a preguntar qué portada usar.`, others, []).ahead).toBe(false);
+  expect(classifyClosing("billing-api te va a preguntar por los permisos en su sesión.", byName, []).ahead).toBe(false);
+  expect(classifyClosing("Mañana el script te va a preguntar la contraseña otra vez.", others, []).ahead).toBe(false);
+  expect(classifyClosing("Listo el cambio. Las pruebas pasan.", others, []).ahead).toBe(false);
+});
+
 const asks = rows.filter(([, r]) => r.is === "asks").length;
 test(`the table holds both kinds (${asks} asks, ${rows.length - asks} not)`, () => {
   expect(asks).toBeGreaterThan(20);

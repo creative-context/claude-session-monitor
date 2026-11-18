@@ -48,6 +48,7 @@ export type Session = {
   lastMain: number; // last event from the main agent
   lastPrompt?: number; // when it last got a message (yours, or another session's)
   relays?: string[]; // sessions its closing message says are waiting for you (Claude Code IDs)
+  relaysAhead?: boolean; // its closing says a session it starts will ask you, naming none
   relayed?: string[]; // the ones whose question it asks you now
   inFlight: number; // main-agent tools started and not finished
   tool?: string;
@@ -59,6 +60,8 @@ export type Session = {
   prompt?: string;
   recap?: string;
   ask?: string;
+  answers?: Answer[]; // the answer buttons under its question (wrap_up's actions), only with an ask
+  reply?: Reply; // an answer you gave from its card, on its way (in memory only)
   plan?: Step[];
   agents: Map<string, Agent>;
   runs: Map<string, Run>;
@@ -81,6 +84,13 @@ export type Session = {
   commands?: Command[]; // commands it moved to the background that haven't said they finished
   commandsRead?: number; // the transcript's size when they were read
 };
+
+// An answer button the session offered with its question: its words, and the Claude app's
+// action when it's one (commit, create_pr, ...), which only the app can do.
+export type Answer = { label: string; app?: string };
+// An answer you clicked on its card: pending for 5 s (due) so you can undo it, then sent once
+// the session's answers mod picks it up, or failed when none does. Never saved.
+export type Reply = { text: string; i: number; at: number; due: number; state: "pending" | "sent" | "failed" };
 
 // A shell command running in the background: Claude Code wakes the session up when it ends.
 // Its ID, when it started and its short description, never the command itself.

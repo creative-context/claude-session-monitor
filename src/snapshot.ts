@@ -7,6 +7,7 @@ import { relativesOf } from "./desktop.ts";
 import { runName, activeAgents, activeCommands } from "./agents.ts";
 import { type Blocked, blockedWords, madeTasks, reminderView, taskList } from "./tasks.ts";
 import { usageView } from "./usage.ts";
+import { canAnswer } from "./answers.ts";
 
 // What the card shows. A finished turn splits into done, asks (it ended with a question
 // for you) and error. Most urgent first.
@@ -17,6 +18,13 @@ const ORDER: Record<Shown, number> = { waiting: 0, asks: 1, error: 2, working: 3
 // blocked on you, or a question or an error from the last day.
 export const needsYou = (shown: Shown, last: number, now: number) =>
   shown === "waiting" || ((shown === "asks" || shown === "error") && now - last < DAY_MS);
+
+// The same rule for a live session, with the answer you gave from its card: one on its way
+// means you answered; one that couldn't be sent needs you again.
+export function sessionNeedsYou(s: Session, shown: Shown, now: number) {
+  if (shown === "asks" && s.reply) return s.reply.state === "failed";
+  return needsYou(shown, s.last, now);
+}
 
 // A session whose own turn ended but still has subagents or a workflow running is
 // busy: the card says so instead of "Done". A question or an error still wins.
@@ -71,7 +79,7 @@ export function snapshot() {
         title: s.title || s.prompt || (s.cwd ? basename(s.cwd) : "Session"),
         project: s.appCwd ? basename(s.appCwd) : s.cwd ? basename(s.cwd) : "", // the session's own folder, not wherever its shell is now
         status: shown,
-        needsYou: needsYou(shown, s.last, now),
+        needsYou: sessionNeedsYou(s, shown, now),
         cwd: s.appCwd ?? s.cwd ?? "", // for Reveal in Finder
         task: s.task,
         taskName: s.task ? tasks.get(s.task)?.name : undefined,
@@ -86,6 +94,11 @@ export function snapshot() {
         waitKind: s.waitKind,
         recap: s.recap,
         ask: s.ask ?? s.askText,
+        // Its answer buttons, while it asks: a label, and the Claude app's action for one only
+        // the app can do. canAnswer: its answers mod is there to take a click.
+        answers: shown === "asks" && s.answers ? s.answers.map((a) => ({ label: a.label, ...(a.app ? { app: a.app } : {}) })) : undefined,
+        canAnswer: shown === "asks" && !!s.answers && canAnswer(s.sid, now),
+        reply: shown === "asks" && s.reply ? { text: s.reply.text, state: s.reply.state, due: s.reply.due } : undefined,
         error: s.errorText,
         note: s.note,
         model: s.model,
@@ -125,7 +138,7 @@ export const SERVER = { version: process.env.CSM_VERSION || "dev", pid: process.
 // sessions waiting on you or asking, then tasks that can't run, then turns that ended on
 // an error. The count on the header, the Dock and the menu bar is its length.
 export type Attention = { kind: "session" | "error" | "blocked"; id: string; title: string; words: string; sid?: string; run?: string; error?: boolean };
-type SessionLike = { sid: string; title: string; status: Shown; needsYou: boolean; wait?: string; ask?: string; error?: string };
+type SessionLike = { sid: string; title: string; status: Shown; needsYou: boolean; wait?: string; ask?: string; error?: string; reply?: { state: string } };
 type TaskLike = { id: string; name: string; needsYou: boolean; blocked: Blocked | null };
 const WORDS_MAX = 300;
 export function attentionOf(list: SessionLike[], taskViews: TaskLike[], now: number): Attention[] {
@@ -133,6 +146,7 @@ export function attentionOf(list: SessionLike[], taskViews: TaskLike[], now: num
     const error = s.status === "error";
     const words = s.status === "waiting" ? s.wait || "Waiting for your answer"
       : error ? s.error || "The turn ended with an error"
+      : s.reply?.state === "failed" ? "Couldn't send your answer"
       : s.ask || "It asked you something";
     return { kind: error ? "error" : "session", id: s.sid, title: s.title, words: words.slice(0, WORDS_MAX), sid: s.sid, error };
   };

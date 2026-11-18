@@ -6,7 +6,7 @@ import { classifyClosing, type Other } from "../closing.ts";
 import { type Session, sessions, bump, localToCli, appTitles } from "./state.ts";
 import { setStatus } from "./session.ts";
 import { readRange } from "./log.ts";
-import { APP_SUMMARY_WAIT_MS, applyAppAsk, hasAppFile } from "./desktop.ts";
+import { APP_SUMMARY_WAIT_MS, applyAppAsk, hasAppFile, relativesOf } from "./desktop.ts";
 import { activeAgents, scanCommands } from "./agents.ts";
 import { pendingReminders } from "./tasks.ts";
 
@@ -117,7 +117,15 @@ export function closingContext(s: Session): [Other[], string[]] {
 const askingNow = (x: Session) => x.status === "waiting" || (x.status === "done" && x.outcome === "asks");
 export function checkRelayed() {
   for (const s of sessions.values()) {
-    if (s.status !== "done" || s.outcome !== "asks" || !s.relayed?.length) continue;
+    if (s.status !== "done" || s.outcome !== "asks") continue;
+    // Its closing said a session it starts will ask you: the side sessions started from it
+    // since that turn began are where the questions are.
+    if (!s.relayed?.length && s.relaysAhead) {
+      const sides = (relativesOf(s.sid).sides ?? []).map((x) => x.sid)
+        .filter((sid) => (sessions.get(sid)?.first ?? 0) >= (s.lastPrompt ?? s.since));
+      if (sides.length) s.relayed = sides;
+    }
+    if (!s.relayed?.length) continue;
     if (s.relayed.some((sid) => {
       const x = sessions.get(sid);
       return !!x && ((x.lastPrompt ?? 0) > s.since || (x.since > s.since && !askingNow(x)));
@@ -141,6 +149,7 @@ export function relinkRelays() {
     if (last.kind !== "text") continue;
     const c = classifyClosing(last.text!, ...closingContext(s));
     s.relays = c.relays;
+    s.relaysAhead = (!s.ask && !c.ask && c.ahead) || undefined;
     // Its own question passes on what it names; with none, the ask came from the app's
     // note, which then is the other session's (as applyAppAsk reads it).
     s.relayed = c.ask ? c.relayed : c.relays.length ? c.relays : undefined;
@@ -166,6 +175,8 @@ export function classifyTurn(s: Session) {
     scanCommands(s); // now, so a command that ended during the turn doesn't show for a moment
   } catch {}
   s.relays = closing?.relays;
+  // Only when the turn asks nothing of its own: the question then came from the app's note.
+  s.relaysAhead = (!s.ask && !closing?.ask && closing?.ahead) || undefined;
   s.relayed = undefined;
   if (last.kind === "error") {
     s.outcome = "error";

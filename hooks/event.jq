@@ -48,7 +48,14 @@ def clip($n): if type == "string" then .[0:$n] else . end;
         start: $i.start
       }
       elif .tool_name == "mcp__ccd_turn__wrap_up" then
-        {recap: ($i.recap | cut(300)), ask: ($i.ask | cut(140))}
+        {recap: ($i.recap | cut(300)), ask: ($i.ask | cut(140)),
+         # The answer buttons' words (up to 2), and an app action's name, so the card can
+         # offer them; nothing else from the buttons.
+         acts: (if ($i.actions | type) == "array"
+                then [$i.actions[0:2][] | objects | {l: (.label | cut(40)), a: (.action | cut(30))}
+                      | with_entries(select(.value != null and .value != "")) | select(length > 0)]
+                     | if length > 0 then . else null end
+                else null end)}
       elif .tool_name == "AskUserQuestion" then
         {q: ($i.questions[0].question | cut(160))}
       else null end

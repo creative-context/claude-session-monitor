@@ -50,6 +50,12 @@ Remove the hook in Settings (or run `bun install-hooks.ts --uninstall` from a cl
 rm -rf "/Applications/Claude Session Monitor.app" ~/.claude-session-monitor
 ```
 
+If you added [the plugin](#the-plugin), remove it too:
+
+```bash
+claude plugin uninstall session-monitor@claude-session-monitor
+```
+
 ## The views
 
 - **Last 7 Days** (⌘1). **Active** comes as cards: what needs you, what's working, anything touched in the last two hours (pick 4, 8, 12 or 24 in its header) and anything set to pick up again on its own, most urgent first. Under it, the rest of today, yesterday and earlier come as rows, and a long day splits into two columns in a wide window. After 7 days a session leaves this view on its own.
@@ -68,7 +74,7 @@ A side session, one the Claude app started from another session, says which one 
 mkdir -p ~/.claude-session-monitor/probe && cd ~/.claude-session-monitor/probe && claude --setting-sources project --strict-mcp-config
 ```
 
-Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal. With the [usage plugin](#the-usage-plugin), none of this is needed: every session hands the app its numbers, and the hidden check doesn't run while they're fresh.
+Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal. With the [plugin](#the-plugin), none of this is needed: every session hands the app its numbers, and the hidden check doesn't run while they're fresh.
 
 **Card size.** Cards are the same size in every window, with titles at 13.5 points on one line, so a tall window shows more of them instead of bigger ones.
 
@@ -91,19 +97,32 @@ Most urgent first. The whole card takes its state's color, strongest for what ne
 | Idle | None | Open, with no turn yet |
 | Closed | None | Its process is gone |
 
+A question that belongs to another session needs you there, not here: when a closing links or names the session that waits for your answer, or says a side session it's about to start will ask you ("la sesión te va a preguntar…"), this card turns Done once you answer in that session or start that side session.
+
 A card that starts needing you breathes for its first minute, then holds still. How a turn ended is read from the end of its transcript about a second after `Stop`. Errors are the lines Claude Code marks with `isApiErrorMessage`.
 
-## The usage plugin
+## Answering from the card
 
-The weekly usage comes faster, and without the app ever opening Claude Code in a hidden terminal, with a small Claude Code plugin. Each time Claude Code measures your plan's limits, in a terminal or in the Claude app, it saves the two percentages for the app. It shows nothing, adds no command, and makes no request. In a terminal session:
+When a session ends its turn with the Claude app's next-step question and answer buttons, its Needs you card shows the first two buttons in its footer, in place of the folder. Click one to answer without opening the session: the card turns blue and says Sent, with Undo and 5 seconds to change your mind. Then the answer goes to the session as your next message, exactly the button's words, and the session starts working on it. From the click on, it no longer counts as needing you.
+
+This needs the [plugin](#the-plugin) in that session. Without it, and for a button only the Claude app can do (Commit, Create PR, Merge and the like), the button carries ↗ and opens the session, as a click on the card does. If no session takes the answer within 25 seconds of your click (the 5 seconds to undo, then 20 more), or one takes it but its message doesn't reach the session within 30 seconds after that, the card says it couldn't send it and needs you again. On a focused card, ⌘↩ answers with the first button and ⌘Z takes it back.
+
+## The plugin
+
+A small Claude Code plugin, `session-monitor`, is the app's side inside each session. It does two things, and shows nothing and adds no command:
+
+- **Usage, sooner.** Each time Claude Code measures your plan's limits, in a terminal or in the Claude app, it saves the two percentages for the app, so the weekly usage comes faster and the app never opens Claude Code in a hidden terminal.
+- **Answers from the card.** In the background, with no turn and nothing in the conversation, it asks the app's server, at `127.0.0.1` only, whether you clicked an answer for this session, and when you did, it submits that answer as your next message. The server only hands it the words of a button that session offered, only after your click and the 5 seconds to undo. With the app closed, it asks again every 15 seconds and does nothing else.
+
+In a terminal session:
 
 ```
-/plugin install session-usage --marketplace creative-context/claude-session-monitor
+/plugin install session-monitor --marketplace creative-context/claude-session-monitor
 ```
 
-Answer `y` to add the marketplace and choose the user scope, so every session loads it. In the Claude app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `creative-context/claude-session-monitor`, then **Add plugin**. It's in `plugin/` in this repository.
+Answer `y` to add the marketplace and choose the user scope, so every session loads it. In the Claude app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `creative-context/claude-session-monitor`, then **Add plugin**. It's in `plugin/` in this repository. If you installed the earlier `session-usage`, uninstall it first: this plugin replaces it.
 
-A session loads plugins when it starts, so sessions already open don't have it yet: run `/reload-plugins` in each, or open new ones. Until then, the usage from those sessions comes from the app's own check, up to 10 minutes late.
+Sessions already open load it on their own a moment after you install or update it. If one doesn't, run `/reload-plugins` there or open a new session; until then its usage comes from the app's own check, up to 10 minutes late, and its answer buttons open the session.
 
 ## Build from source
 

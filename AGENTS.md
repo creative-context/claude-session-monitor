@@ -12,12 +12,13 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
   - `config.ts` folders and time limits; `state.ts` the types and the shared state (sessions, tasks, the version that bumps on each change, and the sessions changed since the last write: `bump(s)` names one, `bump()` marks all, `bumpView()` none).
   - `session.ts` the state machine (`apply`); `log.ts` reading, rotating and replaying `events.jsonl`; `turns.ts` process checks and how a turn ended.
   - `db.ts` `sessions.db` and History; `desktop.ts` the Claude app's session files; `agents.ts` subagents, workflows and background commands.
+  - `answers.ts` answering a session from its card: the buttons, the reply held 5 s for undo, and `/api/answer/:sid` (the page) and `/api/answer/:sid/next` (the mod's long poll), in memory only.
   - `tasks.ts` scheduled tasks and reminders; `usage.ts` plan usage and its probe; `snapshot.ts` what the page gets, with the "needs you" rule and the `attention` list built from it.
 - `closing.ts`: the rules that read a turn's closing message (done, asks you, or passes on another session's question), with its cases in `test/closing.test.ts` (`bun test`).
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.
 - `public/index.html`: the page, its script and its own styles (layout, the usage meter and strip, menus). The tokens, the base and the shared components come from the family's design system, `mac-app-design` (`creative-context/mac-app-design`, cloned next to this folder), vendored as `public/design-tokens.css`, `design-base.css`, `design-components.css`, `design-dataviz.css`, `design-icons.js` and `design.json` (the version, the repo and the commit); never edit those. The Obsidian theme's colors in Apple's system fonts (SF Pro, SF Mono), with no font files.
 - `public/anime-layout.js`: anime.js's layout module (`createLayout`), MIT, built from the npm package with `bun build` (its header says how). It animates Last 7 Days; the page works without it. Never load it from a CDN: the app makes one network request only.
-- `plugin/` and `.claude-plugin/marketplace.json`: the optional usage plugin (`session-usage`), a Claude Code mod that writes `usage.json` each time Claude Code measures the plan's limits. Nothing on screen, no timer, no process, no network. Check it with `claude plugin validate plugin`.
+- `plugin/` and `.claude-plugin/marketplace.json`: the optional plugin (`session-monitor`), a Claude Code mod with two jobs and nothing on screen: it writes `usage.json` each time Claude Code measures the plan's limits, and it asks the server at 127.0.0.1 for an answer you clicked on the session's card and submits it as the session's next prompt. Check it with `claude plugin validate plugin` and `claude plugin test plugin`. Claude Code runs an installed copy, not this folder: after a change, bump `version` in `plugin/.claude-plugin/plugin.json`, then `claude plugin marketplace update claude-session-monitor` and `claude plugin update session-monitor@claude-session-monitor`; open sessions load the new version on their own.
 - `app/main.swift`: the native app. `app/build.sh` builds it universal and puts the server, bundled into one `server.js` with `bun build`, the page, the hook and its installer into it.
 - `test/scenarios.ts`: end-to-end checks against a server with its own temp folder. `test/demo.ts`: made-up sessions and tasks for screenshots. `test/page.ts`: the page in WebKit on the demo (Playwright from the `mac-app-design` clone), in every window size, with a screenshot of each state; run it after changing the page.
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
@@ -31,6 +32,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 ```bash
 bun test/scenarios.ts      # port 4749
 bun test/page.ts           # port 4751, the page in WebKit
+claude plugin test plugin          # the plugin; claude plugin validate plugin
 bun test/demo.ts           # port 4748, or 4747 to show it in the app. --edge adds edge cases, --hot a week running hot
 sh app/build.sh --install  # build, copy to ~/Applications, reopen
 sh app/build.sh --release  # build and zip for a release

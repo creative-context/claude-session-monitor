@@ -12,6 +12,7 @@ import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSy
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCron, prevRun } from "../cron.ts";
+import { playMod } from "./answer-mod.ts";
 
 const args = process.argv.slice(2);
 const PORT = Number(args.find((a) => /^\d+$/.test(a)) ?? 4748);
@@ -29,12 +30,29 @@ const ev = (sid: string, t: number, e: Record<string, unknown>) =>
   appendFileSync(log, JSON.stringify({ t, sid, ...e }) + "\n");
 const project = (name: string) => `/Users/demo/code/${name}`;
 
-// A finished turn: the prompt, an optional recap or question, then Stop.
-function finished(prompt: string, cwd: string, at: number, recap?: string, ask?: string) {
+// A finished turn: the prompt, an optional recap or question with its answer buttons
+// (acts: a label, and the app's action when only the app can do it), then Stop.
+type Act = { l: string; a?: string };
+function finished(prompt: string, cwd: string, at: number, recap?: string, ask?: string, acts?: Act[]) {
   const sid = id();
   ev(sid, at - 6 * MIN, { ev: "UserPromptSubmit", prompt, cwd });
-  if (recap || ask) ev(sid, at - 1000, { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap, ask }, cwd });
+  closeTurn(sid, cwd, at, recap, ask, acts);
+  return sid;
+}
+function closeTurn(sid: string, cwd: string, at: number, recap?: string, ask?: string, acts?: Act[]) {
+  if (recap || ask) ev(sid, at - 1000, { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap, ask, ...(acts ? { acts } : {}) }, cwd });
   ev(sid, at, { ev: "Stop", cwd });
+}
+
+// Sessions you can answer from their card. The ones in `listening` have the answers mod
+// (played by test/answer-mod.ts): your answer reaches them, they work on it for a few
+// seconds and ask the same again, so the demo can be tried more than once.
+const answering = new Map<string, { cwd: string; recap?: string; ask: string; acts: Act[] }>();
+const listening: string[] = [];
+function asksWithAnswers(prompt: string, name: string, at: number, recap: string | undefined, ask: string, acts: Act[], mod: boolean) {
+  const sid = finished(prompt, project(name), at, recap, ask, acts);
+  answering.set(sid, { cwd: project(name), recap, ask, acts });
+  if (mod) listening.push(sid);
   return sid;
 }
 
@@ -44,9 +62,17 @@ ev(s, now - 3 * MIN, { ev: "UserPromptSubmit", prompt: "Upgrade the payments SDK
 ev(s, now - 2 * MIN, { ev: "PreToolUse", tool: "Bash", d: "Install the new SDK version", cwd: project("billing-api") });
 ev(s, now - 1 * MIN, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("billing-api") });
 
-const releaseRun = finished("Release notes for 2.4", project("docs"), now - 9 * MIN,
+const releaseRun = asksWithAnswers("Release notes for 2.4", "docs", now - 9 * MIN,
   "Drafted the release notes from the merged pull requests, grouped by feature.",
-  "Should I publish them to the changelog now?");
+  "Should I publish them to the changelog now?", [{ l: "Publish now" }, { l: "Wait for review" }], true);
+// Its first answer is one only the app can do (a commit); the second can go from the card.
+asksWithAnswers("Fix the login redirect loop", "web-app", now - 4 * MIN,
+  "The redirect now keeps the original page, with a test for each sign-in path.",
+  "The fix is ready on its branch. Commit it?", [{ l: "Commit", a: "commit" }, { l: "Not now" }], true);
+// No mod in this one: its answers open the session.
+asksWithAnswers("Rename the image folders", "media", now - 12 * MIN,
+  "Renamed 38 folders to the new pattern. Nothing links to them by path any more.",
+  "Should I keep the old folder names as redirects?", [{ l: "Keep redirects" }, { l: "Drop them" }], false);
 
 s = id();
 ev(s, now - 14 * MIN, { ev: "UserPromptSubmit", prompt: "Fix the flaky checkout test", cwd: project("web-app") });
@@ -272,6 +298,11 @@ if (EDGE) {
   ev(s, now - 61 * MIN, { ev: "UserPromptSubmit", prompt: "Release readiness check", cwd: project("platform"), tp: tpBig });
   ev(s, now - 60 * MIN, { ev: "Stop", cwd: project("platform"), tp: tpBig });
 
+  // Answers as long as the hook keeps them (40 characters): the second gives way.
+  asksWithAnswers("Migrate the billing exports to the new storage layout", "billing-exports-and-reports", now - 16 * MIN, undefined,
+    "312 old exports have no date in their name. Should I rename them from their contents or leave them where they are?",
+    [{ l: "Rename every file from what it contains" }, { l: "Leave them where they are for this round" }], true);
+
   // A question from two days ago: still a question, but it no longer needs you.
   finished("Pick a name for the CLI", project("cli"), now - 2 * 24 * 60 * MIN,
     "Three options are in names.md, with what each one is taken for on npm.",
@@ -366,7 +397,17 @@ const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   stdout: "inherit",
   stderr: "inherit",
 });
+// The answers mod in the sessions that have it. An answer starts a turn; a few seconds later
+// the session ends it and asks the same question again.
+const mods = GIF ? [] : listening.map((sid) => {
+  const a = answering.get(sid)!;
+  return playMod({
+    port: PORT, log, sids: [sid], cwd: a.cwd,
+    onAnswer: () => setTimeout(() => closeTurn(sid, a.cwd, Date.now(), a.recap, a.ask, a.acts), 8000),
+  });
+});
 const stop = () => {
+  for (const m of mods) m.stop();
   server.kill();
   rmSync(dir, { recursive: true, force: true });
   process.exit(0);

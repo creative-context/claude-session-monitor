@@ -15,6 +15,7 @@ export type Closing = {
   askText?: string; // what the card says
   relayed: string[]; // the sessions whose question it passes on to you
   relays: string[]; // every session it says is waiting for you
+  ahead: boolean; // it says a session will ask you, and names none: one it's about to start
 };
 
 export const fold = (s: string) => s.normalize("NFD").replace(/\p{Diacritic}/gu, "").toLowerCase();
@@ -33,7 +34,7 @@ type Ctx = { others: Other[]; own: string[] };
 export function classifyClosing(text: string, others: Other[] = [], own: string[] = []): Closing {
   const ctx = { others, own };
   const ask = closingQuestion(text) ?? closingRequest(text);
-  return { ask, askText: ask && askWithLead(text, ask), relayed: ask ? relayedTo(text, ask, ctx) : [], relays: relaysIn(text, ctx) };
+  return { ask, askText: ask && askWithLead(text, ask), relayed: ask ? relayedTo(text, ask, ctx) : [], relays: relaysIn(text, ctx), ahead: relaysAhead(text, ctx) };
 }
 
 // ---------------------------------------------------------------- what the closing asks
@@ -238,6 +239,9 @@ const RELAY = new RegExp(String.raw`\b(${[
   String.raw`en (esa|su) (propia )?sesion`,
   String.raw`contesta(le|les|la|las|lo|los)|responde(le|les)`,
   String.raw`te (espera|esta esperando|pregunta|hace \S+ preguntas?|necesita)`,
+  // Said ahead, of a session that is about to start: "la sesión te va a preguntar…".
+  String.raw`te va a (preguntar|hacer \S+ preguntas?|pedir)|te (preguntara|hara \S+ preguntas?)`,
+  String.raw`(will|is going to) ask you`,
   String.raw`(esta|estan|sigue|siguen|quedo|quedaron) esperando`,
   String.raw`espera tu respuesta`,
   String.raw`esperan? (a )?que (elijas|escojas|decidas|confirmes|apruebes|contestes|respondas|le digas)`,
@@ -308,6 +312,19 @@ function relaysIn(text: string, ctx: Ctx): string[] {
     const here = pointedAt(markless(l), ctx);
     return here.length ? here : linksAbove(lines, i, ctx);
   }))];
+}
+
+// A sentence that says a session will ask you ("Antes de empezar, la sesión te va a preguntar
+// si va en azul o en verde", "The new session will ask you…") without linking or naming one: the
+// questions belong to a side session this one proposed or started, which may not exist yet.
+const AHEAD = /\b(te va a (preguntar|hacer \S+ preguntas?|pedir)|te (preguntara|hara \S+ preguntas?)|(will|is going to) ask you)\b/;
+function relaysAhead(text: string, ctx: Ctx): boolean {
+  const lines = closingLines(text);
+  return lines.some((l, i) => {
+    const line = markless(l);
+    return AHEAD.test(fold(line)) && /\b(sesion|session)\b/.test(fold(line))
+      && !pointedAt(line, ctx).length && !linksAbove(lines, i, ctx).length;
+  });
 }
 
 // The sessions a note (the Claude app's own summary of a turn) says the waiting is in:

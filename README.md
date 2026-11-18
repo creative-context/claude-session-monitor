@@ -27,6 +27,7 @@ With a few Claude Code sessions going at once, the one that needs you is easy to
 - **What needs you comes first:** a permission, a question, a turn that ended asking you something, an error, or a scheduled task that can't start. The same count shows on the Dock icon and in the menu bar.
 - **It reads how a turn ended,** so "which one do you want?" counts as needing you and "anything else?" doesn't.
 - **The work behind each session:** the tool it's using, the step of its plan, its subagents and workflows.
+- **Answer from the card:** click one of a session's next-step answers on its card, with 5 seconds to undo, and it goes on working ([with the plugin](docs/guide.md#the-plugin)).
 - **Scheduled tasks:** when each runs next, how the last run went, and runs that never happened.
 - **Weekly usage:** how much of your plan's week you've used, whether you're on pace, and when you'd run out.
 - **A real Mac app:** standard menus, Settings, keyboard navigation, VoiceOver labels and Reduce Motion.
@@ -48,17 +49,17 @@ Requires macOS 14 or later, Claude Code signed in with a Claude plan that includ
 
 Sessions show up as soon as they do something. The app tells you when a new version is out.
 
-The weekly usage meter needs one more step: add the optional [usage plugin](docs/guide.md#the-usage-plugin), or [allow one folder once](docs/guide.md#weekly-usage). To build from source, see [Develop](#develop).
+The weekly usage meter needs one more step: add the optional [plugin](docs/guide.md#the-plugin), which also lets the cards answer, or [allow one folder once](docs/guide.md#weekly-usage). To build from source, see [Develop](#develop).
 
 ## Use
 
-Open the app and leave it beside your work. **Last 7 Days** (⌘1) shows what's active as cards, most urgent first. **All Sessions** (⌘2) is every session, searchable. **Scheduled** (⌘3) lists your scheduled tasks. Click a card to open that session in the Claude app.
+Open the app and leave it beside your work. **Last 7 Days** (⌘1) shows what's active as cards, most urgent first. **All Sessions** (⌘2) is every session, searchable. **Scheduled** (⌘3) lists your scheduled tasks. Click a card to open that session in the Claude app, or one of its answers to answer it from there.
 
 ## Privacy
 
 - Your sessions stay on your Mac. The server listens on `127.0.0.1` only.
 - It keeps short excerpts (titles, the first 200 characters of a prompt, a last recap) in `~/.claude-session-monitor`, never whole conversations or what a scheduled task does.
-- Its one network request is a daily check for a new version, to GitHub, which you can turn off. To read your weekly usage it may start Claude Code for a few seconds, every 10 minutes at most; the usage plugin makes that unnecessary.
+- Its one network request is a daily check for a new version, to GitHub, which you can turn off. To read your weekly usage it may start Claude Code for a few seconds, every 10 minutes at most; the plugin makes that unnecessary.
 
 Every file it reads, keeps or changes is listed in [docs/privacy.md](docs/privacy.md).
 
@@ -68,6 +69,7 @@ Remove the hook in Settings, then:
 
 ```bash
 rm -rf "/Applications/Claude Session Monitor.app" ~/.claude-session-monitor
+claude plugin uninstall session-monitor@claude-session-monitor   # if you added the plugin
 ```
 
 ## Develop

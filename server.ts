@@ -19,6 +19,7 @@ import { readDesktopSessions } from "./src/desktop.ts";
 import { scanAllAgents } from "./src/agents.ts";
 import { loadHistory, PROBE_EVERY, probeUsage, readUsage, usageView } from "./src/usage.ts";
 import { SERVER, snapshot } from "./src/snapshot.ts";
+import { answerRoutes, checkAnswers } from "./src/answers.ts";
 import { createServer, parentGone as kitParentGone, safe } from "./src/server-kit.ts";
 
 // Next to this file, both in a checkout and in the app, where server.js is the bundle.
@@ -32,7 +33,10 @@ const STATUS_LINE = join(import.meta.dir, "hooks", "statusline.sh");
 // kit, vendored as src/server-kit.ts. This file keeps Session Monitor's own.
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-function routes(req: Request, url: URL): Response | undefined {
+function routes(req: Request, url: URL): Response | Promise<Response> | undefined {
+  // Answering a session from its card, and its answers mod asking for one (src/answers.ts).
+  if (url.pathname.startsWith("/api/answer/")) return answerRoutes(req, url);
+
   if (url.pathname === "/api/history") {
     persist(); // so this week's latest changes are in it
     const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
@@ -226,6 +230,7 @@ export function start() {
       [1, "scanAllAgents", scanAllAgents],
       [1, "checkTurns", checkTurns], // in case a timeout was missed
       [1, "watchLog", watchLog],
+      [1, "checkAnswers", checkAnswers], // a card whose session's mod stopped asking can't send
       [2, "pump", pump], // in case a file event was missed
       [2, "usage", usageTick],
       [3, "checkProcesses", checkProcesses],
