@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="docs/banner.png" alt="Claude Session Monitor: a Mac app that shows your Claude Code sessions as they run, and which ones need you. Beside the title, its Active zone: two sessions that need you, one with an error, one working and one with agents working, and at the right the week's usage, half used and on pace, with its card open: the week as a curve along the even-week diagonal, 4% extra left" width="100%">
+  <img src="docs/banner.png" alt="Claude Session Monitor: a Mac app that shows your Claude Code sessions as they run, and which ones need you. Beside the title, its Active zone: two sessions that need you, the first with its two answer buttons, one with an error, one working and one with agents working, and at the right the week's usage, half used and on pace, with its card open: the week as a curve along the even-week diagonal, 4% extra left" width="100%">
 </p>
 
 <h1 align="center">Claude Session Monitor</h1>
@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" alt="The app's Active zone with demo data: a working session stops on a permission, turns orange with a beating dot and moves to the first place; a few seconds later another session finishes and turns green" width="100%">
+  <img src="docs/demo.gif" alt="The app's Active zone with demo data: a working session stops on a permission, turns orange with a beating dot and moves to the first place; then another session that asks a question gets its answer from its card, Publish now: it turns blue, says Sent with 5 seconds to undo, and goes back to working" width="100%">
 </p>
 
 With a few Claude Code sessions going at once, the one that needs you is easy to miss. It sits in another window, waiting on a permission or a question, while you watch the one that's working. This app puts every session on one screen, colored by what it needs from you. It works with the Claude desktop app and with `claude` in a terminal, and your sessions never leave your Mac.

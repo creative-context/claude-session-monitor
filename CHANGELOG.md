@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- The README's banner and animation show an answer from the card: the banner's first card carries its two answer buttons, and the animation answers one, with Sent and the 5 seconds to undo.
+
 ## 0.8.0
 
 - Answer a session from its card: when a turn ends with the Claude app's next-step question and answer buttons, the Needs you card shows the first two, and a click sends that answer to the session as its next message, after 5 seconds to undo. It goes through the optional plugin, which asks the app's local server for it; without the plugin, and for the app's own actions (Commit, Create PR…), the button opens the session.

@@ -127,7 +127,6 @@ s = finished("Check the staging deploy", project("web-app"), now - 35 * MIN,
   "The deploy is rolling out to staging. I'll look at the error rate again in an hour.");
 ev(s, now - 35 * MIN - 2000, { ev: "PostToolUse", tool: "CronCreate", cwd: project("web-app"),
   x: { id: "a1b2c3d4", at: now + 55 * MIN, cron: "0 12 * * *", rec: false } });
-const staging = s;
 
 s = id();
 const tpErr = join(dir, `${s}.jsonl`);
@@ -360,18 +359,18 @@ writeFileSync(join(dir, "usage.json"), JSON.stringify({
   writeFileSync(join(dir, "usage-history.jsonl"), lines.join("\n") + "\n");
 }
 
-// --gif: keep four sessions and the audit's task, with no usage, then wait for the cue.
-// The checkout fix stops on a permission; three and a half seconds later the audit's
-// agents finish and it closes its turn.
+// --gif: keep four sessions and their tasks, with no usage, then wait for the cue. The
+// checkout fix stops on a permission; then the release notes get their answer from the card
+// (docs/demo-gif.swift clicks it), and its mod takes it 5 s later.
 if (GIF) {
-  const keep = new Set([checkout, auditRun, onboarding, staging]);
+  const keep = new Set([checkout, releaseRun, auditRun, onboarding]);
   const lines = readFileSync(log, "utf8").split("\n").filter((l) => l && keep.has(JSON.parse(l).sid));
   writeFileSync(log, lines.join("\n") + "\n");
   for (const f of readdirSync(appDir)) {
     if (f === "scheduled-tasks.json") continue;
     if (!keep.has(JSON.parse(readFileSync(join(appDir, f), "utf8")).cliSessionId)) rmSync(join(appDir, f));
   }
-  writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile.filter((t) => t.id === "data-audit") }));
+  writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile.filter((t) => t.id === "data-audit" || t.id === "release-notes") }));
   rmSync(join(dir, "usage.json"));
   rmSync(join(dir, "usage-history.jsonl"));
   let played = false;
@@ -380,12 +379,6 @@ if (GIF) {
     played = true;
     const at = Date.now();
     ev(checkout, at, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("web-app") });
-    setTimeout(() => {
-      const end = Date.now();
-      for (const agentId of ["demo1", "demo2"]) appendFileSync(join(runDir, "journal.jsonl"), JSON.stringify({ type: "result", agentId, result: "ok" }) + "\n");
-      ev(auditRun, end - 500, { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap: "All 12 tables match last night's counts." }, cwd: project("analytics"), tp });
-      ev(auditRun, end, { ev: "Stop", cwd: project("analytics"), tp });
-    }, 3500);
   });
 }
 
@@ -399,7 +392,7 @@ const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
 });
 // The answers mod in the sessions that have it. An answer starts a turn; a few seconds later
 // the session ends it and asks the same question again.
-const mods = GIF ? [] : listening.map((sid) => {
+const mods = (GIF ? listening.filter((sid) => sid === releaseRun) : listening).map((sid) => {
   const a = answering.get(sid)!;
   return playMod({
     port: PORT, log, sids: [sid], cwd: a.cwd,

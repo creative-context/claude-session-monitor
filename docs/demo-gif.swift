@@ -2,7 +2,8 @@
 // app's own engine): a window 1100 points wide, so three cards fit in a row, scaled down to
 // 880 px. It starts the demo itself (`bun test/demo.ts --gif`, in UTC, on port 4821), cues
 // its story and stops it: the checkout fix stops on a permission and turns Needs you, then
-// the audit's agents finish and it turns Done. Needs ffmpeg.
+// the release notes get an answer from their card (Sent, the 5 s to undo) and go back to
+// working. Needs ffmpeg.
 //
 //   swift docs/demo-gif.swift docs/demo.gif
 import AppKit
@@ -19,8 +20,9 @@ let port = 4821
 var size = NSSize(width: 1100, height: 250) // the part of the page in the GIF, in its own pixels
 let gifWidth = 880
 let fps = 12.5
-let length = 9.0 // seconds
+let length = 13.0 // seconds
 let cueAt = 1.5 // seconds into the recording
+let answerAt = 4.0 // when the release notes' first answer is clicked
 
 let frames = FileManager.default.temporaryDirectory.appendingPathComponent("csm-gif-\(getpid())")
 try? FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
@@ -75,6 +77,7 @@ final class Recorder: NSObject, WKNavigationDelegate {
   var start = Date()
   var count = 0
   var cued = false
+  var answered = false
 
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     // The cards come in over a second or two, then the recording starts, down to just
@@ -98,6 +101,13 @@ final class Recorder: NSObject, WKNavigationDelegate {
     if !cued && t >= cueAt {
       cued = true
       cue.fileHandleForWriting.write("play\n".data(using: .utf8)!)
+    }
+    if !answered && t >= answerAt {
+      answered = true
+      let click = """
+      [...document.querySelectorAll('.card')].find((c) => c.textContent.includes('Release notes'))?.querySelector('[data-answer="0"]')?.click();
+      """
+      webView.evaluateJavaScript(click)
     }
     if t >= length {
       window.orderOut(nil)
