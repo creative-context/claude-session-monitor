@@ -7,7 +7,7 @@ import { relativesOf } from "./desktop.ts";
 import { runName, activeAgents, activeCommands } from "./agents.ts";
 import { type Blocked, blockedWords, madeTasks, reminderView, taskList } from "./tasks.ts";
 import { usageView } from "./usage.ts";
-import { canAnswer } from "./answers.ts";
+import { canAnswer, sayable } from "./answers.ts";
 
 // What the card shows. A finished turn splits into done, asks (it ended with a question
 // for you) and error. Most urgent first.
@@ -22,7 +22,7 @@ export const needsYou = (shown: Shown, last: number, now: number) =>
 // The same rule for a live session, with the answer you gave from its card: one on its way
 // means you answered; one that couldn't be sent needs you again.
 export function sessionNeedsYou(s: Session, shown: Shown, now: number) {
-  if (shown === "asks" && s.reply) return s.reply.state === "failed";
+  if ((shown === "asks" || shown === "error") && s.reply) return s.reply.state === "failed";
   return needsYou(shown, s.last, now);
 }
 
@@ -98,10 +98,15 @@ export function snapshot() {
         // the app can do. canAnswer: its answers mod is there to take a click.
         answers: shown === "asks" && s.answers ? s.answers.map((a) => ({ label: a.label, ...(a.app ? { app: a.app } : {}) })) : undefined,
         canAnswer: shown === "asks" && !!s.answers && canAnswer(s.sid, now),
-        reply: shown === "asks" && s.reply ? { text: s.reply.text, state: s.reply.state, due: s.reply.due } : undefined,
+        // canSay: it waits on you and its mod is listening, so the app's mic can answer it.
+        canSay: sayable(s) && canAnswer(s.sid, now),
+        // The answer you gave from the card, a button's or your words, while it waits on you.
+        reply: (shown === "asks" || shown === "done" || shown === "error") && s.reply ? { text: s.reply.text, state: s.reply.state, said: s.reply.i < 0 || undefined } : undefined,
         error: s.errorText,
         note: s.note,
         model: s.model,
+        effort: s.effort,
+        ultra: s.ultra || undefined,
         agents: agents.slice(0, 6).map((a) => ({
           id: a.id,
           label: a.label,

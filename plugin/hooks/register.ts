@@ -7,39 +7,45 @@ import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 // file the app reads, and only when the app is installed (its folder exists).
 //
 // Answers: when a session ends its turn with a question and answer buttons, its card in the
-// app shows those buttons, and a click answers the session from there. In the background,
-// with no turn and nothing in the conversation, this asks the app's local server (127.0.0.1
-// only) whether you clicked an answer for this session; the server holds each ask up to 20 s.
-// When you did, it submits that answer as the session's next prompt, exactly the button's
-// words and nothing more, which starts a turn once the session is idle. The server only
-// hands over a label the session itself offered, only after your click and the 5 s you have
-// to undo it. It sends nothing but the session's ID in the address, and with the app closed
-// it just asks again every 15 s. It never runs in the app's own usage check (CSM_PROBE).
+// app shows those buttons, and a click answers the session from there; when it waits on you,
+// its card also has a mic, and the words you dictate there and send answer it the same way.
+// In the background, with no turn and nothing in the conversation, this asks the app's local
+// server (127.0.0.1 only) whether you sent an answer for this session; the server holds each
+// ask up to 20 s. When you did, it submits that answer as the session's next prompt, as your
+// own words (the session reads it bare, not as a plugin's message), exactly
+// a button's words or the words you sent from that session's card (one line, up to 1,000
+// characters) and nothing more, which starts a turn once the session is idle. The server only
+// hands over a label the session itself offered or your own words, and only after your click.
+// It sends nothing but the session's ID in the address, and with the app closed it just asks
+// again every 15 s. It never runs in the app's own usage check (CSM_PROBE).
 
 // ---------------------------------------------------------------- usage
 
-// Written when the numbers change, and at least every 5 minutes while Claude Code keeps
-// measuring, so the app sees fresh numbers and never starts its own check.
+// Stamped with when this session measured them. Every open session writes the same file, so
+// one never replaces a newer reading with an older one.
 const FRESH_MS = 5 * 60_000
 let written = 0
 
-async function save($: EngineInterface, limits: SessionRateLimit[]) {
+async function save($: EngineInterface, limits: SessionRateLimit[], measured: number) {
   const seven = limits.find((l) => l.kind === 'seven_day')
   if (!seven?.resetsAt) return
   const home = await $.env.get('HOME')
   const dir = home && `${home}/.claude-session-monitor`
   if (!dir || !(await $.fs.exists(dir))) return
+  const file = `${dir}/usage.json`
+  const held = await $.fs.read(file).then((t) => Number(JSON.parse(t)?.at) * 1000).catch(() => 0)
+  if (held >= measured) return
   const five = limits.find((l) => l.kind === 'five_hour')
   const window = (l?: SessionRateLimit) =>
     l?.resetsAt ? { used_percentage: l.percentUsed, resets_at: Math.floor(Date.parse(l.resetsAt) / 1000) } : null
-  const now = await $.clock.now()
-  written = now
-  await $.fs.write(`${dir}/usage.json`, JSON.stringify({ at: now / 1000, week: window(seven), five_hour: window(five) }))
+  await $.fs.write(file, JSON.stringify({ at: measured / 1000, week: window(seven), five_hour: window(five) }))
 }
 
+// At its start a session holds the last numbers it saw, maybe hours ago, with no time on
+// them: they fill the file only when there is none yet.
 async function first($: EngineInterface) {
   const usage = await $.session.usage().catch(() => null)
-  if (usage) await save($, usage.rateLimits).catch(() => {})
+  if (usage) await save($, usage.rateLimits, 1).catch(() => {})
 }
 
 // ---------------------------------------------------------------- answers
@@ -47,9 +53,9 @@ async function first($: EngineInterface) {
 const PORT = 4747
 const RETRY_MS = 15_000 // after an error, or a reply it doesn't expect
 const ROUND_MS = 1_000 // the shortest round, so a server that answers at once never spins it
-const MAX_TEXT = 40 // a button's words, as the app's hook cuts them
+const MAX_TEXT = 1000 // a button's words, or the words you sent from the card, at most
 
-// The answer in a 200 reply, or null when it isn't one: one line of a button's length.
+// The answer in a 200 reply, or null when it isn't one: one line of 1,000 characters at most.
 export function answerText(body: string): string | null {
   try {
     const text = JSON.parse(body)?.text
@@ -88,7 +94,9 @@ async function listen($: EngineInterface) {
     while (mine === round) {
       const began = await $.clock.now()
       const got = await ask($, port).catch(() => 'retry' as const)
-      if (got !== 'none' && got !== 'retry' && mine === round) void $.prompt.submit({ text: got }).catch(() => {})
+      // As your own words, which they are (a button you clicked, or what you said): the session
+      // reads them bare, not under "The session-monitor plugin sent a message".
+      if (got !== 'none' && got !== 'retry' && mine === round) void $.prompt.submit({ text: got, asUser: true }).catch(() => {})
       const wait = got === 'retry' ? RETRY_MS : ROUND_MS - ((await $.clock.now()) - began)
       if (wait > 0) await $.clock.sleep(wait) // rejects when the mod unloads, which ends the loop
     }
@@ -114,9 +122,15 @@ export const register: Register = (on) => {
     await listen($).catch(() => {})
     return started
   })
+  // A measure comes right after a response of this session, so its numbers are current:
+  // written when they move, and at least every 5 minutes while the session works, so the
+  // app sees fresh numbers and doesn't start its own check.
   on('session.measure', async ($, e, next) => {
-    const stale = (await $.clock.now()) - written > FRESH_MS
-    if (e.changed.includes('rateLimits') || stale) await save($, e.rateLimits).catch(() => {})
+    const now = await $.clock.now()
+    if (e.changed.includes('rateLimits') || now - written > FRESH_MS) {
+      written = now
+      await save($, e.rateLimits, now).catch(() => {})
+    }
     await keepListening($).catch(() => {})
     return next(e)
   })

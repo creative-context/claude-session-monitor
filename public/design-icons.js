@@ -1,4 +1,4 @@
-/* mac-app-design 0.10.1 (icons.js). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.14.0 (icons.js). Vendored: don't edit here. Change it in the design repo and vendor again. */
 // The family's icons: drawn on a 24 px grid, all in the same 1.25 px stroke (base.css sets it).
 // One source for both apps. In a page:
 //   DesignIcons.svg("folder")        an inline <svg class="i"> string
@@ -20,6 +20,7 @@
     "terminal": "<rect x=\"3\" y=\"4\" width=\"18\" height=\"16\" rx=\"2\"/><path d=\"m7 9 3 3-3 3\"/><path d=\"M12.5 15H17\"/>",
     "file": "<path d=\"M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z\"/><path d=\"M14 3v5h5\"/>",
     "pencil": "<path d=\"M4 20h4L19.5 8.5a2.1 2.1 0 0 0-3-3L5 17v3z\"/><path d=\"m14.5 7.5 2 2\"/>",
+    "gear": "<path d=\"M10.14 5.05 L10.42 2.53 L13.58 2.53 L13.86 5.05 A7.2 7.2 0 0 1 15.6 5.76 L17.57 4.18 L19.82 6.43 L18.24 8.4 A7.2 7.2 0 0 1 18.95 10.14 L21.47 10.42 L21.47 13.58 L18.95 13.86 A7.2 7.2 0 0 1 18.24 15.6 L19.82 17.57 L17.57 19.82 L15.6 18.24 A7.2 7.2 0 0 1 13.86 18.95 L13.58 21.47 L10.42 21.47 L10.14 18.95 A7.2 7.2 0 0 1 8.4 18.24 L6.43 19.82 L4.18 17.57 L5.76 15.6 A7.2 7.2 0 0 1 5.05 13.86 L2.53 13.58 L2.53 10.42 L5.05 10.14 A7.2 7.2 0 0 1 5.76 8.4 L4.18 6.43 L6.43 4.18 L8.4 5.76 A7.2 7.2 0 0 1 10.14 5.05Z\"/><circle cx=\"12\" cy=\"12\" r=\"3\"/>",
     "search": "<circle cx=\"11\" cy=\"11\" r=\"6.5\"/><path d=\"m20 20-4.2-4.2\"/>",
     "globe": "<circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M3 12h18\"/><path d=\"M12 3c2.5 2.6 3.8 5.6 3.8 9s-1.3 6.4-3.8 9c-2.5-2.6-3.8-5.6-3.8-9S9.5 5.6 12 3z\"/>",
     "star": "<path d=\"m12 3 2.6 5.6 6.1.7-4.5 4.2 1.2 6L12 16.6 6.6 19.5l1.2-6-4.5-4.2 6.1-.7z\"/>",
@@ -49,6 +50,7 @@
     "arrowDown": "<path d=\"M12 5v14\"/><path d=\"m6 13 6 6 6-6\"/>",
     "speaker": "<path d=\"M11 5 6.5 9H3.5v6h3l4.5 4z\"/><path d=\"M15.5 9a4.5 4.5 0 0 1 0 6\"/><path d=\"M18.5 6a8.5 8.5 0 0 1 0 12\"/>",
     "speakerOff": "<path d=\"M11 5 6.5 9H3.5v6h3l4.5 4z\"/><path d=\"m15.5 9.5 5 5\"/><path d=\"m20.5 9.5-5 5\"/>",
+    "mic": "<rect x=\"9\" y=\"3\" width=\"6\" height=\"11\" rx=\"3\"/><path d=\"M5.5 11a6.5 6.5 0 0 0 13 0\"/><path d=\"M12 17.5V21\"/>",
     "user": "<circle cx=\"12\" cy=\"8\" r=\"3.5\"/><path d=\"M5.5 20a6.5 6.5 0 0 1 13 0\"/>",
     "hourglass": "<path d=\"M7 3h10\"/><path d=\"M7 21h10\"/><path d=\"M8 3v3.5a4 4 0 0 0 1.6 3.2L12 12l2.4-2.3A4 4 0 0 0 16 6.5V3\"/><path d=\"M8 21v-3.5a4 4 0 0 1 1.6-3.2L12 12l2.4 2.3a4 4 0 0 1 1.6 3.2V21\"/>",
     "phone": "<path d=\"M5.5 3.5h3l1.8 4.6-2.1 1.5a11 11 0 0 0 6.2 6.2l1.5-2.1 4.6 1.8v3a2 2 0 0 1-2.2 2A16.5 16.5 0 0 1 3.5 5.7a2 2 0 0 1 2-2.2z\"/>",

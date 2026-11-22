@@ -17,6 +17,7 @@ export function playMod(o: {
   log: string; // the events.jsonl the server reads
   sids: string[];
   cwd?: string;
+  delay?: number; // ms between taking an answer and its prompt line, as a session takes a moment to start its turn
   onAnswer?: (sid: string, text: string) => void; // after the prompt line is written
 }): ModPlayer {
   const stop = new AbortController();
@@ -28,6 +29,7 @@ export function playMod(o: {
         if (r.status === 200) {
           const { text } = (await r.json()) as { text: string };
           answered.push({ sid, text });
+          if (o.delay) await Bun.sleep(o.delay);
           appendFileSync(o.log, JSON.stringify({ t: Date.now(), sid, ev: "UserPromptSubmit", prompt: text, cwd: o.cwd ?? "/tmp/demo" }) + "\n");
           o.onAnswer?.(sid, text);
         } else if (r.status !== 204) await Bun.sleep(1000);

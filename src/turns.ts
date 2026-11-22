@@ -4,7 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { basename } from "node:path";
 import { classifyClosing, type Other } from "../closing.ts";
 import { type Session, sessions, bump, localToCli, appTitles } from "./state.ts";
-import { setStatus } from "./session.ts";
+import { modelOf, setStatus } from "./session.ts";
 import { readRange } from "./log.ts";
 import { APP_SUMMARY_WAIT_MS, applyAppAsk, hasAppFile, relativesOf } from "./desktop.ts";
 import { activeAgents, scanCommands } from "./agents.ts";
@@ -60,7 +60,8 @@ export function checkProcesses() {
 //   text         a closing message; its text says whether it asks you something
 //   none         still mid-turn (a tool call or a tool result is the last thing)
 // ended: Claude Code wrote that the turn's Stop hooks ran after its last reply.
-export type LastTurn = { kind: "interrupted" | "error" | "text" | "none"; text?: string; ended?: boolean };
+// model: the model of that last reply, for a session in a terminal (the app's file says it otherwise).
+export type LastTurn = { kind: "interrupted" | "error" | "text" | "none"; text?: string; ended?: boolean; model?: string };
 
 export const textOf = (row: any): string => {
   const c = row.message?.content;
@@ -92,7 +93,8 @@ export function readLastTurn(tp: string): LastTurn {
     if (row.type !== "assistant") continue;
     const text = textOf(row).trim();
     if (row.isApiErrorMessage) return { kind: "error", text: text || row.error || "API error" };
-    return text ? { kind: "text", text, ended } : { kind: "none", ended };
+    const model = modelOf(row);
+    return text ? { kind: "text", text, ended, model } : { kind: "none", ended, model };
   }
   return { kind: "none" };
 }
@@ -149,10 +151,13 @@ export function relinkRelays() {
     if (last.kind !== "text") continue;
     const c = classifyClosing(last.text!, ...closingContext(s));
     s.relays = c.relays;
-    s.relaysAhead = (!s.ask && !c.ask && c.ahead) || undefined;
+    // What was saved with it wins where the closing alone can't tell (its next-step box isn't
+    // read again, and the side sessions it relays to were found from its turn's start).
+    s.relaysAhead = s.relaysAhead || (!s.ask && !c.ask && c.ahead) || undefined;
     // Its own question passes on what it names; with none, the ask came from the app's
     // note, which then is the other session's (as applyAppAsk reads it).
-    s.relayed = c.ask ? c.relayed : c.relays.length ? c.relays : undefined;
+    const named = c.ask ? c.relayed : c.relays.length ? c.relays : undefined;
+    s.relayed = named?.length ? named : s.relayed;
     const reworded = Boolean(c.askText && !s.ask && s.askText && c.askText !== s.askText);
     if (reworded) s.askText = c.askText;
     if (s.relayed?.length || reworded) bump(s);
@@ -171,6 +176,7 @@ export function classifyTurn(s: Session) {
   const summaryIn = s.appAsk && s.appAsk.edge >= s.since - 10_000;
   if (guess && !summaryIn && hasAppFile(s.sid) && Date.now() - s.since < 800 + APP_SUMMARY_WAIT_MS) return;
   s.classified = true;
+  if (last.model && !hasAppFile(s.sid)) s.model = last.model; // a terminal's: the app's file says it otherwise
   try {
     scanCommands(s); // now, so a command that ended during the turn doesn't show for a moment
   } catch {}

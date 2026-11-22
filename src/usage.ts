@@ -33,6 +33,9 @@ export function readUsage() {
         ? { pct: Math.max(0, Math.min(100, w.used_percentage)), resets: toMs(w.resets_at) }
         : null;
     const next = { at: toMs(j.at) ?? m, week: win(j.week), five: win(j.five_hour) };
+    // Every session writes this file: a reading measured before the one held is older news,
+    // whatever its numbers say (the 5-hour share can go down, so only its time tells).
+    if (usage && next.at < usage.at) return;
     // A share lower than one already seen this week is an old reading: a session that starts
     // again hands over the last numbers it saw, maybe hours ago. The week only goes up.
     const top = next.week?.resets ? highest(next.week.resets) : -1;

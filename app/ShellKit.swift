@@ -1,4 +1,4 @@
-// mac-app-kit 0.2.1 (ShellKit.swift). Vendored: don't edit here. Change it in the kit and vendor again.
+// mac-app-kit 0.2.3 (ShellKit.swift). Vendored: don't edit here. Change it in the kit and vendor again.
 // The native shell's shared parts for the family's Mac apps, compiled with each app's own
 // main.swift (build.sh passes both to swiftc):
 //   - ShellLog: one line in the server's log (server.log), which the app also writes to;
@@ -339,6 +339,19 @@ final class ServerKeeper {
 // move the window. So the header row in the title bar drags the window like a title bar,
 // except over the controls the page reports (holes). A double click does what System
 // Settings says a title bar double click does.
+// The window a PageView fills. WebKit shows hover only in the key window, as macOS does, so
+// coming from another app the page didn't react to the pointer until a click. While the
+// pointer is over it, this window tells WebKit it's key; keys still go to the app in front.
+class PageWindow: NSWindow {
+    var pointerInside = false {
+        didSet {
+            guard pointerInside != oldValue, !super.isKeyWindow else { return }
+            NotificationCenter.default.post(name: pointerInside ? NSWindow.didBecomeKeyNotification : NSWindow.didResignKeyNotification, object: self)
+        }
+    }
+    override var isKeyWindow: Bool { super.isKeyWindow || pointerInside }
+}
+
 class PageView: WKWebView {
     var holes: [CGRect] = [] // in the page's CSS pixels
     var titlebarHeight: CGFloat = 0 // in points, from the top
@@ -349,7 +362,6 @@ class PageView: WKWebView {
     private var exitArea: NSTrackingArea?
     override func updateTrackingAreas() {
         super.updateTrackingAreas()
-        guard pointerFunction != nil else { return }
         if let exitArea { removeTrackingArea(exitArea) }
         let area = NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeAlways, .inVisibleRect], owner: self, userInfo: nil)
         addTrackingArea(area)
@@ -357,16 +369,20 @@ class PageView: WKWebView {
     }
     override func mouseEntered(with event: NSEvent) {
         super.mouseEntered(with: event)
-        if let f = pointerFunction, event.trackingArea === exitArea {
-            evaluateJavaScript("\(f)?.(true)", completionHandler: nil)
-        }
+        guard event.trackingArea === exitArea else { return }
+        (window as? PageWindow)?.pointerInside = true
+        if let f = pointerFunction { evaluateJavaScript("\(f)?.(true)", completionHandler: nil) }
     }
     override func mouseExited(with event: NSEvent) {
         super.mouseExited(with: event)
-        if let f = pointerFunction, event.trackingArea === exitArea {
-            evaluateJavaScript("\(f)?.(false)", completionHandler: nil)
-        }
+        guard event.trackingArea === exitArea else { return }
+        (window as? PageWindow)?.pointerInside = false
+        if let f = pointerFunction { evaluateJavaScript("\(f)?.(false)", completionHandler: nil) }
     }
+
+    // With another app in front, WebKit spends the first click on bringing the window
+    // forward, so opening what you point at took two clicks. The first one counts here.
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
 
     override func mouseDown(with event: NSEvent) {
         var p = convert(event.locationInWindow, from: nil)

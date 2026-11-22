@@ -1,4 +1,4 @@
-/* mac-app-design 0.10.1 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.14.0 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Components: the pieces both apps draw, with their states. Class names are the first
    app's, so nothing renames; a few aliases name a state by its meaning (needs, soft). */
 
@@ -157,6 +157,7 @@ header .spacer { flex: 1; }
 .banner .btn { margin-left: auto; height: 24px; }
 .banner .x { all: unset; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--color-text-secondary); }
 .banner .x:hover { background: var(--obsidian-veil-selected); color: var(--color-text-primary); }
+.banner .x:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
 
 /* ---------- card: surfaces, no lines; the whole card takes its state's color ---------- */
 @property --tint { syntax: "<color>"; inherits: false; initial-value: transparent; }
@@ -270,6 +271,20 @@ header .spacer { flex: 1; }
   .card { transition: --tint 450ms var(--ease-standard), opacity 220ms var(--ease-standard); }
   .card:active { transform: none; }
 }
+/* A control inside a card (an answer, a mic, a tag that opens something) presses itself, not
+   the card: mark it .ctl, and while it's pressed the card neither sinks nor darkens. A button
+   sinks itself to 0.95 on the way down; a .tag stays put. Reduce Motion keeps them still. */
+.card:active:has(.ctl:active) { background: var(--card-bg, var(--tint)); transform: none; }
+.card .ctl:not(.tag) { transition-property: background-color, transform; transition-duration: var(--duration-fast); transition-timing-function: var(--ease-standard); }
+.card .ctl:not(.tag):active { transform: scale(0.95); }
+@media (prefers-reduced-motion: reduce) { .card .ctl:not(.tag):active { transform: none; } }
+/* Lifted: a card with a drawer coming out from under it (.pop.anchored.drawer). On top, and
+   opaque (its tint over the page's color), so the drawer starts under its round corners and
+   reads as coming from beneath it. Its own shadow falls on the drawer, round at its corners
+   like the card: there from the first frame to the last, never animated. Hover and press keep
+   its plain color. */
+.card.lifted, .card.lifted:hover, .card.lifted:active { z-index: 31; --card-bg: linear-gradient(var(--tint), var(--tint)), var(--color-background-body); background: var(--card-bg);
+  box-shadow: 0 3px 10px -1px #0000008C, 0 1px 3px #00000059; }
 
 /* ---------- history row: one line per item, a second one for what it said ---------- */
 .hlist { display: flex; flex-direction: column; gap: 4px; }
@@ -340,6 +355,40 @@ header .spacer { flex: 1; }
 .pop-foot { margin-top: 2px; padding-top: 2px; }
 .pop-foot .prow { grid-template-columns: 14px 1fr; color: var(--color-text-accent); font-size: var(--csm-text-body); }
 .pop-foot .prow:hover { background: var(--obsidian-veil-selected); }
+/* Anchored: a .pop that comes out of the control that opened it, with an arrow pointing at it.
+   The page places it (absolutely, in the box that scrolls with the control, so it follows it)
+   and sets --pop-arrow-x, the arrow's center from its left edge. Below the control by default;
+   .above opens it upward when there's no room below. Its width is --pop-w. */
+.pop.anchored { position: absolute; box-sizing: border-box; width: var(--pop-w, 300px); max-height: none; overflow: visible; padding: 8px 10px; }
+.pop.anchored::before { content: ""; position: absolute; top: -5px; left: calc(var(--pop-arrow-x, 24px) - 6px); width: 12px; height: 12px;
+  border-radius: 2px; background: inherit; transform: rotate(45deg); pointer-events: none; }
+.pop.anchored.above { transform: translateY(4px); }
+.pop.anchored.above.open { transform: none; }
+.pop.anchored.above::before { top: auto; bottom: -5px; }
+/* Drawer: an anchored popover that comes out from under its card (.card.lifted), as wide as the
+   card, with no arrow and square corners on the card's side. Its content goes in .drawer-in,
+   which starts below the card's round corners. The page places its top at the card's bottom
+   edge, less the corners' radius, and sets --h, the height of .drawer-in. It opens by growing
+   from the card's edge to --h: the part by the card, with the corners beside the card's round
+   ones, is there from the first frame, and only its far edge moves, the content riding with
+   it. It closes the same way back, quicker and speeding up. .above (no room below) grows
+   upward: the page moves its top as it grows, so its foot stays at the card. Never 0 px tall:
+   an empty clip would drop its words from the page's text, and VoiceOver's; the 1 px it keeps
+   is under the card. Reduce Motion only fades it. */
+.pop.anchored.drawer { z-index: 30; padding: 0; height: 1px; overflow: hidden; transform: none; display: flex; flex-direction: column; justify-content: flex-end;
+  border-radius: 0 0 var(--radius-container) var(--radius-container);
+  --drawer-out: cubic-bezier(0.4, 0, 1, 1); /* back in, speeding up as it goes */
+  transition: height var(--duration-exit) var(--drawer-out), top var(--duration-exit) var(--drawer-out), opacity 60ms linear calc(var(--duration-exit) - 60ms), visibility 0s linear var(--duration-exit); }
+.pop.anchored.drawer.open { height: var(--h, auto); opacity: 1; transform: none;
+  transition: height var(--duration-enter) var(--ease-enter), top var(--duration-enter) var(--ease-enter), opacity 0s, visibility 0s; }
+.pop.anchored.drawer::before { display: none; }
+.pop.anchored.drawer.above, .pop.anchored.drawer.above.open { justify-content: flex-start; border-radius: var(--radius-container) var(--radius-container) 0 0; transform: none; }
+.drawer-in { flex: none; display: flex; flex-direction: column; gap: 6px; padding: calc(14px + var(--radius-container)) 12px 10px; }
+.drawer.above > .drawer-in { padding: 10px 12px calc(14px + var(--radius-container)); }
+@media (prefers-reduced-motion: reduce) {
+  .pop.anchored.drawer, .pop.anchored.drawer:not(.open) { height: var(--h, auto); transition: opacity 160ms linear, visibility 0s linear 160ms; }
+  .pop.anchored.drawer.open { transition: opacity 160ms linear, visibility 0s; }
+}
 @media (prefers-reduced-motion: reduce) { .pop { transform: none !important; } }
 
 /* ---------- scroll fade: where a list scrolls out of view, it fades into its surface ---------- */

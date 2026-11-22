@@ -99,6 +99,18 @@ export function applyAppAsk(s: Session) {
   if (!a || s.status !== "done" || !s.classified) return;
   if (a.edge < s.since - 10_000) return; // the summary is of an earlier turn
   if (a.text && (pointsElsewhere(s, a.text) || OPEN_NOTE.test(a.text))) return;
+  // The session closed with its next-step box and asked nothing in it: by its own word
+  // nothing waits on you, and the app's note doesn't overrule that. A card the note already
+  // turned (before a restart, say) goes back to done.
+  if (a.text && s.recap && !s.ask) {
+    if (s.outcome === "asks" && s.askText === a.text) {
+      s.outcome = "done";
+      s.askText = undefined;
+      s.relayed = undefined;
+      bump(s);
+    }
+    return;
+  }
   if (a.text && s.outcome === "done") {
     s.outcome = "asks";
     s.askText = a.text;
@@ -143,6 +155,7 @@ export function relativesOf(sid: string) {
 // What one app session file says, as far as this app needs it.
 export type AppFile = {
   local: string; cli: string; from?: string; title?: string; archived?: boolean; model?: string; cwd?: string;
+  effort?: string; ultra?: boolean; // the effort level picked for it, and whether ultracode is on
   created?: number; last?: number; task?: string; ask?: { text: string; edge: number };
 };
 export function parseAppFile(text: string, name: string): AppFile | undefined {
@@ -154,6 +167,8 @@ export function parseAppFile(text: string, name: string): AppFile | undefined {
     from: typeof j.spawnedFrom?.sessionId === "string" ? j.spawnedFrom.sessionId : undefined,
     title: typeof j.title === "string" ? j.title : undefined, archived: j.isArchived === true,
     model: typeof j.model === "string" ? j.model : undefined, cwd: typeof cwd === "string" ? cwd : undefined,
+    effort: typeof j.effort === "string" && /^[a-z]{1,12}$/.test(j.effort) ? j.effort : undefined,
+    ultra: j.sessionSettings?.ultracode === true || undefined,
     created: typeof j.createdAt === "number" ? j.createdAt : undefined,
     last: typeof j.lastActivityAt === "number" ? j.lastActivityAt : undefined,
     task: typeof j.scheduledTaskId === "string" ? j.scheduledTaskId : undefined,
@@ -314,10 +329,13 @@ export function readDesktopSessions() {
       s.appAsk = d.ask;
       applyAppAsk(s);
     }
-    if (d.title !== s.title || d.archived !== s.archived || d.model !== s.model || d.cwd !== s.appCwd || d.task !== s.task) {
+    if (d.title !== s.title || d.archived !== s.archived || d.model !== s.model || d.effort !== s.effort || d.ultra !== s.ultra ||
+      d.cwd !== s.appCwd || d.task !== s.task) {
       s.title = d.title;
       s.archived = d.archived;
       s.model = d.model;
+      s.effort = d.effort;
+      s.ultra = d.ultra;
       s.appCwd = d.cwd;
       s.task = d.task;
       bump(s);

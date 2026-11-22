@@ -174,6 +174,17 @@ describe("agent scan", () => {
     expect(s.agents.get("b1")?.finished).toBe(false);
   });
 
+  test("an agent that handed its report back is finished, one still calling it is not", () => {
+    const { s, sub } = sessionWithAgents("handback");
+    const handback = assistant([{ type: "tool_use", id: "h1", name: "SubagentHandback", input: { report: "Made-up report." } }], "tool_use");
+    writeFileSync(join(sub, "agent-h1.jsonl"), handback);
+    A.scanAllAgents();
+    expect(s.agents.get("h1")?.finished).toBeFalsy(); // the call hasn't gone through yet
+    appendFileSync(join(sub, "agent-h1.jsonl"), JSON.stringify({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: "h1", content: "Report delivered." }] } }) + "\n");
+    A.scanAllAgents();
+    expect(s.agents.get("h1")?.finished).toBe(true);
+  });
+
   test("an agent's detail is one line of 160 characters at most", () => {
     const { s, sub } = sessionWithAgents("long");
     const command = "echo " + "x".repeat(400) + "\n  && echo done";
@@ -295,6 +306,27 @@ describe("usage readings", () => {
   });
 });
 
+describe("usage readings by their time", () => {
+  test("a reading measured before the one held is left out, 5-hour share included", async () => {
+    const config = await import("../src/config.ts");
+    const usage = await import("../src/usage.ts");
+    const resets = Math.floor(Date.now() / 1000) + 3 * 86400;
+    const f = join(config.DIR, "usage.json");
+    let n = 100;
+    const write = (at: number, week: number, five: number) => {
+      writeFileSync(f, JSON.stringify({ at, week: { used_percentage: week, resets_at: resets }, five_hour: { used_percentage: five, resets_at: resets - 86400 } }));
+      const t = Date.now() / 1000 + ++n; // a new mtime each time
+      utimesSync(f, t, t);
+      usage.readUsage();
+      return usage.usageView(Date.now());
+    };
+    const now = Date.now() / 1000 + 50;
+    expect(write(now, 30, 40)?.five?.pct).toBe(40);
+    expect(write(now - 600, 30, 10)?.five?.pct).toBe(40); // measured ten minutes earlier: older news
+    expect(write(now + 60, 31, 12)?.five?.pct).toBe(12); // newer: the 5-hour share may go down
+  });
+});
+
 describe("workflow names", () => {
   const runTranscript = (name: string, input: object) => {
     const tp = join(PROJECTS, `${name}.jsonl`);
@@ -315,4 +347,57 @@ describe("workflow names", () => {
     const s = runTranscript("wf-inline", { script: "export const meta = { name: 'made-up-flow', description: 'Checks the drafts' };" });
     expect(A.runName(s, "wf-123")).toMatchObject({ name: "made-up-flow", description: "Checks the drafts" });
   });
+});
+
+describe("the database", () => {
+  test("a write that fails is tried again on the next one", () => {
+    const sid = uuid(90);
+    newSession(sid, { title: "Made-up 90" });
+    state.bump(sid);
+    dbm.db.exec("ALTER TABLE sessions RENAME TO sessions_away");
+    expect(() => dbm.persist()).toThrow();
+    dbm.db.exec("ALTER TABLE sessions_away RENAME TO sessions");
+    dbm.persist();
+    expect((dbm.db.query("SELECT title FROM sessions WHERE sid = ?").get(sid) as any)?.title).toBe("Made-up 90");
+  });
+});
+
+describe("opening sessions.db", () => {
+  // Run in its own process and folder: openDatabase works on the one folder it was started with.
+  const run = (setup: string) => {
+    const dir = mkdtempSync(join(tmpdir(), "csm-open-"));
+    const script = `
+      import { Database } from "bun:sqlite";
+      import { existsSync, readdirSync, writeFileSync } from "node:fs";
+      const file = process.env.CSM_DIR + "/sessions.db";
+      ${setup}
+      const { openDatabase } = await import(${JSON.stringify(join(import.meta.dir, "../src/db.ts"))});
+      let threw = "";
+      try { openDatabase(); } catch (e) { threw = e.code ?? String(e); }
+      console.log(JSON.stringify({ threw, files: readdirSync(process.env.CSM_DIR).filter((f) => f.startsWith("sessions.db")) }));`;
+    const r = Bun.spawnSync(["bun", "-e", script], { env: { ...process.env, CSM_DIR: dir, CSM_APP_SESSIONS: join(dir, "app"), CSM_PROJECTS: join(dir, "projects") } });
+    return JSON.parse(r.stdout.toString().trim().split("\n").at(-1)!) as { threw: string; files: string[] };
+  };
+
+  test("a locked database is not moved aside", () => {
+    const out = run(`
+      const a = new Database(file);
+      a.exec("PRAGMA journal_mode = DELETE");
+      a.exec("CREATE TABLE sessions (sid TEXT PRIMARY KEY)");
+      a.exec("BEGIN EXCLUSIVE"); // held for the whole run
+      globalThis.keep = a; // so it is not collected and released
+    `);
+    expect(out.threw).toBe("SQLITE_BUSY");
+    expect(out.files).toEqual(["sessions.db"]);
+  }, 30_000);
+
+  test("a file that is not a database moves aside, and an earlier .bad is kept", () => {
+    const out = run(`
+      writeFileSync(file, "this is not a database ".repeat(20));
+      writeFileSync(file + ".bad", "the first one");
+    `);
+    expect(out.threw).toBe("");
+    expect(out.files).toContain("sessions.db.bad");
+    expect(out.files).toContain("sessions.db.bad2");
+  }, 30_000);
 });

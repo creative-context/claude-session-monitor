@@ -1,4 +1,4 @@
-/* mac-app-design 0.10.1 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.14.0 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Tokens: colors, type, space, shape and motion for the family's Mac apps.
    Dark only. The Obsidian theme's names and values stay as they are;
    the --csm-* names are the family's own, kept from the first app so nothing renames. */
@@ -12,8 +12,8 @@
   --color-overlay-hover: #FFFFFF0A;     /* 4% */
   --obsidian-veil-selected: #FFFFFF0F;  /* 6% */
   --color-overlay-pressed: #FFFFFF14;   /* 8% */
-  --color-surface-raised: #16171A;      /* popovers and panels: lifted by light and a soft shadow */
-  --shadow-raised: 0 12px 32px #00000080, inset 0 0 0 1px #FFFFFF0A;
+  --color-surface-raised: #202125;      /* popovers and panels: lifted by light and a soft shadow; with no line at their edge, this step is what sets them apart (secondary text 4.95:1) */
+  --shadow-raised: 0 12px 32px #00000080; /* a soft shadow only: no line at the edge, the surface's own step is enough */
 
   /* Text */
   --color-text-primary: #F7F8F8;
@@ -75,6 +75,13 @@
   /* Motion: calm and in step, one easing curve, no bounce. */
   --duration-fast: 100ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* How long things take: out quickly, in gently. An exit, an entry, a move across the window,
+     and a color that changes in place. Panels enter on --ease-enter. */
+  --duration-exit: 160ms;
+  --duration-enter: 320ms;
+  --duration-travel: 400ms;
+  --duration-color: 450ms;
+  --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Data viz: one quiet fill, tracks a step above the card, "now" in the accent, and the
      state colors for how it's going. Whose turn: orange you, blue Claude, gray others. */

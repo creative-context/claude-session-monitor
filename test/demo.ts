@@ -66,7 +66,7 @@ const releaseRun = asksWithAnswers("Release notes for 2.4", "docs", now - 9 * MI
   "Drafted the release notes from the merged pull requests, grouped by feature.",
   "Should I publish them to the changelog now?", [{ l: "Publish now" }, { l: "Wait for review" }], true);
 // Its first answer is one only the app can do (a commit); the second can go from the card.
-asksWithAnswers("Fix the login redirect loop", "web-app", now - 4 * MIN,
+const loginFix = asksWithAnswers("Fix the login redirect loop", "web-app", now - 4 * MIN,
   "The redirect now keeps the original page, with a test for each sign-in path.",
   "The fix is ready on its branch. Commit it?", [{ l: "Commit", a: "commit" }, { l: "Not now" }], true);
 // No mod in this one: its answers open the session.
@@ -119,7 +119,12 @@ ev(s, now - 22 * MIN, { ev: "UserPromptSubmit", prompt: "Nightly data audit", cw
 ev(s, now - 21 * MIN, { ev: "Stop", cwd: project("analytics"), tp });
 const auditRun = s;
 
-const onboarding = finished("Onboarding email copy", project("marketing-site"), now - 26 * MIN,
+// A session in a terminal: no app file, so its model is the one of its last reply.
+const onboarding = id();
+const tpMail = join(dir, `${onboarding}.jsonl`);
+writeFileSync(tpMail, JSON.stringify({ type: "assistant", message: { model: "claude-sonnet-5-5", content: [{ type: "text", text: "The draft is ready." }] } }) + "\n");
+ev(onboarding, now - 32 * MIN, { ev: "UserPromptSubmit", prompt: "Onboarding email copy", cwd: project("marketing-site"), tp: tpMail });
+closeTurn(onboarding, project("marketing-site"), now - 26 * MIN,
   "Wrote three subject lines and a short body. The draft is in emails/onboarding.md.");
 
 // Done, and set to look again on its own later: it stays in Active until then.
@@ -163,13 +168,22 @@ mkdirSync(appDir, { recursive: true });
 // session says which session it came from.
 const side = finished("Write the cart race regression test", project("web-app"), now - 6 * MIN,
   "The test reproduces the race in 3 of 10 runs before the fix and never after it.");
+// Its answers mod listens too, so in the app its Done card has a mic for a spoken answer.
+answering.set(side, { cwd: project("web-app"), recap: "The test reproduces the race in 3 of 10 runs before the fix and never after it.", ask: "", acts: [] });
+listening.push(side);
 writeFileSync(join(appDir, "local_checkout.json"), JSON.stringify({
   sessionId: "local_checkout", cliSessionId: checkout, title: "Fix the flaky checkout test", originCwd: project("web-app"),
-  createdAt: now - 14 * MIN, lastActivityAt: now - 20_000,
+  createdAt: now - 14 * MIN, lastActivityAt: now - 20_000, model: "claude-sonnet-5-5", effort: "medium",
 }));
 writeFileSync(join(appDir, "local_side.json"), JSON.stringify({
   sessionId: "local_side", cliSessionId: side, title: "Write the cart race regression test", originCwd: project("web-app"),
   createdAt: now - 12 * MIN, lastActivityAt: now - 6 * MIN, spawnedFrom: { sessionId: "local_checkout" },
+  model: "claude-haiku-4-5", effort: "low",
+}));
+// The model and effort a session runs with, as the app's file keeps them.
+writeFileSync(join(appDir, "local_login.json"), JSON.stringify({
+  sessionId: "local_login", cliSessionId: loginFix, title: "Fix the login redirect loop", originCwd: project("web-app"),
+  createdAt: now - 10 * MIN, lastActivityAt: now - 4 * MIN, model: "claude-opus-5-5", effort: "high",
 }));
 const taskFile: any[] = [];
 let runFiles = 0;
@@ -182,18 +196,19 @@ function task(id: string, name: string, cron: string, cwd: string, o: { enabled?
     ...(o.lastFor ? { lastScheduledFor: new Date(o.lastFor).toISOString(), lastRunAt: new Date(o.lastFor + MIN).toISOString() } : {}),
   });
 }
-function runOf(sid: string, taskId: string, title: string, cwd: string, at: number) {
+function runOf(sid: string, taskId: string, title: string, cwd: string, at: number, more: object = {}) {
   writeFileSync(join(appDir, `local_${++runFiles}.json`), JSON.stringify({
-    cliSessionId: sid, scheduledTaskId: taskId, title, originCwd: cwd, createdAt: at, lastActivityAt: at + 5 * MIN,
+    cliSessionId: sid, scheduledTaskId: taskId, title, originCwd: cwd, createdAt: at, lastActivityAt: at + 5 * MIN, ...more,
   }));
 }
 
 // Its last run asks you something (the release notes card above).
 task("release-notes", "Weekly release notes", "0 16 * * 5", project("docs"), { lastFor: prev("0 16 * * 5") });
-runOf(releaseRun, "release-notes", "Release notes for 2.4", project("docs"), now - 15 * MIN);
+runOf(releaseRun, "release-notes", "Release notes for 2.4", project("docs"), now - 15 * MIN,
+  { model: "claude-opus-5-5", effort: "xhigh", sessionSettings: { ultracode: true } });
 // Running right now (the workflow above).
 task("data-audit", "Nightly data audit", "0 2 * * *", project("analytics"), { lastFor: prev("0 2 * * *") });
-runOf(auditRun, "data-audit", "Nightly data audit", project("analytics"), now - 22 * MIN);
+runOf(auditRun, "data-audit", "Nightly data audit", project("analytics"), now - 22 * MIN, { model: "claude-opus-5-5", effort: "high" });
 // Ran fine, three times.
 const builds = "30 10 * * 1-5";
 let at = prev(builds);
@@ -359,9 +374,12 @@ writeFileSync(join(dir, "usage.json"), JSON.stringify({
   writeFileSync(join(dir, "usage-history.jsonl"), lines.join("\n") + "\n");
 }
 
-// --gif: keep four sessions and their tasks, with no usage, then wait for the cue. The
-// checkout fix stops on a permission; then the release notes get their answer from the card
-// (docs/demo-gif.swift clicks it), and its mod takes it 5 s later.
+// --gif: keep four sessions and their tasks, with the week's usage beside them, then wait for
+// the cues, one line each on stdin. "play": the checkout fix stops on a permission. Then the
+// release notes get their answer from the card (docs/demo-gif.swift clicks it), and its mod
+// takes it at once and asks the same again a moment later (CSM_DEMO_TURN_MS). "resume": the
+// checkout fix gets its permission and runs its tests again. Both start fresh, so the story
+// ends as it began and the GIF loops without a seam.
 if (GIF) {
   const keep = new Set([checkout, releaseRun, auditRun, onboarding]);
   const lines = readFileSync(log, "utf8").split("\n").filter((l) => l && keep.has(JSON.parse(l).sid));
@@ -371,14 +389,18 @@ if (GIF) {
     if (!keep.has(JSON.parse(readFileSync(join(appDir, f), "utf8")).cliSessionId)) rmSync(join(appDir, f));
   }
   writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile.filter((t) => t.id === "data-audit" || t.id === "release-notes") }));
-  rmSync(join(dir, "usage.json"));
-  rmSync(join(dir, "usage-history.jsonl"));
-  let played = false;
-  process.stdin.on("data", () => {
-    if (played) return;
-    played = true;
-    const at = Date.now();
-    ev(checkout, at, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("web-app") });
+  const fresh = Date.now();
+  const rn = answering.get(releaseRun)!;
+  closeTurn(releaseRun, rn.cwd, fresh, rn.recap, rn.ask, rn.acts);
+  // As at the story's end: a permission just given, the tests running again.
+  ev(checkout, fresh - 1500, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("web-app") });
+  ev(checkout, fresh, { ev: "PreToolUse", tool: "Bash", d: "Run the checkout tests", cwd: project("web-app") });
+  process.stdin.on("data", (b) => {
+    for (const cue of String(b).split("\n")) {
+      const at = Date.now();
+      if (cue === "play") ev(checkout, at, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("web-app") });
+      if (cue === "resume") ev(checkout, at, { ev: "PreToolUse", tool: "Bash", d: "Run the checkout tests", cwd: project("web-app") });
+    }
   });
 }
 
@@ -390,13 +412,14 @@ const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   stdout: "inherit",
   stderr: "inherit",
 });
-// The answers mod in the sessions that have it. An answer starts a turn; a few seconds later
-// the session ends it and asks the same question again.
+// The answers mod in the sessions that have it. An answer starts a turn a moment later; a few
+// seconds after (CSM_DEMO_TURN_MS, 8 s by default) the session ends it and asks the same question again.
+const TURN_MS = Number(process.env.CSM_DEMO_TURN_MS) || 8000;
 const mods = (GIF ? listening.filter((sid) => sid === releaseRun) : listening).map((sid) => {
   const a = answering.get(sid)!;
   return playMod({
-    port: PORT, log, sids: [sid], cwd: a.cwd,
-    onAnswer: () => setTimeout(() => closeTurn(sid, a.cwd, Date.now(), a.recap, a.ask, a.acts), 8000),
+    port: PORT, log, sids: [sid], cwd: a.cwd, delay: 1500,
+    onAnswer: () => setTimeout(() => closeTurn(sid, a.cwd, Date.now(), a.recap, a.ask || undefined, a.acts.length ? a.acts : undefined), TURN_MS),
   });
 });
 const stop = () => {

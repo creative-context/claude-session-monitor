@@ -1,5 +1,7 @@
 // Draws docs/screenshot.png: the page on the demo data, in WebKit (the app's own engine),
-// at twice the pixels, with the weekly usage card open. Run the demo first.
+// at twice the pixels, with the weekly usage card open, and the mic on each card whose
+// session can take a spoken answer (a stand-in for the app's dictation, which listens to
+// nothing). Run the demo first.
 //
 //   TZ=UTC bun test/demo.ts --hot &
 //   swift docs/screenshot.swift http://127.0.0.1:4748/ docs/screenshot.png
@@ -33,8 +35,14 @@ let utc = WKUserScript(source: """
     Intl.DateTimeFormat.prototype = DTF.prototype;
   })();
   """, injectionTime: .atDocumentStart, forMainFrameOnly: true)
+// The app's dictation, as the page sees it: with a handler named "dictate", the cards that
+// can take a spoken answer show their mic. This one never listens.
+final class NoDictation: NSObject, WKScriptMessageHandler {
+  func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {}
+}
 let config = WKWebViewConfiguration()
 config.userContentController.addUserScript(utc)
+config.userContentController.add(NoDictation(), name: "dictate")
 let web = WKWebView(frame: window.contentLayoutRect, configuration: config)
 web.pageZoom = scale
 window.contentView = web

@@ -4,7 +4,7 @@ import { existsSync, statSync } from "node:fs";
 import { nextRun, parseCron } from "../cron.ts";
 import { type Status, type Step, type Ev, type Session, sessions, bump } from "./state.ts";
 import { readRange } from "./log.ts";
-import { readAppFileSoon, readDesktopSoon } from "./desktop.ts";
+import { hasAppFile, readAppFileSoon, readDesktopSoon } from "./desktop.ts";
 import { timeOf } from "./tasks.ts";
 import { answersOf, clearReply, forgetAnswer } from "./answers.ts";
 
@@ -12,6 +12,9 @@ import { answersOf, clearReply, forgetAnswer } from "./answers.ts";
 const REMINDER_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function setStatus(s: Session, status: Status, t: number) {
+  // A finished turn that starts working again, by any path (a prompt, or a background task
+  // waking it with none), no longer asks: its answer buttons and a reply on its way go.
+  if (s.status === "done" && status === "working") forgetAnswer(s);
   if (s.status !== status) {
     s.status = status;
     s.since = t;
@@ -73,6 +76,12 @@ export const completeCurrent = (plan?: Step[]) =>
 
 // A session we first meet halfway (hooks installed later, or the server was off)
 // gets its plan and last recap from the transcript, replayed with the same rules.
+// The model a reply came from, when it's one of Claude's ("<synthetic>" marks an error line).
+export const modelOf = (row: any): string | undefined => {
+  const m = row?.message?.model;
+  return typeof m === "string" && /^claude-[a-z0-9.-]{1,60}$/.test(m) ? m : undefined;
+};
+
 export function hydrate(s: Session) {
   if (s.hydrated || !s.tp || !existsSync(s.tp)) return;
   s.hydrated = true;
@@ -82,6 +91,7 @@ export function hydrate(s: Session) {
   let recap: string | undefined;
   let ask: string | undefined;
   let actions: unknown;
+  let model: string | undefined; // of its last reply
   for (const line of lines) {
     let row: any;
     try {
@@ -99,6 +109,7 @@ export function hydrate(s: Session) {
       continue;
     }
     if (row.type !== "assistant" || !Array.isArray(content)) continue;
+    model = modelOf(row) ?? model;
     for (const b of content) {
       if (b?.type !== "tool_use") continue;
       if (b.name === "mcp__ccd_turn__update_plan") plan = applyPlan(plan, b.input);
@@ -111,9 +122,17 @@ export function hydrate(s: Session) {
     }
   }
   if (!s.plan) s.plan = plan;
+  if (model && !hasAppFile(s.sid)) s.model = model; // a session in a terminal; the app's file says it otherwise
   if (s.status === "done" && !s.recap && !s.ask) {
     s.recap = recap?.slice(0, 300);
     s.ask = ask?.slice(0, 140);
+  }
+  // After a restart sessions.db brings back the recap and the question, but not that the
+  // question was the next-step box's own: the transcript says so, when its last box is the
+  // one the recap came from. Without it the box would read as asking nothing.
+  if (s.status === "done" && !s.ask && typeof ask === "string" && ask.trim() && s.recap === recap?.slice(0, 300)) {
+    s.ask = ask.slice(0, 140);
+    if (s.outcome === "done") s.outcome = "asks"; // a card a wrong reading turned to done before
   }
   // The answer buttons under the question it still asks (after a restart, only the
   // transcript has them).

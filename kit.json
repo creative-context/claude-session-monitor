@@ -1,10 +1,10 @@
 {
   "name": "mac-app-kit",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "repo": "creative-context/mac-app-kit",
-  "commit": "1e464d5b531c",
+  "commit": "d2ebcd8474ff",
   "files": {
-    "src/server-kit.ts": "71b3f1259e71f8233593dc13118dc15984213653e85718f74c34d49f9636ca23",
-    "app/ShellKit.swift": "9b03bdef794ae669a3650a6df09eafe42de0f60d697a99d7bd514c35a8560fca"
+    "src/server-kit.ts": "cf98e7d708d801c5583dad5741e4b435a14fc12d33be2e99d8fd083f93cf4784",
+    "app/ShellKit.swift": "6652d6a1aacf9d3cf1a283a0c7dd0a06c9f8ca79a60c03577927bb2bc1ae0022"
   }
 }

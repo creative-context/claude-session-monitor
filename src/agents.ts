@@ -87,6 +87,9 @@ export function readAgentTail(a: Agent, mtime: number) {
       a.detail = short(i2.description ?? i2.file_path ?? i2.command ?? i2.pattern ?? i2.url);
     }
     if (!midTurn && row.message?.stop_reason === "end_turn" && !use) a.finished = true;
+    // Or it handed its report back with the tool for that, and the call went through: that
+    // ends the agent, with no closing text after it.
+    if (midTurn && use?.name === "SubagentHandback") a.finished = true;
     return;
   }
 }

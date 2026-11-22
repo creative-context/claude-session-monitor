@@ -39,13 +39,54 @@ export function classifyClosing(text: string, others: Other[] = [], own: string[
 
 // ---------------------------------------------------------------- what the closing asks
 
-// The last sentences of a closing message's last paragraph.
-function closingSentences(text: string, count: number): string[] {
-  const clean = text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "").replace(/[*_`#>]/g, "").trim();
-  const last = clean.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean).at(-1) ?? "";
-  const sentences = (last.match(SENTENCE) ?? []).map((s) => s.trim()).filter(Boolean);
+// Inline code is text, not sentences: "Cambié `¿Lo subo?` por `Subir`" has no question.
+// Its marks that would end a sentence go; "server.ts" stays as it is.
+const uncode = (text: string) =>
+  text.replace(/`([^`\n]+)`/g, (_, c: string) => c.replace(/[¿?¡!]/g, "").replace(/\.+(?=\s|$)/g, ""));
+
+// The last sentences of a closing message's last paragraph. With `pastData`, of the last
+// paragraph before a footer of data ("Pruebas: 17 de 17 pasan.", paths, a table), and none
+// when there's no such footer.
+function closingSentences(text: string, count: number, pastData = false): string[] {
+  const clean = uncode(text.replace(/```[\s\S]*?```/g, " ").replace(/^[ \t]*>.*$/gm, "")).replace(/[*_`#>]/g, "").trim();
+  const paragraphs = clean.split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+  let k = paragraphs.length - 1;
+  if (pastData) {
+    while (k >= 0 && dataParagraph(paragraphs[k])) k--;
+    if (k === paragraphs.length - 1) return [];
+  }
+  const sentences = (paragraphs[k]?.match(SENTENCE) ?? []).map((s) => s.trim()).filter(Boolean);
   return sentences.slice(-count);
 }
+
+// A paragraph of data, not prose: every line is a short "label: value", a count ("17 de 17
+// pasan", "3 files changed"), file names or paths, or a table row.
+function dataParagraph(p: string): boolean {
+  return p.split("\n").every((line) => {
+    const l = line.trim().replace(/^(\d+[.)]|[-•+])\s+/, "");
+    if (!l || l.startsWith("|")) return true;
+    if (/[?¿]/.test(l)) return false;
+    const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
+    const label = l.match(/^([^\s:]+(?:\s+[^\s:]+){0,3}):\s+(\S.*)$/);
+    if (label) return words(label[2]) <= 8 && !/[.!?]\s+\S/.test(label[2]);
+    if (/^[\w@~.\/-]+(\s*,\s*[\w@~.\/-]+)*\.?$/.test(l) && /\/|\.\w{1,6}\b/.test(l)) return true;
+    return /^\d+(\s*(\/|de|of)\s*\d+)?\s/.test(l) && words(l) <= 8;
+  });
+}
+
+// What a sentence says in its own voice. After a colon that follows a sending verb ("Le
+// escribí a Marta: ¿…?", "I replied in the thread: Could you…?") comes someone else's text.
+const NOCONJ = "(?:(?!\\b(?:y|e|o|u|pero|and|but|or|so|que|then)\\b)[^:,;.!?]){0,40}";
+const SENT = new RegExp("^(.*\\b(?:(?:le|les) (?:dije|escribi|mande|pregunte|conteste|respondi)|i(?: have|['\u2019]ve)? (?:asked(?! (?:you|me|us)\\b)|replied (?:to|in)|sent to|wrote (?:to|in)|posted (?:to|in)|answered(?! (?:you|me|us)\\b)))\\b" + NOCONJ + "):");
+function ownPart(s: string): string {
+  const m = fold(s).match(SENT);
+  if (!m) return s;
+  const n = m[1].split(":").length; // the colon that opens the quote is the n-th one
+  return s.split(":").slice(0, n).join(":");
+}
+
+// Questions that answer themselves: "¿Quién iba a pensar que era el caché?", "Who knew?".
+const RHETORICAL = /^(quien (iba a|hubiera|habria|lo iba a|lo hubiera) (pensar|decir|imaginar|creer)|quien lo (diria|hubiera dicho)|who (would|could)(n['’]t)?( have|['’]ve) (thought|guessed|known)|who knew)\b/;
 
 // The question a closing message ends on: its last sentence, or the one before it when that
 // one speaks to you and the last explains it ("¿Lo subo a main? Así sale hoy."). A question
@@ -53,14 +94,29 @@ function closingSentences(text: string, count: number): string[] {
 // session talking to itself. A question earlier in the text doesn't count, and neither does
 // a short courtesy one ("¿Algo más?", "Anything else I can help with?").
 // When the message ends on a list ("Lo que queda:" and its points), a question that ends
-// one of its items counts too: "1. **La segunda parte.** … ¿La arranco?".
+// one of its items counts too: "1. **La segunda parte.** … ¿La arranco?". So does one that
+// ends the paragraph before a footer of data ("¿Lo subo?\n\nPruebas: 17 de 17 pasan.").
 function closingQuestion(text: string): string | undefined {
-  const open = (s: string) => s.endsWith("?") && !courtesyQuestion(s);
-  const [prev, last] = closingSentences(text, 2).length === 2 ? closingSentences(text, 2) : [undefined, closingSentences(text, 1)[0]];
-  const q = last && open(last) ? last
-    : prev && open(prev) && !rhetorical(prev, last ?? "") ? prev
-    : closingItems(text).map(lastSentence).find(open);
+  const open = (s: string) => ownPart(s).endsWith("?") && !courtesyQuestion(s) && !RHETORICAL.test(fold(s).replace(/^[¿\s]+/, ""));
+  const ending = (sentences: string[]) => {
+    const [prev, last] = sentences.length === 2 ? sentences : [undefined, sentences[0]];
+    return last && open(last) ? last : prev && open(prev) && !rhetorical(prev, last ?? "") ? prev : undefined;
+  };
+  // Before a footer of data, a question about the work ("¿Qué cambió?") is a heading for it.
+  const beforeData = closingSentences(text, 2, true);
+  const dataQ = ending(beforeData);
+  const q = ending(closingSentences(text, 2))
+    ?? closingItems(text).map(lastSentence).find(open)
+    ?? (dataQ && !headingLike(dataQ) && !(dataQ === beforeData.at(-1) && rhetorical(dataQ, "")) ? dataQ : undefined);
   return q && q.length > 3 ? q.slice(0, 160) : undefined;
+}
+
+// A short question that names a thing ("¿El resultado?", "And the numbers?", "¿Y las pruebas?")
+// heads the data under it; it doesn't ask you anything.
+function headingLike(q: string): boolean {
+  if (addressesYou(q)) return false;
+  const f = fold(q).replace(/^[¿\s]+/, "");
+  return f.replace(/[?¿]/g, "").split(/\s+/).filter(Boolean).length <= 3 || /^(y|and the|el|la|los|las)\b/.test(f);
 }
 
 // A question followed by its own answer: "¿Funcionó? Sí, ya pasa.", or one that asks about
@@ -115,7 +171,7 @@ function closingItems(text: string): string[] {
   return items;
 }
 const lastSentence = (item: string) =>
-  (markless(item).replace(LIST_ITEM, "").match(SENTENCE) ?? []).map((s) => s.trim()).filter(Boolean).at(-1) ?? "";
+  (markless(uncode(item)).replace(LIST_ITEM, "").match(SENTENCE) ?? []).map((s) => s.trim()).filter(Boolean).at(-1) ?? "";
 
 // A question from a list item reads better with the item's bold lead: "La segunda parte,
 // el menú. ¿La arranco?".
@@ -139,7 +195,7 @@ const REQUEST = [
   /\b(me falta saber|solo falta|necesito (saber|que)|falta que (me )?(digas|confirmes|decidas|elijas|apruebes))\b/,
   /\b(dime|dimelo|confirmame|avisame|indicame|me dices|me confirmas|me avisas)\b/,
   // With the object stuck to it, so "El script lee los archivos" doesn't count but "Léelos" does.
-  /\b(confirma|aprueba|elige|escoge|decide|contesta|responde|revisa|manda|pasa|escribe|lee|abre|prueba|corre|agrega|pega)(me|lo|la|los|las|melo|mela)\b/,
+  /\b(confirma|aprueba|autoriza|elige|escoge|decide|contesta|responde|revisa|manda|pasa|escribe|lee|abre|prueba|corre|agrega|pega)(me|lo|la|los|las|melo|mela)\b/,
   // The choice left to you: "it's up to you", "Tú decides cuál".
   /\b(up to you|tu (decides|eliges|escoges))\b/,
   /\bcual(es)? (prefieres|quieres|te gusta|eliges|escoges)\b/,
@@ -158,7 +214,7 @@ const REQUEST = [
 // Words that ask you only at the start of a clause, as an imperative or a direct question
 // without its marks: "Elige una", "Si te late, escoge el azul", "Tú decide", "Approve the PR",
 // "Quieres que lo suba". After a subject they say what something else does.
-const IMPERATIVE = /^(decide|elige|escoge|aprueba|confirma|contesta|responde|tell me|approve|choose|pick|confirm|reply to|answer|(quieres|prefieres) que|te parece (bien )?(que|si))\s+\S/;
+const IMPERATIVE = /^(decide|elige|escoge|aprueba|autoriza|confirma|contesta|responde|tell me|ping me|approve|choose|pick|confirm|reply to|answer|(quieres|prefieres) que|te parece (bien )?(que|si))\s+\S/;
 const LEAD = /^((y|o|pero|entonces|ahora|solo|nomas|mejor|ya|tu|usted|porfa|por favor|and|or|but|so|then|now|just|please|you|also|tambien)\s+)+/;
 const imperative = (f: string) =>
   f.split(/[,;:()—–]|\s-\s/).some((c) => IMPERATIVE.test(c.trim().replace(LEAD, "")));
@@ -194,8 +250,8 @@ function closingRequest(text: string): string | undefined {
   // The last sentence of each point of a closing list too ("…esperan tu visto bueno."), unless
   // it starts with a condition: "Si prefieres el otro, lo cambio" is a note beside the point.
   const items = closingItems(text).map(lastSentence).filter((s) => !/^(si|if)\b/i.test(s));
-  const hit = [...closingSentences(text, 3), ...items].find((s) => {
-    const f = fold(s);
+  const hit = [...closingSentences(text, 3), ...items, ...closingSentences(text, 3, true)].find((s) => {
+    const f = fold(ownPart(s));
     return !COURTESY.test(f) && !WAITS_NOT.test(f) && (REQUEST.some((re) => re.test(f)) || imperative(f));
   });
   return hit ? hit.slice(0, 160) : undefined;

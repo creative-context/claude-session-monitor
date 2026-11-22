@@ -15,9 +15,9 @@
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
 	<key>CFBundleShortVersionString</key>
-	<string>0.8.0</string>
+	<string>0.9.0</string>
 	<key>CFBundleVersion</key>
-	<string>42</string>
+	<string>83</string>
 	<key>LSMinimumSystemVersion</key>
 	<string>14.0</string>
 	<key>NSAppTransportSecurity</key>
@@ -27,5 +27,9 @@
 	</dict>
 	<key>NSHighResolutionCapable</key>
 	<true/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Hear the answer you dictate on a session's card.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>Turn the answer you dictate into text, on this Mac.</string>
 </dict>
 </plist>

@@ -1,8 +1,34 @@
 # Changelog
 
-## Unreleased
+## 0.9.0
 
-- The README's banner and animation show an answer from the card: the banner's first card carries its two answer buttons, and the animation answers one, with Sent and the 5 seconds to undo.
+- Answer by voice: in the app, a card whose session waits on you has a mic. Press it and a composer opens out from under the card, as wide as it (from above it near the bottom of the window), so the card and its question stay in sight: speak, then Send (or Return) sends your words to the session as they are, or end with a phrase and pause, “enviar mensaje” or “send message” unless you set your own in Settings › Send by voice; if a send fails, they wait in a box to fix and send again. Cancel, Close or Esc always closes it. The speech is recognized on your Mac, in English or Spanish: your Mac's language until you choose one in the menu bar menu. The plugin is 0.2.7: a session reads the answer you send from its card, dictated or clicked, as your own words, no longer under "The session-monitor plugin sent a message". The microphone and speech permissions you give carry over to later versions.
+- Dictation plays two soft notes going up when the mic starts listening and the same two going down when it stops, so you know when to speak and that it has your words. Settings › Send by voice can turn them off, and the guide says how to play your own sounds instead.
+- The week's usage beside Active lines up with the cards: "This week" starts at their top edge and its last line, the reset or the 5-hour line, ends on the second row's bottom edge; the week's blocks take the room in between.
+- A pause while you dictate no longer drops what you said before it: after a pause the speech recognizer starts a new phrase and reports only that one, and the app now keeps the phrases before it, so a sentence, a pause and your send phrase go together.
+- Popovers, the composer and the week's usage card are one step lighter and have no line at their edge (the design system's 0.13.2), so they keep their edge over dark cards.
+- The composer grows out from the card's edge, its corners beside the card's round ones from the first frame, and the card casts a soft shadow on it; the hint that says the send phrase shares the buttons' line. The wave beside Listening keeps its width, so Listening no longer jumps when you pause.
+- The model's effort and UC tags are 16 px and sit on whole pixels, so they're sharp and their letters centered on a 1× screen.
+- While the pointer is on a card or a row of Last 7 Days, nothing changes place: a session that moves up or down waits, its card still updating where it is, and once the pointer leaves, everything glides where it belongs. The same while you dictate on a card.
+- Pressing an answer or the mic presses that button, not the whole card; the card sinks only when you press its body. A second press on the mic closes its composer.
+- The dot between the model and the time is gone.
+- The week's usage beside Active no longer drops for a moment while the cards glide to a new order.
+- With another app in front, one click on a card opens its session: the first click no longer only brings the window forward.
+- Coming from another app, the window reacts to the pointer right away: cards light up and their relatives with them, without a click first.
+- Pointing at a session lights up its relatives sooner, and the rest steps back faster.
+- The week's usage at the right of Active stays in sight while you scroll through Active's cards. The list no longer bounces at its ends, so the usage stays still when a flick reaches the top.
+- Each card shows the session's model and effort beside its time, with UC in an outlined tag when ultracode is on. The effort is its initial in a small solid square (L, M, H, X, and MAX written whole); a session in a terminal shows its model.
+- After a restart, a session whose next-step box asked you still needs you: the box's question comes back from the transcript, so the Claude app's note can't turn the card to done.
+- A subagent that ends by handing its report back to its session counts as finished, so the card no longer shows it working for 15 minutes after it's done.
+- Fewer wrong cards: a question followed by a line of data (test counts, files, a table) still needs you; a question inside inline code, or one you sent someone else and quote after a colon, no longer does; short requests like "autorízalo" or "ping me" do.
+- An answer clicked on a card goes to the session at once: no more 5 seconds to undo it, which made it feel slow, and the card says Sending… only until the session takes it.
+- An answer clicked on a card is dropped if the session moves on before it goes, and the card's buttons go when the session starts working.
+- After a restart, a question that belongs to another session (a link, or a side session it started) stays there instead of coming back as Needs you.
+- A damaged sessions.db no longer keeps the server from starting: it's set aside as sessions.db.bad and a new one starts; a busy one is waited for, never set aside, and a failed write is tried again.
+- The related sessions' spotlight no longer stays on when the pointer leaves the window, or lights the card you left from when it comes back in somewhere else.
+- The weekly usage no longer lags behind: a session that starts or reloads no longer writes the last numbers it saw, maybe hours old, as if they were new, and the app keeps the newest reading by when it was measured. The plugin is 0.2.4.
+- A session that closes with its next-step box and asks nothing in it no longer needs you because the Claude app's note on the turn asks for something: the session's own word wins.
+- The README's banner and animation show an answer from the card: the banner's first card carries its two answer buttons, and the animation dictates one from a card's mic and sends it, then opens the week's usage card.
 
 ## 0.8.0
 

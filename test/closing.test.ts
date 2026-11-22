@@ -124,6 +124,50 @@ const rows: [string, Row][] = [
   ["relay: short name, English, waiting",{ text: "Done here. billing-api is waiting for you to answer two questions in its session.", is: "relayed", relayed: ["cli-billing"], others: byName }],
   ["not a relay: this session's own name", { text: "Terminé el cambio. ¿Subo billing-api a main?", is: "asks", others: byName, own: ["billing-api"] }],
   ["not a relay: a name with no word of waiting", { text: "Ya quedó la parte de billing-api. ¿Subo los cambios?", is: "asks", others: byName }],
+
+  // A question before a footer of data (label: value lines, counts, paths, a table) still asks.
+  ["data footer: a test count", { text: "Listo el cambio.\n\n¿Lo subo a main?\n\nPruebas: 17 de 17 pasan.", is: "asks", ask: "¿Lo subo a main?" }],
+  ["data footer: files and a table", { text: "Quedó la tabla nueva.\n\n¿La publico en la wiki?\n\nArchivos: notas/tabla.md, notas/indice.md\n\n| Columna | Antes | Ahora |\n|---|---|---|\n| Fecha | texto | fecha |", is: "asks", ask: "¿La publico en la wiki?" }],
+  ["data footer: a list of facts, English", { text: "The migration script is ready.\n\nShould I run it on staging?\n\n- Branch: fix/date-columns\n- Tests: 42 of 42 pass\n- scripts/migrate.ts", is: "asks", ask: "Should I run it on staging?" }],
+  ["data footer: a request before paths", { text: "Hay dos portadas listas. Dime cuál dejo.\n\nRutas: portadas/azul.png, portadas/verde.png", is: "asks", ask: /Dime cuál/ }],
+  ["not a data footer: prose after the question", { text: "Listo el cambio.\n\n¿Lo subo a main?\n\nMientras tanto sigo con los textos de la portada, que todavía no me convencen.", is: "done" }],
+  ["not a data footer: a long note after the question", { text: "Quedó el borrador.\n\n¿Lo mando hoy?\n\nNota: lo dejé en el tono formal porque el cercano sonaba raro con los números del trimestre.", is: "done" }],
+  ["data footer after a rhetorical question", { text: "Ya quedó.\n\n¿Qué cambió?\n\nArchivos: src/menu.ts, src/menu.css", is: "done" }],
+
+  // A question inside inline code is text, not a question.
+  ["a question in inline code", { text: "Cambié `¿Lo subo?` por `Subir` en el botón.", is: "done" }],
+  ["a question in inline code, English", { text: "Renamed the prompt `Are you sure?` to `Delete this file` and the test passes.", is: "done" }],
+  ["inline code inside a real question", { text: "Ya compila. ¿Subo `server.ts` a main?", is: "asks", ask: "¿Subo server.ts a main?" }],
+  ["inline code before a real question", { text: "Dejé el botón en `Guardar`. ¿Lo dejo así?", is: "asks", ask: "¿Lo dejo así?" }],
+
+  // A question it sent someone else, quoted after a colon, is theirs.
+  ["a question it wrote to someone", { text: "Le escribí a Marta en el canal: ¿Puedes confirmar la fecha del corte?", is: "done" }],
+  ["a question it asked a team", { text: "Le pregunté al equipo de diseño: ¿Cuál de los dos íconos va en la barra?", is: "done" }],
+  ["a question it replied with, English", { text: "I replied in the thread: Could you share the error log?", is: "done" }],
+  ["a request it sent someone", { text: "Le mandé a Iván: confirma la hora del corte.", is: "done" }],
+  ["Te escribí asks", { text: "Te escribí abajo las opciones: ¿cuál prefieres?", is: "asks", ask: /prefieres/ }],
+  ["Te mandé asks", { text: "Te mandé el enlace: ¿lo abres y me dices si carga?", is: "asks", ask: /lo abres/ }],
+  ["I sent you asks", { text: "I sent you two options: which one do you prefer?", is: "asks", ask: /which one/ }],
+  ["I wrote the summary asks", { text: "I wrote the summary below: should I send it to the team?", is: "asks", ask: /should I send/ }],
+  ["I posted the fix asks", { text: "I posted the fix: can you confirm it works on your Mac?", is: "asks", ask: /can you confirm/ }],
+  ["asked someone and waits asks", { text: "Le pregunté a Marta y no contestó: ¿le escribo otra vez?", is: "asks", ask: /le escribo/ }],
+  ["I asked you asks", { text: "I asked you earlier: which port do you want?", is: "asks", ask: /which port/ }],
+  ["English to a third party", { text: "I asked Marta: could you share the log?", is: "done" }],
+  ["English wrote to them", { text: "I wrote to them: can you resend the invoice?", is: "done" }],
+  ["English replied to the vendor", { text: "I replied to the vendor: is the price final?", is: "done" }],
+  ["heading before data, Spanish", { text: "Hice dos cambios. ¿El resultado?\n\nPruebas: 17 de 17 pasan.", is: "done" }],
+  ["heading before data, English", { text: "Fixed. And the numbers?\n\nBefore: 4 s\nAfter: 1 s", is: "done" }],
+  ["heading before data, ¿Y", { text: "¿Y las pruebas?\n\n17 de 17 pasan.", is: "done" }],
+  ["real question before data", { text: "Ya quedó. ¿Lo subo a main?\n\nPruebas: 17 de 17 pasan.", is: "asks", ask: "¿Lo subo a main?" }],
+  ["te pregunto: still asks", { text: "Te pregunto una cosa: ¿lo subo hoy o mañana?", is: "asks", ask: /lo subo hoy/ }],
+  ["a message sent, then its own question", { text: "Le escribí a Marta para avisarle. ¿Lo subo a main?", is: "asks", ask: "¿Lo subo a main?" }],
+
+  // Small requests, and a final rhetorical question.
+  ["autorízalo", { text: "Autorízalo en la ventana cuando puedas.", is: "asks", ask: /Autorízalo/ }],
+  ["ping me", { text: "The build is green. Ping me if you want it tagged.", is: "asks", ask: /Ping me/ }],
+  ["autoriza said of a system", { text: "Listo. El sistema autoriza el acceso solo en horario laboral.", is: "done" }],
+  ["a final rhetorical who'd-have-thought", { text: "Encontré el problema. ¿Quién iba a pensar que era el caché?", is: "done" }],
+  ["a final rhetorical who'd-have-thought, English", { text: "Fixed the flaky test. Who would have thought it was the timezone?", is: "done" }],
 ];
 
 for (const [name, row] of rows) {

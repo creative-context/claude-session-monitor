@@ -50,8 +50,11 @@ if [ ! -f build/AppIcon.icns ] || [ app/make-icon.swift -nt build/AppIcon.icns ]
 fi
 cp build/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
 
-# Ad-hoc signature: enough for this Mac, and for macOS to accept it as a login item.
-codesign --force --sign - "$APP" >/dev/null
+# Ad-hoc signature: enough for this Mac, and for macOS to accept it as a login item. Its
+# requirement names the bundle ID, not this build's hash, so the microphone and speech
+# permissions you gave carry over to the next build and to updates.
+ID=$(/usr/libexec/PlistBuddy -c "Print CFBundleIdentifier" app/Info.plist)
+codesign --force --sign - -r="designated => identifier \"$ID\"" "$APP" >/dev/null
 echo "Built $APP"
 
 if [ "$1" = "--release" ]; then

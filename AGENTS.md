@@ -12,7 +12,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
   - `config.ts` folders and time limits; `state.ts` the types and the shared state (sessions, tasks, the version that bumps on each change, and the sessions changed since the last write: `bump(s)` names one, `bump()` marks all, `bumpView()` none).
   - `session.ts` the state machine (`apply`); `log.ts` reading, rotating and replaying `events.jsonl`; `turns.ts` process checks and how a turn ended.
   - `db.ts` `sessions.db` and History; `desktop.ts` the Claude app's session files; `agents.ts` subagents, workflows and background commands.
-  - `answers.ts` answering a session from its card: the buttons, the reply held 5 s for undo, and `/api/answer/:sid` (the page) and `/api/answer/:sid/next` (the mod's long poll), in memory only.
+  - `answers.ts` answering a session from its card: the buttons, the reply handed over at once, and `/api/answer/:sid` (the page) and `/api/answer/:sid/next` (the mod's long poll), in memory only.
   - `tasks.ts` scheduled tasks and reminders; `usage.ts` plan usage and its probe; `snapshot.ts` what the page gets, with the "needs you" rule and the `attention` list built from it.
 - `closing.ts`: the rules that read a turn's closing message (done, asks you, or passes on another session's question), with its cases in `test/closing.test.ts` (`bun test`).
 - `cron.ts`: cron schedules in local time: next run, previous run, and the schedule in words.
@@ -25,7 +25,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `README.md` and `docs/`: the README is short (what it is, features in a line each, install, use, a privacy summary, uninstall, develop, license). `docs/guide.md` holds everything the app shows and its optional pieces, `docs/privacy.md` every file it reads, keeps, changes, sends and starts, and `docs/architecture.md` how it's built, the tools and the lessons from other projects.
 - `docs/banner.html` → `docs/banner.png`: the README banner, drawn at 880×440 with made-up sessions and captured at 3× with headless Chrome on a Mac, for SF Pro (the command is at the top of the file). Edit the HTML, never the PNG.
 - `docs/screenshot.png`: shown in the guide; the page on the demo data running hot (`bun test/demo.ts --hot`), drawn in WebKit at 2× with the weekly usage card open, by `docs/screenshot.swift` (the command is at the top of the file).
-- `docs/demo.gif`: the README's top animation, 880 px wide, recorded in WebKit by `docs/demo-gif.swift` (the command is at the top of the file), which runs `bun test/demo.ts --gif` in UTC and cues its story: a session turns Needs you and moves first, then another one finishes. Needs ffmpeg.
+- `docs/demo.gif`: the README's top animation, 880 px wide, recorded in WebKit by `docs/demo-gif.swift` (the command is at the top of the file), which runs `bun test/demo.ts --gif` in UTC and cues its story: a session turns Needs you and moves first, then a drawn pointer answers another one by voice from its card and opens the week's usage card, and both sessions end as they began, so it loops without a seam (drawn with `--dictate`, 14.4 s; without it, the answer is a button, no pointer and no usage card). Needs ffmpeg.
 
 ## Commands
 

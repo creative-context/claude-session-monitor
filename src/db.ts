@@ -1,6 +1,7 @@
 // History, in SQLite.
 
 import { Database } from "bun:sqlite";
+import { existsSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
 import { DIR, WEEK_MS, FORGET_MS, MAX_SESSIONS } from "./config.ts";
 import { type Status, type Session, type Reminder, tasks, sessions, dirty, allDirty, clean } from "./state.ts";
@@ -16,8 +17,30 @@ import { type Shown, needsYou, sessionNeedsYou, shownStatus } from "./snapshot.t
 export let db: Database;
 let upsert: ReturnType<Database["prepare"]>;
 
+// A sessions.db that can't be opened (not a database, or damaged) is moved aside as
+// sessions.db.bad, with its -wal and -shm, and a fresh one starts: History starts over, but the
+// server never fails at startup again and again over it.
 export function openDatabase() {
-  db = new Database(join(DIR, "sessions.db"));
+  const file = join(DIR, "sessions.db");
+  try {
+    open(file);
+  } catch (e) {
+    try { db?.close(); } catch {}
+    // Only a file that isn't a database or is damaged moves aside; a locked one, a full disk
+    // or a permission error is not the file's fault and is thrown for the caller to see.
+    const code = (e as { code?: string })?.code ?? "";
+    if (code !== "SQLITE_NOTADB" && code !== "SQLITE_CORRUPT") throw e;
+    let bad = `${file}.bad`;
+    for (let n = 2; existsSync(bad); n++) bad = `${file}.bad${n}`; // never over an earlier one
+    for (const end of ["", "-wal", "-shm"]) if (existsSync(file + end)) renameSync(file + end, `${bad}${end}`);
+    console.error(`${new Date().toISOString()} sessions.db couldn't be opened (${e instanceof Error ? e.message : e}); moved it to ${bad.split("/").pop()} and started a new one`);
+    open(file);
+  }
+}
+
+function open(file: string) {
+  db = new Database(file);
+  db.exec("PRAGMA busy_timeout = 5000");
   db.exec("PRAGMA journal_mode = WAL");
   db.exec(`CREATE TABLE IF NOT EXISTS sessions (
     sid TEXT PRIMARY KEY, title TEXT, prompt TEXT, project TEXT, cwd TEXT, app_cwd TEXT, tp TEXT,
@@ -28,11 +51,12 @@ export function openDatabase() {
   if (!cols.includes("task")) db.exec("ALTER TABLE sessions ADD COLUMN task TEXT");
   if (!cols.includes("sched")) db.exec("ALTER TABLE sessions ADD COLUMN sched TEXT"); // its reminders and the tasks it set up
   if (!cols.includes("wait")) db.exec("ALTER TABLE sessions ADD COLUMN wait TEXT"); // what a waiting session waits on
+  if (!cols.includes("relay")) db.exec("ALTER TABLE sessions ADD COLUMN relay TEXT"); // its turn start and whose question it passes on
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
-    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait)
-    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait)
+    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait, relay)
+    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait, $relay)
     ON CONFLICT(sid) DO UPDATE SET
       title = coalesce(excluded.title, title), prompt = coalesce(excluded.prompt, prompt),
       project = coalesce(excluded.project, project), cwd = coalesce(excluded.cwd, cwd),
@@ -41,7 +65,7 @@ export function openDatabase() {
       status = excluded.status, outcome = excluded.outcome, recap = excluded.recap, ask = excluded.ask,
       error = excluded.error, note = excluded.note, model = coalesce(excluded.model, model),
       pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task), sched = excluded.sched,
-      wait = excluded.wait`);
+      wait = excluded.wait, relay = excluded.relay`);
 }
 
 export const rowOf = (s: Session) => ({
@@ -55,7 +79,23 @@ export const rowOf = (s: Session) => ({
   $sched: s.reminders?.length || s.made?.length ? JSON.stringify({ r: s.reminders ?? [], m: s.made ?? [] }) : null,
   // The log resumes where it stopped, so a wait it read before a restart isn't read again.
   $wait: s.status === "waiting" ? JSON.stringify({ w: s.wait, k: s.waitKind, a: s.waitAgent, p: s.waitPrev }) : null,
+  // When its turn started, and whose question it passes on: checkRelayed() needs them, and the
+  // turns read before a restart aren't read again. Session IDs and a time, nothing typed.
+  $relay: s.lastPrompt != null || s.relaysAhead || s.relayed?.length
+    ? JSON.stringify({ p: s.lastPrompt, a: s.relaysAhead || undefined, d: s.relayed?.length ? s.relayed : undefined }) : null,
 });
+const relayOf = (v: unknown): Partial<Session> => {
+  try {
+    const r = typeof v === "string" ? JSON.parse(v) : null;
+    if (!r) return {};
+    const ids = Array.isArray(r.d) ? r.d.filter((x: unknown) => typeof x === "string") : [];
+    return {
+      lastPrompt: typeof r.p === "number" ? r.p : undefined,
+      relaysAhead: r.a === true || undefined,
+      relayed: ids.length ? ids : undefined,
+    };
+  } catch { return {}; }
+};
 const waitOf = (v: unknown): Partial<Session> => {
   try {
     const w = typeof v === "string" ? JSON.parse(v) : null;
@@ -78,16 +118,22 @@ const sameRow = (a: Row | undefined, b: Row) => {
 };
 export function persist(all = false) {
   if (!db || (!all && !allDirty && !dirty.size)) return;
-  const look = all || allDirty ? sessions.values() : [...dirty].flatMap((sid) => sessions.get(sid) ?? []);
+  const look = all || allDirty ? [...sessions.values()] : [...dirty].flatMap((sid) => sessions.get(sid) ?? []);
   clean();
   const changed: Row[] = [];
   for (const s of look) {
     const row = rowOf(s);
-    if (sameRow(written.get(s.sid), row)) continue;
-    written.set(s.sid, row);
-    changed.push(row);
+    if (!sameRow(written.get(s.sid), row)) changed.push(row);
   }
-  if (changed.length) db.transaction(() => { for (const row of changed) upsert.run(row); })();
+  if (!changed.length) return;
+  try {
+    db.transaction(() => { for (const row of changed) upsert.run(row); })();
+  } catch (e) {
+    for (const row of changed) dirty.add(row.$sid); // still to write: the next write tries them again
+    throw e;
+  }
+  // Only once they're in: a write that failed leaves them as not written.
+  for (const row of changed) written.set(row.$sid, row);
 }
 
 // On startup, the last week comes back from the database, so a restart loses nothing.
@@ -105,6 +151,7 @@ export function loadRecent() {
       note: r.note ?? undefined, outcome: r.outcome ?? undefined, classified: Boolean(r.outcome),
       archived: false, task: r.task ?? undefined,
       reminders: schedOf(r.sched).r, made: schedOf(r.sched).m,
+      ...relayOf(r.relay),
       ...(status === "waiting" ? waitOf(r.wait) : {}),
     });
   }

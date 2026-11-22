@@ -1,7 +1,7 @@
 {
   "name": "session-monitor",
-  "version": "0.2.3",
-  "description": "Claude Session Monitor's side in each session: saves the plan's usage for the app, and sends the answer you click on a session's card. Nothing on screen.",
+  "version": "0.2.7",
+  "description": "Claude Session Monitor's side in each session: saves the plan's usage for the app, and sends the answer you click or dictate on a session's card. Nothing on screen.",
   "license": "MIT",
   "repository": "https://github.com/creative-context/claude-session-monitor"
 }

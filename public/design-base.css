@@ -1,4 +1,4 @@
-/* mac-app-design 0.10.1 (base.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.14.0 (base.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Base: the page as a Mac window draws it. */
 
 * { box-sizing: border-box; }
@@ -24,6 +24,9 @@ code { font-family: var(--font-family-mono); font-size: 0.95em; color: var(--col
    is for links), no text selection except in fields. The app marks <body class="embed">. */
 body.embed, body.embed * { cursor: default !important; }
 body.embed { -webkit-user-select: none; user-select: none; }
+/* Text boxes keep selection, read-only ones too: under user-select: none WebKit won't select
+   in a read-only textarea or input (an editable one still works), so its text couldn't be copied. */
+body.embed textarea, body.embed input { -webkit-user-select: text; user-select: text; }
 
 /* Motion: calm and in step. No bounce, one easing curve, colors that fade between states,
    icons that breathe or turn together. */

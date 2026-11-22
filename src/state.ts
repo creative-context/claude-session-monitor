@@ -61,7 +61,7 @@ export type Session = {
   recap?: string;
   ask?: string;
   answers?: Answer[]; // the answer buttons under its question (wrap_up's actions), only with an ask
-  reply?: Reply; // an answer you gave from its card, on its way (in memory only)
+  reply?: Reply; // an answer you gave from its card, a button or your words, on its way (in memory only)
   plan?: Step[];
   agents: Map<string, Agent>;
   runs: Map<string, Run>;
@@ -75,7 +75,9 @@ export type Session = {
   // From the desktop app's own session file, when there is one
   title?: string;
   archived?: boolean;
-  model?: string;
+  model?: string; // the app's model ID; for a session in a terminal, the model of its last reply
+  effort?: string; // low, medium, high, xhigh or max, as the app saves it
+  ultra?: boolean; // ultracode is on
   appCwd?: string; // the folder the app opened the session in; needed to reopen it
   task?: string; // the scheduled task this session is a run of
   appAsk?: { text: string; edge: number }; // what the Claude app says its last turn needs from you ("" = nothing)
@@ -88,9 +90,10 @@ export type Session = {
 // An answer button the session offered with its question: its words, and the Claude app's
 // action when it's one (commit, create_pr, ...), which only the app can do.
 export type Answer = { label: string; app?: string };
-// An answer you clicked on its card: pending for 5 s (due) so you can undo it, then sent once
-// the session's answers mod picks it up, or failed when none does. Never saved.
-export type Reply = { text: string; i: number; at: number; due: number; state: "pending" | "sent" | "failed" };
+// An answer you gave on its card, a button's (i, its index) or words you dictated and sent
+// (i is -1): pending until the session's answers mod picks it up (at once when it's asking),
+// then sent, or failed when none does. Never saved.
+export type Reply = { text: string; i: number; at: number; state: "pending" | "sent" | "failed" };
 
 // A shell command running in the background: Claude Code wakes the session up when it ends.
 // Its ID, when it started and its short description, never the command itself.

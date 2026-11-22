@@ -22,7 +22,9 @@
   /* The page fills its window and reflows to any size: the header, then the views,
      which scroll when their content doesn't fit. */
   .strip { display: flex; flex-direction: column; gap: 12px; height: 100%; padding: 12px 16px 0; }
-  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; margin: 0 -8px; padding: 0 8px 16px; scroll-padding-block: 32px; }
+  /* No rubber band at its ends: a flick that ends at the top would drag the pinned usage tile
+     down and back with the cards. */
+  .content { flex: 1 1 auto; min-height: 0; overflow-y: auto; overflow-x: hidden; overscroll-behavior-y: none; margin: 0 -8px; padding: 0 8px 16px; scroll-padding-block: 32px; }
   /* Where the view scrolls out of sight, it fades into the window (the design system's
      .scroll-fade), over the side gutters too; a card brought into view clears the fade. */
   .content > .scroll-fade { margin-inline: -8px; }
@@ -107,7 +109,18 @@
   .meter { --fill: #C4C8CF; --over: var(--fill); --say: var(--color-text-secondary);
     /* Always two cards tall, whether Active has one row or more, so the day blocks keep their size. */
     flex: none; align-self: flex-start; width: 96px; box-sizing: border-box; height: calc(2 * var(--csm-card-h) + 8px);
-    display: flex; flex-direction: column; align-items: center; text-align: center; padding: 12px 4px 10px; cursor: default; }
+    /* It stays where it starts while Active's cards scroll by (pinMeter sets its top to that
+       place), and goes with Active once its cards end. */
+    position: sticky; top: 0;
+    display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 4px; cursor: default; }
+  /* Flush with the cards beside it: "This week" starts at their top edge (its capitals) and the
+     last line ends on the second row's bottom edge (its baseline); the days take what's between. */
+  .meter .m-lbl { text-box: trim-start cap alphabetic; }
+  .meter > :last-child { text-box: trim-end cap alphabetic; }
+  /* While the layout glides the cards, it lifts Active out of the flow and puts it back in
+     place with a translate; the sticky top would then count Active's place twice and the
+     meter would drop by it. The translate already holds that place, so no top meanwhile. */
+  #week.is-animated .abody > .meter { top: 0 !important; }
   .meter[hidden] { display: none; }
   .meter.on-pace, .meter.plenty { --say: var(--color-text-green); }
   /* Ahead of pace, only the part above the blue line takes the color: how much too fast. */
@@ -151,7 +164,7 @@
   /* The usage card, on hover or focus of the week's usage: a raised surface, lifted by a
      shadow, not a line; groups set apart by space; one left edge for all its text. */
   .ucard { position: fixed; z-index: 30; width: min(248px, calc(100vw - 16px)); box-sizing: border-box; padding: 6px; border-radius: 12px;
-    background: #16171A; box-shadow: 0 16px 40px #000000A0; color: var(--color-text-primary);
+    background: var(--color-surface-raised); box-shadow: 0 16px 40px #000000A0; color: var(--color-text-primary);
     font-size: var(--csm-text-body); line-height: var(--csm-lh-body); font-variant-numeric: tabular-nums; pointer-events: none;
     opacity: 0; visibility: hidden; transform: translateX(6px) scale(0.98); transform-origin: right top;
     transition: opacity 120ms var(--ease-standard), transform 120ms var(--ease-standard), visibility 0s linear 120ms; } /* out quickly */
@@ -185,10 +198,14 @@
   /* As the header strip writes it: the data in white, the words in gray. */
   .uc-foot { padding: 10px 10px 6px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
   .uc-foot b { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
-  .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 8px; padding-top: 8px; box-shadow: 0 -1px 0 #FFFFFF0F; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+  /* The 5-hour window, last, on the second row's bottom edge. Its words are trimmed to their
+     capitals, so its baseline is that edge and the bar sits centered on the letters; the line
+     above it sits halfway between the reset's baseline and these capitals. */
+  .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-top: 8px; box-shadow: 0 -1px 0 #FFFFFF0F; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
+  .meter .m-five > span { text-box: trim-both cap alphabetic; }
   .meter .m-five i { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); position: relative; overflow: hidden; }
   .meter .m-five i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--color-text-secondary); }
-  .meter .m-five span { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
+  .meter .m-five .v { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
   /* Short cards: the tile drops what it can do without. */
   @container list (max-width: 520px) { .meter { display: none; } }
   /* The fills carry their height from the first draw; only the very first time they grow
@@ -275,10 +292,54 @@
   /* Pointing at a session with relatives spotlights its family: it and the sessions it's
      related to stay as they are, everything else steps back, and their relation tags light up. */
   .family :is(.card, .hrow):not(.rel-lit):not(.rel-self), .family .meter { opacity: 0.3; }
-  .meter { transition: opacity 220ms var(--ease-standard); }
+  /* The step back is quicker than a card's own fade, so the spotlight keeps up with the
+     pointer: only the opacity's time changes, the design system's other times stay. */
+  .meter { transition: opacity 160ms var(--ease-standard); }
+  #content .card { transition-duration: 450ms, var(--duration-fast), 700ms, 160ms; }
+  #content .grid > .card { transition-duration: 450ms, var(--duration-fast), 0s, 160ms; }
+  #content .hrow { transition-duration: 450ms, 700ms, 160ms; }
+  @media (prefers-reduced-motion: reduce) { #content .card { transition-duration: 450ms, 160ms; } }
   :is(.rel-lit, .rel-self) .tag.rel { color: var(--color-text-primary); background: #FFFFFF24; }
   .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
   .top .time { margin-left: auto; }
+
+  /* The model, its effort and ultracode, beside the time and in its color. The effort is its
+     initial knocked out of a solid square (L, M, H, X), and Max is written whole, so it never
+     reads as Medium. Each card measures itself: as it narrows, the model goes first (under
+     about 283 px), then the effort (under about 223); the time always stays, and the tooltip
+     says it all in words. A wide state tag can still crowd them: then the script drops the
+     model, the effort, then all of it (fitMeta). */
+  .grid > .card { container-type: inline-size; }
+  .card .top .time { min-width: 0; }
+  /* With no meta left to give way, the time keeps its own width again, so the state tag gives way instead. */
+  .card .top .time:not(:has(> .meta)), .card .top .time:has(> .meta.no-meta) { min-width: auto; }
+  .card .time .meta { display: inline-flex; align-items: center; gap: 4px; min-width: 0; overflow: hidden; white-space: nowrap; color: var(--meta); }
+  .card .time .meta svg.i { width: 12px; height: 12px; flex: none; }
+  /* Ultracode: UC in a tag the effort's height, drawn in a line instead of filled. Whole
+     pixels (a 1 px line, a 22 × 16 box): both tags are 16 px, an even height, so centered on
+     the state tag's 20 px line they start on a whole pixel and the line stays sharp at 1×. */
+  .card .time .meta .uc {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+    width: 22px; height: 16px; border: 1px solid currentColor; border-radius: 3.5px;
+    font-size: 9.5px; line-height: 1; font-weight: 700; letter-spacing: 0.04em; text-indent: 0.04em; /* the spacing after the C, matched before the U: centered */
+  }
+  .card .time .meta .eff {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+    min-width: 16px; height: 16px; padding: 0 3px; border-radius: 3.5px; background: currentColor;
+    font-size: 10.5px; line-height: 1; font-weight: 700; letter-spacing: 0.01em;
+    -webkit-text-fill-color: var(--color-background-body);
+  }
+  .card .time .meta .eff.max { padding: 0 4px; }
+  .card .time .meta .mdl + .eff { margin-left: 3px; } /* a little more air after the model's name */
+  .card .time .msep { width: 3px; } /* a little air between the model and the time, no dot */
+  @container (max-width: 259px) { .card .time .meta .mdl { display: none; } }
+  @container (max-width: 199px) {
+    .card .time .meta .eff { display: none; }
+    .card .time .meta:not(:has(.uc)), .card .time .meta:not(:has(.uc)) + .msep { display: none; }
+  }
+  .card .time .meta.no-mdl .mdl, .card .time .meta.no-eff :is(.mdl, .eff) { display: none; }
+  .card .time .meta.no-eff:not(:has(.uc)), .card .time .meta.no-eff:not(:has(.uc)) + .msep,
+  .card .time .meta.no-meta, .card .time .meta.no-meta + .msep { display: none; }
 
   /* ---------- answers: a question's buttons at the card's foot ----------
      The session's own answers take the folder's place: the first, filled, is the one it
@@ -300,7 +361,77 @@
   .card > .sentline { height: 22px; box-sizing: content-box; font-size: var(--csm-text-meta); color: var(--meta); white-space: nowrap; }
   .sentline .say { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sentline .a-b { flex: none; }
-  .sentline .count { margin-left: auto; flex: none; font-variant-numeric: tabular-nums; }
+
+  /* ---------- dictation: the app's mic on a card that waits on you ----------
+     A round mic at the end of the foot. Pressed, it stays on and a composer comes out of it:
+     the design system's anchored popover, outside the card and in the list that scrolls, so
+     it follows the card. It holds the words as they come, then a text box to fix them and
+     send. The card under it doesn't change. Five bars beside "Listening" follow the mic's
+     level, calmly, in transform only; Reduce Motion keeps only their color. */
+  .card .mic-b { order: 99; flex: none; margin-left: auto; box-sizing: border-box; width: 24px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: var(--radius-element); background: #FFFFFF26; color: var(--color-text-primary); transition: background-color var(--duration-fast) var(--ease-standard); }
+  .card .mic-b:hover { background: #FFFFFF33; }
+  /* Its answers, the mic and the tags that open something are .ctl: they press themselves, not
+     the card (the design system's rule). */
+  .card .mic-b.on, .card .mic-b.on:hover { background: #F7F8F8; color: var(--color-on-light); }
+  .card .mic-b svg.i { width: 14px; height: 14px; }
+  .card .mic-b:focus-visible, .dict :is(.d-b, .d-edit):focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+  .content { position: relative; } /* the composer is placed in it */
+  /* The composer is the design system's drawer (.pop.anchored.drawer) from under its card,
+     which is .lifted while it's out and while it slides back. */
+  .dict { --meta: var(--color-text-secondary); cursor: auto; }
+  .dict .d-head, .dict .d-row { flex: none; display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; font-size: var(--csm-text-meta); }
+  .dict .d-head { height: 20px; }
+  .dict .d-row { height: 22px; color: var(--meta); }
+  .dict .d-say { min-width: 0; overflow: hidden; text-overflow: ellipsis; color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+  .dict .d-say.note { color: var(--color-text-orange); }
+  .dict .d-head > svg.i { flex: none; width: 13px; height: 13px; color: var(--color-text-orange); }
+  .dict .d-hint { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .dict .d-words { flex: none; height: calc(var(--csm-lh-body) * 3); overflow: hidden; display: flex; flex-direction: column; justify-content: flex-end;
+    font-size: var(--csm-text-body); line-height: var(--csm-lh-body); color: var(--color-text-primary); overflow-wrap: anywhere; user-select: text; -webkit-user-select: text; }
+  .dict .d-words .wait { color: var(--meta); }
+  /* Older words leave at the top through a short fade, never as half a line. */
+  .dict.listening .d-words, .dict.stopping .d-words { -webkit-mask-image: linear-gradient(to bottom, transparent, #000 14px); mask-image: linear-gradient(to bottom, transparent, #000 14px); }
+  .dict.error .d-words { height: auto; max-height: calc(var(--csm-lh-body) * 7); justify-content: flex-start; overflow-y: auto; }
+  .dict .d-edit { flex: none; box-sizing: border-box; width: 100%; height: calc(var(--csm-lh-body) * 4 + 6px); margin: 0; padding: 3px 6px; resize: none; border: 0; border-radius: var(--radius-element);
+    background: #00000040; color: var(--color-text-primary); font: inherit; font-size: var(--csm-text-body); line-height: var(--csm-lh-body); user-select: text; -webkit-user-select: text; }
+  /* Whole pixels, so the bars and the gaps between them come out even on a 1× screen too. */
+  .dict .d-wave { --lvl: 0; flex: none; display: inline-flex; align-items: center; gap: 2px; height: 14px; color: var(--color-text-primary); }
+  .dict .d-wave i { width: 2px; height: 14px; border-radius: 1px; background: currentColor; transform: scaleY(var(--h, 0.2)); transition: transform 110ms var(--ease-standard); }
+  .dict .d-wave.hush i { animation: d-idle 1600ms var(--ease-standard) infinite; } /* not .quiet: that's the design system's caught-up note */
+  .dict .d-wave i:nth-child(2) { animation-delay: 120ms; }
+  .dict .d-wave i:nth-child(3) { animation-delay: 240ms; }
+  .dict .d-wave i:nth-child(4) { animation-delay: 360ms; }
+  .dict .d-wave i:nth-child(5) { animation-delay: 480ms; }
+  @keyframes d-idle { 0%, 100% { transform: scaleY(0.2); } 40% { transform: scaleY(0.42); } }
+  .dict.stopping .d-wave { --lvl: 0 !important; color: var(--meta); }
+  .dict.stopping .d-wave i { --h: 0.2 !important; animation: none; }
+  .dict .d-lang { flex: none; padding: 0 4px; border-radius: 3.5px; background: #FFFFFF1A; color: var(--color-text-primary); font-size: 10.5px; line-height: 15px; font-weight: 700; letter-spacing: 0.02em; }
+  .dict .d-b { all: unset; flex: none; box-sizing: border-box; height: 22px; padding: 0 9px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-element);
+    font-size: var(--csm-text-meta); font-weight: var(--font-weight-medium); white-space: nowrap; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-standard); }
+  .dict .d-b:first-of-type { margin-left: auto; }
+  .dict .d-b.pri { background: #F7F8F8; color: var(--color-on-light); }
+  .dict .d-b.pri:hover { background: #FFFFFF; }
+  .dict .d-b.sec { background: #FFFFFF26; color: var(--color-text-primary); }
+  .dict .d-b.sec:hover { background: #FFFFFF33; }
+  .dict .d-b[aria-disabled="true"] { opacity: 0.6; cursor: default; }
+  /* Under the words while it listens: the closing phrase that sends, or, once you said it
+     (the head then says Sending…), a thin bar that fills for the 1.2 s you have to talk on or press Esc. */
+  /* The hint (and the cue that replaces it) shares the buttons' line, at its left; where both
+     don't fit, it takes the line above them. */
+  .dict .d-row:has(.d-tip) { height: auto; min-height: 22px; flex-wrap: wrap; row-gap: 6px; }
+  .dict .d-row > .d-tip { flex: 1 0 auto; }
+  .dict .d-tip { flex: none; position: relative; box-sizing: border-box; height: 20px; padding-bottom: 5px; display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; font-size: var(--csm-text-meta); color: var(--meta); }
+  .dict .d-tip > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+  .dict .d-tip > .d-bar { position: absolute; left: 0; right: 0; bottom: 0; height: 2px; border-radius: 1px; background: #FFFFFF1A; overflow: hidden; }
+  .dict .d-tip > .d-bar::after { content: ""; position: absolute; inset: 0; background: var(--color-text-primary); transform-origin: left center; animation: d-fill 1200ms linear both; }
+  @keyframes d-fill { from { transform: scaleX(0); } to { transform: scaleX(1); } }
+  @keyframes d-fill-color { from { background-color: transparent; } to { background-color: var(--color-text-primary); } }
+  @media (prefers-reduced-motion: reduce) {
+    .dict .d-wave i, .dict .d-wave.hush i { transform: scaleY(0.6); animation: none; transition: background-color 120ms linear;
+      background: color-mix(in srgb, currentColor calc(35% + var(--lvl) * 65%), transparent); }
+    .dict .d-tip > .d-bar::after { transform: none; animation-name: d-fill-color; }
+  }
 
 
 
@@ -380,6 +511,7 @@
     .card > .top { display: contents; }
     .card > .top > .tag { display: none; } /* the state reads in the row's tint and dot, and VoiceOver says it */
     .card > .top > .time { grid-column: 3; grid-row: 1; line-height: 17px; }
+    .card > .top > .time > :is(.meta, .msep) { display: none; } /* a row keeps the model to its time's tooltip */
     .card > .title { grid-column: 2; grid-row: 1; margin: 0; font-size: 13px; line-height: 17px; -webkit-line-clamp: 2; }
     .card > .detail { grid-column: 2 / 4; grid-row: 2; margin-top: 2px; font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
     .card > .tags { grid-column: 2 / 4; grid-row: 3; margin-top: 7px; gap: 12px; padding: 0; white-space: nowrap; }
@@ -412,6 +544,10 @@
     .card > .title { grid-column: 2 / 4; }
     .card > .detail { grid-column: 2 / 4; grid-row: 3; }
     .card > .bar, .card > .ans, .card > .sentline { grid-row: 4; }
+    /* The tags go, and only the mic stays on their line. */
+    .card > .tags:has(.mic-b) { display: flex; grid-row: 4; } /* under the detail, not over it */
+    .card > .tags:has(.mic-b) > .tag { display: none; }
+    .dict .d-lang, .dict .d-hint { display: none; }
     .hrow { grid-template-columns: 16px minmax(0, 1fr); padding: 8px 10px; }
     .hrow > .tag, .hrow .hsnip, .hrow > span:empty { display: none; }
     .hrow .htime { grid-column: 2; grid-row: 2; }
@@ -594,7 +730,7 @@
   const wfNamed = (wf) => Boolean(wf?.name) && wf.name !== "Workflow";
   // An answer you sent from its card, waiting its 5 s or on its way: the session is about
   // to work on it, so the card shows it working, not an old question.
-  const sentOf = (s) => s.status === "asks" && (s.reply?.state === "pending" || s.reply?.state === "sent");
+  const sentOf = (s) => s.kind !== "task" && (s.status === "asks" || s.status === "done" || s.status === "error") && (s.reply?.state === "pending" || s.reply?.state === "sent");
   const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s) && !sentOf(s);
   // Its own turn is over and something it started goes on: agents, or only a shell command.
   const onlyCommands = (s) => s.background && !s.agentCount && !s.workflows?.length && s.commandCount > 0;
@@ -696,12 +832,13 @@
 
   function tags(s) {
     const out = [];
+    const mic = micHtml(s);
     if (s.project) out.push(tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project));
     // Relatives: where it came from, or how many side sessions it started. The name gives
     // way first when the footer is full, down to the icon; hovering the card outlines the
     // other one, and a click opens it.
-    if (s.from) out.push(`<span class="tag rel" data-open-sid="${esc(s.from.sid)}" title="${esc(relTip(s, "from"))}">${ICON.branch}<span>From ${esc(s.from.title)}</span></span>`);
-    if (s.sides) out.push(`<span class="tag rel" data-open-sid="${esc(s.sides[0].sid)}" title="${esc(relTip(s, "sides"))}">${ICON.branch}<span>${s.sides.length === 1 ? "1 side session" : `${s.sides.length} side sessions`}</span></span>`);
+    if (s.from) out.push(`<span class="tag rel ctl" data-open-sid="${esc(s.from.sid)}" title="${esc(relTip(s, "from"))}">${ICON.branch}<span>From ${esc(s.from.title)}</span></span>`);
+    if (s.sides) out.push(`<span class="tag rel ctl" data-open-sid="${esc(s.sides[0].sid)}" title="${esc(relTip(s, "sides"))}">${ICON.branch}<span>${s.sides.length === 1 ? "1 side session" : `${s.sides.length} side sessions`}</span></span>`);
     const wf = s.workflows?.[0];
     if (wf || s.agentCount) {
       const tokens = wf?.tokens || (s.agents || []).reduce((n, a) => n + (a.tokens || 0), 0);
@@ -722,57 +859,46 @@
     if (s.reminder) out.push(tag(`${ICON.wake}<span>${esc(shortWhen(s.reminder.at))}${s.reminder.more ? ` +${s.reminder.more}` : ""}</span>`, "sched", wakeTip(s.reminder)));
     const made = s.made || [];
     if (made.length) {
-      out.push(`<span class="tag made" data-show-task="${esc(made[0].id)}" title="${esc(madeTip(made))}">${ICON.calendarPlus}<span>${esc(made[0].name)}</span></span>`);
+      out.push(`<span class="tag made ctl" data-show-task="${esc(made[0].id)}" title="${esc(madeTip(made))}">${ICON.calendarPlus}<span>${esc(made[0].name)}</span></span>`);
       if (made.length > 1) out.push(tag(`<span>+${made.length - 1}</span>`, "sched", madeTip(made)));
     }
-    return `<div class="tags">${out.join("")}</div>`;
+    return `<div class="tags">${out.join("")}${mic}</div>`;
   }
 
   // A question's answers, in the tags' place: the session's own buttons, up to two. A click
   // sends one (its answers mod takes it to the session); one the app has to do, or any while
-  // no mod is listening, opens the session instead and says why. Once sent: 5 s to undo,
-  // counting down to when it goes; if no mod took it, the card needs you again.
+  // no mod is listening, opens the session instead and says why. It goes at once: Sending
+  // until the mod takes it, then Sent; if no mod took it, the card needs you again.
   const SENT_WORDS = "Sent. The session is working on it.";
+  const SENDING_WORDS = "Sending…";
   const answerable = (s) => s.kind !== "task" && s.status === "asks" && s.answers?.length > 0;
-  function answersFoot(s) {
+  // The answer you gave from the card, a button's or your words: on its way, or not sent.
+  const replied = (s) => s.kind !== "task" && (s.reply?.state === "failed" || sentOf(s));
+  function replyFoot(s) {
     const r = s.reply;
-    if (r?.state === "failed") {
-      return `<div class="sentline failed"><span class="say" title="${esc(`“${r.text}” didn't reach the session`)}">Couldn't send</span><span class="a-b" data-open-sid="${esc(s.sid)}" title="Opens the session: answer there"><span>Open</span>${ICON.open}</span></div>`;
+    if (r.state === "failed") {
+      return `<div class="sentline failed"><span class="say" title="${esc(`“${r.text}” didn't reach the session`)}">Couldn't send</span><span class="a-b ctl" data-open-sid="${esc(s.sid)}" title="Opens the session: answer there"><span>Open</span>${ICON.open}</span>${micHtml(s)}</div>`;
     }
-    if (sentOf(s)) {
-      const left = r.state === "pending" ? Math.ceil((r.due - now()) / 1000) : 0;
-      return left > 0
-        ? `<div class="sentline" data-due="${r.due}"><span class="say">Sent</span><span class="a-b" data-undo title="Take it back before it goes (⌘Z)"><span>Undo</span></span><span class="count">${left} s</span></div>`
-        : `<div class="sentline"><span class="say">${SENT_WORDS}</span></div>`;
-    }
+    return `<div class="sentline"><span class="say">${r.state === "pending" ? SENDING_WORDS : SENT_WORDS}</span></div>`;
+  }
+  function answersFoot(s) {
+    if (replied(s)) return replyFoot(s);
     return `<div class="ans">${s.answers.map((a, i) => {
       const opens = Boolean(a.app) || !s.canAnswer;
       const tip = a.app ? "Only the Claude app can do this" : !s.canAnswer ? "Opens the session: answer there" : `Answer “${a.label}”${i ? "" : " (⌘↩)"}`;
-      return `<span class="a-b ${i ? "sec" : "pri"}${opens ? " opens" : ""}" data-answer="${i}" title="${esc(tip)}"><span>${esc(a.label)}</span>${opens ? ICON.open : ""}</span>`;
-    }).join("")}</div>`;
+      return `<span class="a-b ctl ${i ? "sec" : "pri"}${opens ? " opens" : ""}" data-answer="${i}" title="${esc(tip)}"><span>${esc(a.label)}</span>${opens ? ICON.open : ""}</span>`;
+    }).join("")}${micHtml(s)}</div>`;
   }
   // VoiceOver: what the answers are, and what a click or ⌘↩ does with the first.
   function answerWords(s) {
-    if (!answerable(s)) return [];
-    if (s.reply?.state === "failed") return [`Couldn't send your answer “${s.reply.text}”`];
-    if (sentOf(s)) return [s.reply.state === "pending" ? "Sent, Command-Z takes it back" : SENT_WORDS];
+    if (replied(s) && s.reply.state === "failed") return [`Couldn't send your answer “${s.reply.text}”`];
+    if (replied(s)) return [s.reply.state === "pending" ? "Sending your answer" : SENT_WORDS];
+    if (!answerable(s)) return canMic(s) ? ["You can dictate an answer"] : [];
     const first = s.answers[0];
     return [`Answers: ${s.answers.map((a) => a.label).join(", ")}`,
-      first.app || !s.canAnswer ? "Command-Return opens the session to answer" : `Command-Return answers ${first.label}`];
+      first.app || !s.canAnswer ? "Command-Return opens the session to answer" : `Command-Return answers ${first.label}`,
+      canMic(s) ? "You can dictate an answer" : ""];
   }
-
-  // The 5 s on a sent answer count down in place, then say it went, without a redraw.
-  let countdown;
-  function tickAnswers() {
-    const lines = document.querySelectorAll(".sentline[data-due]");
-    for (const el of lines) {
-      const left = Math.ceil((Number(el.dataset.due) - now()) / 1000);
-      if (left > 0) el.querySelector(".count").textContent = `${left} s`;
-      else el.outerHTML = `<div class="sentline"><span class="say">${SENT_WORDS}</span></div>`;
-    }
-    if (!lines.length) { clearInterval(countdown); countdown = undefined; }
-  }
-  const armCountdown = () => { if (!countdown && document.querySelector(".sentline[data-due]")) countdown = setInterval(tickAnswers, 250); };
 
   async function answerCard(sid, i) {
     const s = live.get(sid);
@@ -784,7 +910,352 @@
     // 409: no mod is there to take it after all. Anything else unexpected: answer there.
     if (r?.status !== 204) openSession(sid);
   }
-  const undoAnswer = (sid) => fetch(`/api/answer/${encodeURIComponent(sid)}/undo`, { method: "POST", headers: { "x-csm": "1" } }).catch(() => {});
+
+  // ---------------------------------------------------------------- dictation
+  // In the app, a card whose session waits on you (canSay: Done, Needs you or Error, its mod
+  // listening) has a mic. Pressing it asks the app to listen, on this Mac only, and opens a
+  // composer under the mic (above it when there's no room below): the words as they come,
+  // then a text box to fix them and send as the session's next prompt. The composer is one
+  // element in the list, outside the card, so a redraw of the card never touches it and the
+  // card keeps its question in sight. One card at a time. Return stops, then sends; Esc,
+  // Cancel and Close always drop it; a click elsewhere never does, so a stray click can't lose
+  // the words. In a browser there's no app to listen, so no mic.
+  const dictBridge = () => window.webkit?.messageHandlers?.dictate;
+  let dict = null; // { sid, phase: listening | stopping | review | sending | error, text, level, lang, error, note, armed (the phrase's timer), viaPhrase }
+  let dictEl = null; // the composer, while there is one
+  let dictLang = "en-US"; // the last one the app said (it says it as the page loads)
+  const LANGS = { "es-MX": ["ES", "Spanish (Mexico)"], "en-US": ["EN", "English (US)"] };
+  const canMic = (s) => Boolean(dictBridge()) && s.canSay === true && s.kind !== "task" && !sentOf(s);
+  // The mic's on state is set on it in place (syncMic), so the card's markup is the same whether you dictate or not.
+  const micHtml = (s) => (canMic(s)
+    ? `<span class="mic-b ctl" role="button" tabindex="0" data-mic aria-haspopup="dialog" aria-expanded="false" aria-label="Dictate an answer" title="Dictate an answer">${ICON.mic}</span>` : "");
+  const DICT_ERRORS = {
+    denied: "Dictation needs the microphone and speech recognition. Allow this app for both in System Settings, under Privacy & Security.",
+    unavailable: "Dictation isn't ready for this language. Download it in System Settings, under Keyboard, Dictation.",
+    failed: "Dictation stopped before it finished. Try again.",
+    silent: "The microphone gives no sound. Check that it isn't muted and that this app may use it in System Settings, under Privacy & Security.",
+    empty: "No words came through. Try again.",
+    moved: "Not sent: the session closed or moved on before you sent this.",
+  };
+  const DICT_TITLES = { denied: "Dictation isn't allowed", unavailable: "Language not ready", failed: "Dictation stopped", silent: "No sound", empty: "No words heard", moved: "The session moved on" };
+  const dictBtn = (act, words, cls, tip, extra = "") =>
+    `<button type="button" class="d-b ${cls}" data-dict="${act}" title="${esc(tip)}"${extra}>${words}</button>`;
+  const micOf = (sid) => cards.get(sid)?.querySelector("[data-mic]") ?? null;
+  let dictUnder = null; // the card whose drawer is sliding back under it
+  function syncMic() {
+    for (const m of $content.querySelectorAll("[data-mic]")) {
+      const sid = m.closest("[data-sid]")?.dataset.sid;
+      const on = Boolean(dict) && sid === dict.sid;
+      if (m.classList.contains("on") !== on) m.classList.toggle("on", on);
+      const under = !on && sid === dictUnder;
+      if (m.classList.contains("under") !== under) m.classList.toggle("under", under);
+      const card = m.closest(".card"); // over its drawer while it's out or sliding back
+      if (card && card.classList.contains("lifted") !== (on || under)) card.classList.toggle("lifted", on || under);
+      if (m.getAttribute("aria-expanded") !== String(on)) m.setAttribute("aria-expanded", String(on));
+    }
+  }
+
+  // The five bars follow your voice. Each takes the level with its own weight and a little
+  // chance, so a sentence reads as speech, not one pump; the curve lifts a normal voice to
+  // the middle. Quiet, they rest low and breathe, so it shows it's listening.
+  const WAVE_K = [0.55, 0.85, 1, 0.8, 0.5];
+  function drawWave(level) {
+    const w = dictEl?.querySelector(".d-wave");
+    if (!w) return;
+    const raw = Math.max(0, Math.min(1, Number(level) || 0));
+    const lvl = Math.pow(raw, 0.7);
+    w.style.setProperty("--lvl", String(raw));
+    w.classList.toggle("hush", lvl < 0.08);
+    [...w.children].forEach((b, i) => b.style.setProperty("--h", (0.2 + Math.min(0.8, lvl * WAVE_K[i] * (0.65 + Math.random() * 0.5))).toFixed(3)));
+  }
+  // What the composer holds for the phase it's in, made anew when the phase changes.
+  function buildDict() {
+    const d = dict;
+    if (!dictEl) {
+      dictEl = document.createElement("div");
+      dictEl.id = "dict";
+      dictEl.setAttribute("role", "dialog");
+      dictEl.setAttribute("aria-label", "Dictate an answer");
+      dictEl.style.transition = "none"; // placed and measured first, then it slides out (dictPhase)
+      $content.append(dictEl);
+    }
+    dictEl.className = `pop anchored drawer dict ${d.phase}${dictEl.classList.contains("open") ? " open" : ""}${dictEl.classList.contains("above") ? " above" : ""}`;
+    const [short, long] = LANGS[d.lang] || LANGS["en-US"];
+    const lang = `<span class="d-lang" title="${esc(`Dictating in ${long}. Change the language in the menu bar menu.`)}">${short}</span>`;
+    const cancel = dictBtn("cancel", "Cancel", "sec", "Cancel (Esc)");
+    if (d.phase === "listening" || d.phase === "stopping") {
+      dictEl.innerHTML = `<div class="drawer-in"><div class="d-head"><span class="d-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span><span class="d-say">${d.phase === "stopping" ? "Sending…" : "Listening"}</span>${lang}</div>
+        <div class="d-words"><span></span></div>
+        <div class="d-row">${d.phase === "listening" ? `<div class="d-tip"></div>` : ""}${cancel}${dictBtn("send", "Send", "pri", "Send what you said (Return)", d.phase === "stopping" ? ' aria-disabled="true"' : "")}</div></div>`;
+    } else if (d.phase === "error") {
+      // A session that moved on keeps what you said in sight, and offers no second try here.
+      const moved = d.error === "moved";
+      const said = moved && d.text ? ` <span class="wait">“${esc(d.text)}”</span>` : "";
+      dictEl.innerHTML = `<div class="drawer-in"><div class="d-head">${ICON.alert}<span class="d-say">${esc(DICT_TITLES[d.error] || DICT_TITLES.failed)}</span></div>
+        <div class="d-words" role="alert"><span>${esc(DICT_ERRORS[d.error] || DICT_ERRORS.failed)}${said}</span></div>
+        <div class="d-row">${dictBtn("cancel", "Close", moved ? "pri" : "sec", "Close (Esc)")}${moved ? "" : dictBtn("retry", "Try again", "pri", "Dictate again")}</div></div>`;
+    } else {
+      // Sending, or back after a send that didn't go through: the words in a box, to fix and send again.
+      const head = d.note ? `<span class="d-say note" role="alert">${esc(d.note)}</span>` : `<span class="d-say">Your answer</span>`;
+      dictEl.innerHTML = `<div class="drawer-in"><div class="d-head">${head}</div>
+        <textarea class="d-edit" rows="4" maxlength="1000" spellcheck="true" aria-label="Your answer, to fix before you send it"></textarea>
+        <div class="d-row"><span class="d-hint">Return sends</span>${cancel}${dictBtn("send", d.phase === "sending" ? "Sending…" : "Send", "pri", "Send to the session (Return)", d.phase === "sending" ? ' aria-disabled="true"' : "")}</div></div>`;
+      const ta = dictEl.querySelector("textarea");
+      ta.value = d.text;
+      ta.readOnly = d.phase === "sending";
+      ta.addEventListener("input", () => { if (dict) dict.text = ta.value; });
+    }
+    return dictEl;
+  }
+  // What changes ten times a second goes straight to the composer, without a rebuild.
+  function dictLive() {
+    if (!dictEl || !dict) return;
+    const w = dictEl.querySelector(".d-words > span");
+    if (w && (dict.phase === "listening" || dict.phase === "stopping")) {
+      w.className = dict.text ? "" : "wait";
+      w.textContent = dict.text || "Say your answer…";
+    }
+    drawWave(dict.level);
+    const tag = dictEl.querySelector(".d-lang");
+    const [short, long] = LANGS[dict.lang] || LANGS["en-US"];
+    if (tag && tag.textContent !== short) { tag.textContent = short; tag.title = `Dictating in ${long}. Change the language in the menu bar menu.`; }
+    const tip = dictEl.querySelector(".d-tip");
+    const first = sendPhrases(dict.lang)[0];
+    const key = `${dict.lang}|${dict.armed ? 1 : 0}|${phraseHint(dict.lang)}`;
+    if (tip && tip.dataset.k !== key) { // made anew when it arms, so the bar fills from the start
+      tip.dataset.k = key;
+      tip.classList.toggle("armed", Boolean(dict.armed));
+      tip.innerHTML = dict.armed ? `<span>Keep talking or press Esc to stop</span><i class="d-bar" aria-hidden="true"></i>`
+        : first ? `<span title="${esc(`End with ${phraseHint(dict.lang)} and stop talking to send`)}">End with “${esc(first.say)}” to send</span>` : "";
+      const say = dictEl.querySelector(".d-say");
+      if (say) say.textContent = dict.armed ? "Sending…" : "Listening"; // the head says it, as when you press Send
+    }
+  }
+  // The closing phrase: said as the last words, then a pause of 1.2 s, it sends as Send does.
+  // Only at the very end and as whole words, on a copy without case, accents or punctuation,
+  // so "hay que enviar el mensaje a Tomás" never sends, and "enviar mensaje a Tomás" doesn't
+  // while more words follow. Talking on disarms it; Esc or Cancel drops the dictation.
+  // What ends a dictation and sends it, by language: the app's Settings say (Send by voice),
+  // with each message, and whether those words stay in the answer or only send it. Until it
+  // says, these, which go.
+  const DEFAULT_PHRASES = { "es-MX": ["enviar mensaje"], "en-US": ["send message"] };
+  let phraseSet = null; // { lang, phrases, keep }, from the app
+  const ARM_MS = 1200;
+  const sendPhrases = (lang) => {
+    const own = phraseSet?.lang === lang;
+    const list = own ? phraseSet.phrases : DEFAULT_PHRASES[lang] || DEFAULT_PHRASES["es-MX"];
+    return list.map((say) => ({ p: normWords(say), say: String(say).trim(), keep: own && phraseSet.keep })).filter((x) => x.p);
+  };
+  const normWords = (t) => String(t ?? "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim();
+  const phraseAtEnd = (t, lang) => { const n = normWords(t); return sendPhrases(lang).find(({ p }) => n === p || n.endsWith(" " + p)); };
+  const endsWithPhrase = (t, lang) => Boolean(phraseAtEnd(t, lang));
+  const phraseHint = (lang) => { const l = sendPhrases(lang).map(({ say }) => `“${say}”`); return l.length > 1 ? `${l.slice(0, -1).join(", ")} or ${l.at(-1)}` : l[0] ?? ""; };
+  // The words without the phrase at their end, and without the comma or stop before it,
+  // unless Settings keep it in the answer.
+  function stripPhrase(t, lang) {
+    const hit = phraseAtEnd(t, lang);
+    if (!hit || hit.keep) return t;
+    const want = hit.p.split(" ");
+    const toks = [...String(t).matchAll(/\S+/g)];
+    const got = [];
+    for (let i = toks.length - 1; i >= 0; i--) {
+      got.unshift(...normWords(toks[i][0]).split(" ").filter(Boolean));
+      if (got.length >= want.length) return got.join(" ") === want.join(" ") ? String(t).slice(0, toks[i].index).replace(/[\s,.;:!?¡¿…—–-]+$/, "") : t;
+    }
+    return t;
+  }
+  function disarmDict() {
+    if (!dict?.armed) return;
+    clearTimeout(dict.armed);
+    dict.armed = 0;
+  }
+  // On each update while it listens: armed when the words end with the phrase, disarmed when they don't.
+  function armDict() {
+    if (!dict) return;
+    const on = dict.phase === "listening" && endsWithPhrase(dict.text, dict.lang);
+    if (on === Boolean(dict.armed)) return;
+    if (!on) return disarmDict();
+    const d = dict;
+    d.armed = setTimeout(() => { if (dict === d && d.armed && d.phase === "listening") stopDict(); }, ARM_MS);
+    announceDict("Sending. Keep talking or press Escape to stop.");
+  }
+  // Under the card's mic, or above it when the list shows no room below; inside the list's
+  // sides; the arrow on the mic. In the list that scrolls, so it moves with the card. Hidden
+  // while its card isn't on screen (another view).
+  function placeDict() {
+    if (!dictEl || !dict) return;
+    const card = cards.get(dict.sid);
+    const shown = Boolean(card?.isConnected && card.getClientRects().length && view === "week");
+    dictEl.style.display = shown ? "" : "none";
+    if (!shown) return;
+    // A drawer from under its card: the card's width, starting under its round bottom corners
+    // (or its top ones, when there's no room below), as tall as what it holds (--h). Above the
+    // card its top is where its foot will be until it opens, then that less its height, so it
+    // grows upward from the card.
+    const cr = card.getBoundingClientRect();
+    const box = $content.getBoundingClientRect();
+    const tuck = parseFloat(getComputedStyle(card).borderBottomLeftRadius) || 0;
+    const w = Math.round(cr.width);
+    dictEl.style.setProperty("--pop-w", `${w}px`);
+    const h = dictEl.querySelector(".drawer-in")?.offsetHeight || 0;
+    const below = box.bottom - cr.bottom, above = cr.top - box.top;
+    const up = below < h - tuck + 4 && (above >= h - tuck + 4 || above > below);
+    const foot = cr.top + tuck; // above the card: where its foot stays
+    const top = Math.round((up ? foot - (dictEl.classList.contains("open") ? h : 0) : cr.bottom - tuck) - box.top + $content.scrollTop);
+    dictEl.classList.toggle("above", up);
+    dictEl.style.left = `${Math.round(cr.left - box.left + $content.scrollLeft)}px`;
+    dictEl.style.top = `${top}px`;
+    dictEl.style.setProperty("--h", `${h}px`);
+  }
+  // The cards may still be gliding (the layout's 420 ms or the page's FLIP) when the list
+  // is redrawn: keep placing the composer on every frame until they stop, so it follows its mic.
+  let dictChase = 0;
+  function chaseDict(ms = 600) {
+    if (!dict) return;
+    const end = performance.now() + ms;
+    if (dictChase) { dictChase = end; return; }
+    dictChase = end;
+    const step = () => {
+      placeDict();
+      if (dict && performance.now() < dictChase) requestAnimationFrame(step);
+      else dictChase = 0;
+    };
+    requestAnimationFrame(step);
+  }
+  // A new phase: the composer made anew, placed, and the keyboard where it's needed next.
+  function dictPhase(phase, more = {}) {
+    if (!dict) return;
+    // Back to the text box after a send: the Return that sent them must not send them again.
+    if (phase === "review" && dict.phase !== "review") dict.reviewAt = performance.now();
+    if (phase !== "listening") disarmDict();
+    Object.assign(dict, { phase, error: undefined, note: undefined }, more);
+    const first = !dictEl;
+    buildDict();
+    dictLive();
+    syncMic();
+    placeDict();
+    if (first) { void dictEl.offsetWidth; dictEl.style.transition = ""; void dictEl.offsetWidth; dictEl.classList.add("open"); placeDict(); } // it grows out
+    const focus = phase === "review" ? dictEl.querySelector("textarea") : phase === "listening" ? dictEl.querySelector('[data-dict="send"]')
+      : phase === "error" ? dictEl.querySelector('[data-dict="retry"]') ?? dictEl.querySelector('[data-dict="cancel"]') : null;
+    if (focus && dictEl.style.display !== "none") {
+      focus.focus({ preventScroll: true });
+      if (focus.tagName === "TEXTAREA") focus.setSelectionRange(focus.value.length, focus.value.length);
+    }
+    const say = { listening: "Listening", sending: "Sending", review: dict.note || "", error: DICT_ERRORS[dict.error] || "" }[phase];
+    if (say) announceDict(say);
+  }
+  const announceDict = (words) => { const a = document.getElementById("announce"); if (a) a.textContent = words; };
+  function startDict(sid) {
+    const s = live.get(sid);
+    if (!dictBridge() || !s || !canMic(s)) return;
+    // One card at a time: the app ends one that listens elsewhere, and a composer on another card goes.
+    if (dict && dict.sid !== sid) closeDict();
+    disarmDict();
+    hidePop(); // one popover at a time
+    dict = { sid, since: s.since, phase: "listening", text: "", level: 0, lang: dictLang };
+    if (!held) held = new Map(weekOrder); // the cards hold still while you dictate
+    try { dictBridge().postMessage({ cmd: "start", sid }); } catch { return dictPhase("error", { error: "failed" }); }
+    dictPhase("listening");
+  }
+  // Send while listening: the app stops, and its final words go to the session as they are.
+  function stopDict() {
+    if (dict?.phase !== "listening") return;
+    dict.viaPhrase = Boolean(dict.armed); // by the phrase, or Send while it was armed: the phrase doesn't go
+    try { dictBridge()?.postMessage({ cmd: "stop" }); } catch {}
+    dictPhase("stopping");
+  }
+  // The composer goes, and the mic it came from is off again.
+  // Sent, canceled or closed, the drawer slides back under its card, then goes; the cards
+  // stay where they are until it's gone.
+  const DICT_OUT = 180;
+  function closeDict() {
+    disarmDict();
+    const was = dict?.sid;
+    dict = null;
+    const el = dictEl;
+    dictEl = null;
+    if (el) {
+      el.removeAttribute("id");
+      el.inert = true;
+      if (el.classList.contains("above")) el.style.top = `${parseFloat(el.style.top) + el.offsetHeight}px`;
+      el.classList.remove("open");
+      dictUnder = was;
+      setTimeout(() => { el.remove(); if (dictUnder === was) { dictUnder = null; syncMic(); } }, DICT_OUT);
+    }
+    syncMic();
+    setTimeout(releaseHold, el ? DICT_OUT : 0);
+  }
+  function endDict(focusBack = true) {
+    if (!dict) return;
+    const sid = dict.sid;
+    if ((dict.phase === "listening" || dict.phase === "stopping") && !dict.heard) { try { dictBridge()?.postMessage({ cmd: "cancel" }); } catch {} }
+    const hadFocus = dictEl?.contains(document.activeElement);
+    closeDict();
+    render();
+    if (focusBack || hadFocus) (micOf(sid) ?? cards.get(sid))?.focus({ preventScroll: true });
+  }
+  // From the app's final words (stopping) or from the text box after a send that failed (review).
+  async function sendDict() {
+    if (dict?.phase !== "review" && !(dict?.phase === "stopping" && dict.heard)) return;
+    const text = dict.text.replace(/\s+/g, " ").trim();
+    if (!text) return dictPhase("review", { note: "Say or type something first." });
+    const sid = dict.sid;
+    // The words were for the turn they were spoken about: if the session moved on, they don't go.
+    if (live.get(sid)?.since !== dict.since) return movedOn();
+    const since = dict.since;
+    dictPhase("sending");
+    const r = await fetch(`/api/answer/${encodeURIComponent(sid)}`, {
+      method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 1000), since }),
+    }).catch(() => null);
+    if (dict?.sid !== sid || dict.phase !== "sending") return;
+    if (r?.status === 204) return endDict(true); // the card shows Sending…, then Sent
+    dictPhase("review", { note: "Couldn't send. Try again, or open it." });
+  }
+  function dictAct(act) {
+    if (act === "cancel") return endDict(true);
+    if (act === "send") return dict?.phase === "listening" ? stopDict() : sendDict();
+    if (act === "retry") return dict && startDict(dict.sid);
+  }
+  // A session that started working, ended or waits on a permission takes no words. The
+  // composer says so instead of closing quietly, which looked as if the words had gone.
+  function checkDict() {
+    if (!dict || dict.phase === "sending") return;
+    const s = live.get(dict.sid);
+    if (dict.phase === "error" && dict.error === "moved") return s ? undefined : endDict(false); // its card went too
+    if (s && sentOf(s)) return endDict(false); // an answer is already on its way
+    if (!s || !(s.status === "asks" || s.status === "done" || s.status === "error") || s.since !== dict.since) movedOn();
+  }
+  function movedOn() {
+    if ((dict.phase === "listening" || dict.phase === "stopping") && !dict.heard) { try { dictBridge()?.postMessage({ cmd: "cancel" }); } catch {} }
+    if (!live.get(dict.sid)) return endDict(false); // its card is gone too
+    dictPhase("error", { error: "moved" });
+  }
+  // What the app says while it listens: the words so far and the level, then the final words.
+  function onDictation(m) {
+    if (m?.lang && LANGS[m.lang]) dictLang = m.lang;
+    if (m?.lang && Array.isArray(m.phrases)) phraseSet = { lang: m.lang, phrases: m.phrases.map(String), keep: Boolean(m.keep) };
+    if (!m || !dict || m.sid !== dict.sid) return;
+    if (m.lang && LANGS[m.lang]) dict.lang = m.lang;
+    if (m.state === "listening") {
+      if (dict.phase !== "listening" && dict.phase !== "stopping") return;
+      if (typeof m.text === "string") dict.text = m.text;
+      dict.level = m.level;
+      armDict();
+      return dictLive();
+    }
+    if (m.state === "done") {
+      if (dict.phase !== "listening" && dict.phase !== "stopping") return;
+      let text = String(m.text ?? "").replace(/\s+/g, " ").trim();
+      if (dict.viaPhrase) text = stripPhrase(text, dict.lang).trim();
+      if (!text) return dictPhase("error", { error: "empty" });
+      dict.text = text.slice(0, 1000);
+      dict.heard = true; // the app is done listening: nothing to cancel there
+      void sendDict(); // not returned: the app's call gets no promise back
+      return;
+    }
+    if (m.state === "canceled") { const back = dictEl?.contains(document.activeElement) ? dict.sid : null; closeDict(); if (back) micOf(back)?.focus({ preventScroll: true }); return; }
+    if (m.state === "error") return dictPhase("error", { error: DICT_ERRORS[m.error] ? m.error : "failed" });
+  }
 
   // "12:00 PM" today, "Tomorrow 8:17 AM", "Mon 9:00 AM": short, for a tag.
   function shortWhen(t) {
@@ -856,6 +1327,27 @@
   const cards = new Map(); // sid → card element, kept between updates
   let weekLayout = null; // anime.js layout for Last 7 Days, once its module has loaded
   let weekShape = ""; // which sessions are in which section, in order, at the last draw
+  let weekShown = ""; // the same, in the order on screen
+  // Last 7 Days holds still while you point at a card or a row, or dictate on a card: what's
+  // there keeps its place (its content still changes), something new waits at the end of its
+  // section, and once the pointer has left for a moment everything glides where it belongs.
+  let weekOrder = new Map(); // sid → [section, index], as last drawn
+  let held = null; // the same, from when the hold began
+  let holdPointer = false;
+  let holdTimer = 0;
+  const HOLD_DELAY = 500;
+  function holdStart() { clearTimeout(holdTimer); holdPointer = true; if (!held) held = new Map(weekOrder); }
+  function holdEnd(now = false) {
+    clearTimeout(holdTimer);
+    if (!holdPointer) return;
+    const go = () => { holdPointer = false; releaseHold(); };
+    if (now) go(); else holdTimer = setTimeout(go, HOLD_DELAY);
+  }
+  function releaseHold() {
+    if (holdPointer || dict || !held) return;
+    held = null;
+    if (view === "week") renderWeek();
+  }
   let weekMeterOn = false; // whether the week's column stood beside the cards at the last draw
   const groups = new Map(); // section id → section element
 
@@ -864,6 +1356,59 @@
   // Needs you and working say for how long; anything else says how long ago.
   const lastingOf = (s) => s.kind !== "task" && (s.status === "working" || ((s.status === "waiting" || s.status === "asks") && needsYou(s)));
   const agoOf = (s, lasting) => (lasting ? span2(s.since || s.last) : ago(s.status === "working" ? s.last : s.since));
+  // The model and its effort in the Claude app's own words: "claude-opus-5-5" is Opus 5.5.
+  // An ID of another shape shows nothing rather than itself.
+  const EFFORT = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra", max: "Max" };
+  const EFFORT_MARK = { low: "L", medium: "M", high: "H", xhigh: "X", max: "MAX" }; // its square on the card
+  function modelName(id) {
+    const m = /^claude-([a-z]+)-(\d{1,2}(?:-\d{1,2})*)(?:-\d{8})?(?:\[[^\]]*\])?$/.exec(id || "");
+    return m ? `${m[1][0].toUpperCase()}${m[1].slice(1)} ${m[2].replace(/-/g, ".")}` : "";
+  }
+  function metaOf(s) {
+    const model = s.kind === "task" ? "" : modelName(s.model);
+    return model ? { model, effort: EFFORT[s.effort] || "", mark: EFFORT[s.effort] ? EFFORT_MARK[s.effort] : "", ultra: Boolean(s.ultra) } : null;
+  }
+  const metaWords = (m) => (m ? [m.model, m.effort && `${m.effort} effort`, m.ultra && "Ultracode"].filter(Boolean) : []);
+  const metaHtml = (m) => (m ? `<span class="meta" aria-hidden="true"><span class="mdl">${esc(m.model)}</span>${m.mark ? `<span class="eff${m.mark === "MAX" ? " max" : ""}">${m.mark}</span>` : ""}${m.ultra ? `<span class="uc">UC</span>` : ""}</span><span class="msep" aria-hidden="true"></span>` : "");
+
+  // A card whose state tag leaves too little room drops the model, then the effort, then all
+  // of it, rather than cut them off. Again whenever the card changes size.
+  function fitMeta(el) {
+    const m = el.querySelector(":scope > .top > .time > .meta");
+    if (!m) return;
+    fitMetaTags(m);
+    snapMeta(m);
+  }
+  function fitMetaTags(m) {
+    m.classList.remove("no-eff", "no-mdl", "no-meta");
+    for (const c of ["no-mdl", "no-eff", "no-meta"]) {
+      if (!m.getClientRects().length) return; // hidden: a row of the compact view
+      const edge = m.getBoundingClientRect().right + 0.5;
+      if (![...m.children].some((x) => x.getClientRects().length && x.getBoundingClientRect().right > edge)) return;
+      m.classList.add(c);
+    }
+  }
+  // The model's tags have a 1 px line (UC) or a fill (the effort). On a 1× screen a tag that
+  // starts between two pixels gets its line drawn on whole pixels while its letters stay where
+  // they fall, so they look off center and blurred. The time beside them decides where they
+  // land, so the row moves by what's left over to the next whole pixel.
+  function snapMeta(m) {
+    m.style.translate = "";
+    const tag = m.querySelector(".eff, .uc");
+    if (!tag || !tag.getClientRects().length) return;
+    const k = devicePixelRatio || 1;
+    const x = tag.getBoundingClientRect().left * k;
+    const off = (Math.round(x) - x) / k;
+    if (Math.abs(off) > 0.01) m.style.translate = `${off.toFixed(3)}px 0`;
+  }
+  // After a draw, once the cards have glided to where they stay.
+  let snapTimer = 0;
+  function snapMetas(delay = 0) {
+    clearTimeout(snapTimer);
+    snapTimer = setTimeout(() => { for (const el of cards.values()) { const m = el.isConnected && el.querySelector(":scope > .top > .time > .meta"); if (m) snapMeta(m); } }, delay);
+  }
+  const metaFit = typeof ResizeObserver === "function" ? new ResizeObserver((es) => es.forEach((e) => fitMeta(e.target))) : null;
+
   function cardKey(s) {
     const lasting = lastingOf(s);
     return JSON.stringify(s) + "\n" + [agoOf(s, lasting), lasting, needsYou(s), isStale(s), dayStart(0), Math.floor(now() / 36e5),
@@ -881,9 +1426,10 @@
       if (seen.size && !weekLayout) el.classList.add("new"); // not on the first draw; the layout fades it in otherwise
       el.addEventListener("animationend", (e) => { if (e.animationName === "enter") el.classList.remove("new"); });
       cards.set(s.sid, el);
+      metaFit?.observe(el);
     }
-    // "new" and "found" are short-lived marks that a live update must not wipe.
-    const keep = ["new", "found", "rel-lit", "rel-self"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
+    // "new" and "found" are short-lived marks that a live update must not wipe; "lifted" is syncMic's.
+    const keep = ["new", "found", "rel-lit", "rel-self", "lifted"].filter((c) => el.classList.contains(c)).map((c) => ` ${c}`).join("");
     const cls = `card ${sentOf(s) ? "working sent" : s.status}${s.background ? " background" : ""}${isStale(s) ? " stale" : ""}${isFresh(s) ? " fresh" : ""}${keep}`;
     if (el.className !== cls) el.className = cls;
     if (el._key === key) return el;
@@ -891,29 +1437,36 @@
     const lasting = lastingOf(s);
     const agoText = agoOf(s, lasting);
     // A run of a scheduled task shows a calendar clock by its time instead of the plain clock.
-    const timeTip = s.kind === "task" ? ` title="${esc(`Can't start since ${when(s.since)}`)}"`
-      : lasting ? ` title="${esc(`${s.task ? `${s.taskName ? `A run of ${s.taskName}` : "A scheduled run"}. ` : ""}${s.status === "working" ? "Working" : "Waiting for you"} since ${when(s.since || s.last)}`)}"`
-      : s.task ? ` title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}"` : "";
+    // The time's tooltip starts with the model, its effort and ultracode, in words.
+    const meta = metaOf(s);
+    const tipText = [metaWords(meta).join(" · "), s.kind === "task" ? `Can't start since ${when(s.since)}`
+      : lasting ? `${s.task ? `${s.taskName ? `A run of ${s.taskName}` : "A scheduled run"}. ` : ""}${s.status === "working" ? "Working" : "Waiting for you"} since ${when(s.since || s.last)}`
+      : s.task ? (s.taskName ? `A run of ${s.taskName}` : "A scheduled run") : ""].filter(Boolean).join("\n");
+    const timeTip = tipText ? ` title="${esc(tipText)}"` : "";
     const inner = `
       <div class="top">
         ${tag(`${cardIcon(s)}<span>${label(s)}</span>`, `s-${sentOf(s) ? "working" : s.status}`)}
-        <span class="time"${timeTip}>${s.task ? ICON.calendarClock : lasting ? "" : ICON.clock}${agoText}</span>
+        <span class="time"${timeTip}>${metaHtml(meta)}${s.task ? ICON.calendarClock : lasting ? "" : ICON.clock}${agoText}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
-      ${answerable(s) ? answersFoot(s) : `${tags(s)}${bar(s)}`}`;
+      ${answerable(s) || replied(s) ? answersFoot(s) : `${tags(s)}${bar(s)}`}`;
     // A row of free height (the compact view) keeps its height while its answer is out, so
-    // the rows under it stay put and Undo sits where the answers were.
+    // the rows under it stay put and what it says sits where the answers were.
     const sent = sentOf(s);
     if (sent && !el._sent && el.isConnected) el.style.minHeight = `${el.offsetHeight}px`;
     else if (!sent && el._sent) el.style.minHeight = "";
     el._sent = sent;
     if (el._inner !== inner) {
+      // The mic had the keyboard: the new one gets it back.
+      const hadMic = document.activeElement?.matches?.("[data-mic]") && el.contains(document.activeElement);
       el.innerHTML = inner;
       el._inner = inner;
+      if (hadMic) el.querySelector("[data-mic]")?.focus({ preventScroll: true });
       syncIcons(el);
+      if (el.isConnected) fitMeta(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...schedWords(s), ...relWords(s), ...answerWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...metaWords(meta), ...schedWords(s), ...relWords(s), ...answerWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
     const tip = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
@@ -1056,15 +1609,22 @@
     // card's color instead of redrawing it, and a card that changes place slides there.
     const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
     const buckets = new Map(SECTIONS.map((g) => [g.id, []]));
-    for (const s of list) buckets.get(SECTIONS.find((g) => g.test(s)).id).push(s);
+    for (const s of list) buckets.get(held?.get(s.sid)?.[0] ?? SECTIONS.find((g) => g.test(s)).id).push(s);
+    // Held: each in its place from the hold's start, something new after them, in its usual order.
+    if (held) for (const arr of buckets.values()) arr.sort((a, b) => (held.get(a.sid)?.[1] ?? Infinity) - (held.get(b.sid)?.[1] ?? Infinity));
     // Only a change in what is where (which cards and rows, in what order) is animated by
     // the layout. While it measures it mutes CSS transitions, and a card's color fade on a
     // status change must keep running, so updates that only change content skip it.
     const shape = JSON.stringify(SECTIONS.map((g) => [g.id, buckets.get(g.id).map((s) => s.sid)]));
     // Newest first in the day sections; the server's order (urgency) in Active.
-    for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => b.last - a.last);
-    const moved = shape !== weekShape;
+    if (!held) for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => b.last - a.last);
+    weekOrder = new Map();
+    for (const [id, arr] of buckets) arr.forEach((s, i) => weekOrder.set(s.sid, [id, i]));
+    // Held, what counts is what's on screen: as long as nothing new comes or goes, nothing moved.
+    const shown = JSON.stringify(SECTIONS.map((g) => [g.id, buckets.get(g.id).map((s) => s.sid)]));
+    const moved = held ? shown !== weekShown : shape !== weekShape;
     weekShape = shape;
+    weekShown = shown;
     // Back from hidden, things are simply where they are now.
     const glide = moved && hadShell && weekLayout && !still && !catchingUp && document.visibilityState === "visible";
     // Without the layout, the page's own FLIP slides what moved: every card if the shape or
@@ -1127,7 +1687,7 @@
         if (at !== el) grid.insertBefore(el, at || null);
       });
     }
-    for (const [sid, el] of cards) if (!keep.has(sid)) { listed.has(sid) ? el.remove() : drop(el); cards.delete(sid); }
+    for (const [sid, el] of cards) if (!keep.has(sid)) { listed.has(sid) ? el.remove() : drop(el); metaFit?.unobserve(el); cards.delete(sid); }
     renderMeter();
     checkFamily();
 
@@ -1151,8 +1711,9 @@
     // anime.js measures before and after, then animates what changed: a card that moves
     // glides, one that leaves fades out instead of vanishing, a section opens and closes,
     // and a card that becomes a row (or a row a card) turns into it.
-    if (glide) return void weekLayout.update(mutate); // it fades colors as it moves things
+    if (glide) { snapMetas(480); return void weekLayout.update(mutate); } // it fades colors as it moves things
     mutate();
+    snapMetas();
 
     // Without it, FLIP: start each moved card where it was on screen and let it glide to
     // its new place. Starting from the on-screen position keeps it smooth even mid-move.
@@ -1475,6 +2036,8 @@
   function setView(v, fromApp) {
     if (v !== "week" && v !== "history" && v !== "scheduled") return;
     view = v;
+    // Another view closes the composer, like any popover: hidden, it would still hold the keys.
+    if (v !== "week" && dict) endDict(false);
     $week.hidden = v !== "week";
     $history.hidden = v !== "history";
     $scheduled.hidden = v !== "scheduled";
@@ -1484,6 +2047,7 @@
     if (v === "scheduled") renderScheduled();
     renderUsage(); // the header carries the usage when the Active tile is out of view
     endFamily(); // the card that lit the spotlight may be out of view now
+    placeDict(); // the composer shows only with its card
     if (!fromApp) bridge()?.postMessage({ view: v }); // keep the app's toolbar switch in step
   }
 
@@ -1501,7 +2065,8 @@
   // The app drives these from its toolbar.
   window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); snapWeek(); },
     endFamily: () => endFamily(), // the app calls these when the pointer enters or leaves the window, active or not
-    pointer: (inside) => { pointerIn = Boolean(inside); if (!inside) { endFamily(); hideUsageCard(); } } };
+    pointer: (inside) => { appInside = Boolean(inside); pointerIn = false; if (!inside) { endFamily(); hideUsageCard(); holdEnd(); } },
+    dictation: (m) => onDictation(m) }; // the app's dictation, for the card that asked
 
   // In the app the header row sits in the title bar, and the app drags the window by it.
   // It needs to know where the things you can click are, so it leaves those alone.
@@ -1522,15 +2087,19 @@
   $q.addEventListener("input", () => search($q.value));
 
   $content.addEventListener("click", (e) => {
+    // The mic and the composer: nothing in them opens the session.
+    const mic = e.target.closest("[data-mic]");
+    if (mic) { const sid = mic.closest("[data-sid]").dataset.sid; return dict?.sid === sid ? endDict() : startDict(sid); } // a second press closes it
+    const act = e.target.closest("[data-dict]");
+    if (act) return act.getAttribute("aria-disabled") === "true" ? undefined : dictAct(act.dataset.dict);
+    if (e.target.closest(".dict")) return;
     const go = e.target.closest("[data-go]");
     if (go) return setView(go.dataset.go);
     const made = e.target.closest("[data-show-task]");
     if (made) return showTask(made.dataset.showTask);
-    // A question's answer, or taking one back, on its card.
+    // A question's answer, on its card.
     const ans = e.target.closest("[data-answer]");
     if (ans) return answerCard(ans.closest("[data-sid]").dataset.sid, Number(ans.dataset.answer));
-    const undo = e.target.closest("[data-undo]");
-    if (undo) return undoAnswer(undo.closest("[data-sid]").dataset.sid);
     const rel = e.target.closest("[data-open-sid]");
     if (rel) return openSession(rel.dataset.openSid);
     if (e.target.closest("[data-more]")) return loadHistory(false);
@@ -1551,7 +2120,7 @@
   // so passing over the window doesn't make it flicker; at once from the keyboard.
   let litFor = null;
   let litTimer;
-  const FAMILY_DELAY = 180;
+  const FAMILY_DELAY = 80;
   function lightRelatives(item, now) {
     clearTimeout(litTimer);
     if (item === litFor) return;
@@ -1575,14 +2144,27 @@
   // pointer position when the layout changes, even after the pointer left for another
   // window, and those replays don't move. In the app, the app also says when the pointer
   // comes and goes (window.csm.pointer).
+  // In the app: whether the window says the pointer is inside it. Coming back in, nothing
+  // lights up until the pointer really moves, so a replay of where it left can't light the
+  // card it left from; and while it's out, nothing does at all.
   let pointerIn = !embed;
-  $content.addEventListener("pointerover", (e) => { if (pointerIn) lightRelatives(e.target.closest?.(".card, .hrow")); });
-  $content.addEventListener("pointermove", (e) => {
-    if (pointerIn || !(e.movementX || e.movementY)) return;
-    pointerIn = true;
-    lightRelatives(e.target.closest?.(".card, .hrow"));
+  let appInside = true;
+  // On a card or a row of Last 7 Days, the list holds still (holdStart); off them, it lets go.
+  const pointAt = (el) => { if (el?.closest("#week")) holdStart(); else holdEnd(); };
+  $content.addEventListener("pointerover", (e) => {
+    if (!pointerIn) return;
+    const el = e.target.closest?.(".card, .hrow");
+    lightRelatives(el);
+    pointAt(el);
   });
-  $content.addEventListener("pointerleave", () => { if (embed) pointerIn = false; lightRelatives(null, true); });
+  $content.addEventListener("pointermove", (e) => {
+    if (pointerIn || !appInside || !(e.movementX || e.movementY)) return;
+    pointerIn = true;
+    const el = e.target.closest?.(".card, .hrow");
+    lightRelatives(el);
+    pointAt(el);
+  });
+  $content.addEventListener("pointerleave", () => { if (embed) pointerIn = false; lightRelatives(null, true); holdEnd(); });
   // WebKit doesn't always say the pointer left when it leaves the window or the app goes to
   // the back, so the spotlight also goes then.
   const endFamily = () => lightRelatives(null, true);
@@ -1600,7 +2182,7 @@
   });
   $content.addEventListener("focusout", (e) => { if (!$content.contains(e.relatedTarget)) lightRelatives(null, true); });
   document.addEventListener("contextmenu", (e) => {
-    if (!embed) return;
+    if (!embed || e.target.closest?.(".dict textarea")) return;
     e.preventDefault();
     const task = e.target.closest("[data-task]");
     if (task) {
@@ -1616,8 +2198,46 @@
     bridge()?.postMessage({ menu: { sid: item.dataset.sid, title: s?.title ?? "", cwd: s?.cwd ?? "" } });
   });
 
+  // Dictation from the keyboard: Return or Space presses the mic and the composer's buttons;
+  // while it listens, Return sends what you said wherever the focus is; Esc drops it (from a
+  // search field only while it listens); Tab stays in the composer. After a send that didn't
+  // go through, the words wait in a text box where Return sends again (Shift-Return too: the
+  // words go as one line). A held key or a quick second press must not send twice: while it
+  // stops and sends, Return does nothing, and back in the text box a repeat, or a press within
+  // 0.6 s, does nothing. Keys in the composer stay there, so arrows and letters never move
+  // between cards or open the session.
+  const REVIEW_GRACE = 600;
+  document.addEventListener("keydown", (e) => {
+    const t = e.target;
+    if (dict?.phase === "review" && (e.key === "Enter" || e.key === " ") && t.closest?.(".dict")
+      && (e.repeat || performance.now() - (dict.reviewAt ?? 0) < REVIEW_GRACE)
+      && (e.key === "Enter" || t.matches?.("[data-dict]"))) { e.preventDefault(); e.stopPropagation(); return; }
+    const inPanel = t.closest?.(".dict, [data-mic]");
+    const press = e.key === "Enter" || e.key === " ";
+    if (press && !e.metaKey && !e.altKey && !e.ctrlKey && t.matches?.("[data-mic], [data-dict]")) {
+      e.preventDefault(); e.stopPropagation();
+      if (t.dataset.mic !== undefined) return startDict(t.closest("[data-sid]").dataset.sid);
+      if (t.getAttribute("aria-disabled") !== "true") dictAct(t.dataset.dict);
+      return;
+    }
+    if (!dict) return;
+    const listening = dict.phase === "listening" || dict.phase === "stopping";
+    // Tab and Shift-Tab stay in the composer.
+    if (e.key === "Tab" && dictEl?.contains(t)) {
+      e.preventDefault(); e.stopPropagation();
+      const f = [...dictEl.querySelectorAll("textarea, .d-b")].filter((x) => x.getClientRects().length);
+      return f[(f.indexOf(t) + (e.shiftKey ? -1 : 1) + f.length) % f.length]?.focus();
+    }
+    if (e.key === "Escape" && (inPanel || listening || !t.closest?.("input, textarea"))) { e.preventDefault(); e.stopPropagation(); return endDict(true); }
+    if (e.key === "Enter" && !e.metaKey && !e.altKey && !e.ctrlKey) {
+      if ((listening || dict.phase === "sending") && (inPanel || !t.closest?.("input, textarea"))) { e.preventDefault(); e.stopPropagation(); return stopDict(); }
+      if (dict.phase === "review" && t.tagName === "TEXTAREA" && inPanel) { e.preventDefault(); e.stopPropagation(); return sendDict(); }
+    }
+    if (inPanel) e.stopPropagation();
+  }, true);
+
   // On a card that asks: ⌘↩ gives its first answer (or opens the session when it can't be
-  // sent from here), and ⌘Z takes back one still waiting its 5 s.
+  // sent from here).
   $content.addEventListener("keydown", (e) => {
     const card = e.target.closest?.(".card[data-sid]");
     if (!card || !e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
@@ -1627,9 +2247,6 @@
       e.preventDefault();
       if (s.reply?.state === "failed") openSession(s.sid);
       else if (!s.reply) answerCard(s.sid, 0);
-    } else if (e.key.toLowerCase() === "z" && s.reply?.state === "pending") {
-      e.preventDefault();
-      undoAnswer(s.sid);
     }
   });
 
@@ -1753,7 +2370,7 @@
       <path d="${line}" fill="none" stroke="#E6E8EB" stroke-width="1.75" stroke-linecap="round"/>
       ${ahead}
       <line x1="${nx.toFixed(1)}" y1="${(ny + 5).toFixed(1)}" x2="${nx.toFixed(1)}" y2="${H}" stroke="#F7F8F859" stroke-width="1"/>
-      <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="4.5" fill="var(--color-text-primary)" stroke="#16171A" stroke-width="2"/>
+      <circle cx="${nx.toFixed(1)}" cy="${ny.toFixed(1)}" r="4.5" fill="var(--color-text-primary)" stroke="var(--color-surface-raised)" stroke-width="2"/>
       ${letters}</svg>`;
   }
 
@@ -1833,7 +2450,7 @@
     el.tabIndex = 0;
     el.setAttribute("aria-describedby", "ucard");
     el.addEventListener("pointerenter", () => { if (pointerIn) openSoon(el); });
-    el.addEventListener("pointermove", (e) => { if (e.movementX || e.movementY) { pointerIn = true; openSoon(el); } });
+    el.addEventListener("pointermove", (e) => { if (appInside && (e.movementX || e.movementY)) { pointerIn = true; openSoon(el); } });
     el.addEventListener("pointerleave", hideUsageCard);
     el.addEventListener("focus", () => showUsageCard(el));
     el.addEventListener("blur", hideUsageCard);
@@ -1890,7 +2507,7 @@
       <span class="m-week" aria-hidden="true">${days}</span>
       ${p.say ? `<span class="m-say">${p.say}</span>` : ""}
       ${fc ? `<span class="m-reset m-out">Out ${outWords(fc.at)}</span>` : w.resets ? `<span class="m-reset">Resets ${resetWords(w.resets)}</span>` : ""}
-      ${five ? `<span class="m-five">5 h<i><b style="width:${Math.min(100, five.pct)}%"></b></i><span>${Math.floor(five.pct)}%</span></span>` : ""}`;
+      ${five ? `<span class="m-five"><span>5 h</span><i><b style="width:${Math.min(100, five.pct)}%"></b></i><span class="v">${Math.floor(five.pct)}%</span></span>` : ""}`;
     $m.hidden = false;
     $m.className = `meter ${p.key}${$m._intro ? " intro" : ""}`;
     $m.setAttribute("aria-valuenow", String(pct));
@@ -1977,6 +2594,16 @@
     }
   }
   addEventListener("resize", () => requestAnimationFrame(renderUsage));
+
+  // The usage tile sticks at the very place it starts, under Active's heading, so it doesn't
+  // move at all while the cards scroll by.
+  function pinMeter() {
+    const m = document.querySelector(".abody > .meter");
+    if (!m || m.hidden) return;
+    const top = Math.round(m.parentElement.getBoundingClientRect().top - $content.getBoundingClientRect().top + $content.scrollTop);
+    if (m.style.top !== `${top}px`) m.style.top = `${top}px`;
+  }
+  addEventListener("resize", () => requestAnimationFrame(pinMeter));
   usageHover($usage);
 
   // The header's counts, which the app also shows on its Dock icon and in the menu bar.
@@ -2108,6 +2735,7 @@
   }
 
   function showPop(anchor) {
+    if (dict) return; // one popover at a time: a composer you're dictating in stays
     clearTimeout(popShowTimer);
     clearTimeout(popHideTimer);
     if (popAnchor && popAnchor !== anchor) popAnchor.setAttribute("aria-expanded", "false");
@@ -2227,7 +2855,7 @@
     hidePop();
     if (back && document.activeElement !== back) { popQuietFocus = true; back.focus({ preventScroll: true }); }
   });
-  addEventListener("resize", () => { if (popKind) placePop(); });
+  addEventListener("resize", () => { if (popKind) placePop(); placeDict(); });
   $pop.addEventListener("click", (e) => {
     const go = e.target.closest("[data-go]");
     if (go) { hidePop(); return setView(go.dataset.go); }
@@ -2286,12 +2914,16 @@
   function render() {
     if (document.hidden) { behind = true; return; }
     behind = false;
+    checkDict();
     renderHeader();
     renderBanner();
     renderWeek();
+    pinMeter();
+    syncMic();
+    placeDict();
+    chaseDict();
     if (view === "history") refreshHistory();
     if (view === "scheduled") renderScheduled();
-    armCountdown();
     // Redraw when the first breathing minute of something that needs you runs out.
     clearTimeout(freshTimer);
     const ends = state.sessions.filter(isFresh).map((s) => (s.since || s.last) + FRESH_MS - now());
