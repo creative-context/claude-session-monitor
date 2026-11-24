@@ -2,28 +2,29 @@
 <!-- README banner. Drawn at the size GitHub shows it (880×440) and captured at 3× with headless Chrome:
      chrome --headless=new --hide-scrollbars --force-device-scale-factor=3 --window-size=880,440 \
        --screenshot=docs/banner.png docs/banner.html
-     The cards copy the app's own colors and type (Apple's SF Pro, so render it on a Mac), with
-     made-up sessions. -->
+     The cards copy the app's own colors and type, the Amber look, in SF Pro, so render it on a Mac,
+     with made-up sessions. -->
 <html lang="en-US">
 <head>
 <meta charset="utf-8">
 <title>Claude Session Monitor</title>
 <style>
   :root {
-    --bg: #050506;
-    --panel: #0d0e10;
-    --line: #23262b;
+    --bg: #030304;
+    --panel: #030304;
+    --line: transparent;
     --ink: #f2f4f6;
     --ink-2: #a3a9b1;
     --ink-3: #7c838c;
     /* The app's state colors */
-    --accent: #2D72D2;
+    --accent: #5E6AD2;
     --warning: #C87619;
     --error: #CD4246;
     --success: #238551;
     --orange: #FDB876;
     --red: #FFB2B8;
-    --on-tint: #A3A8B0;
+    --on-tint: #A4AAB4;
+    --amber: #F4C053;
   }
   * { box-sizing: border-box; margin: 0; }
   html, body { width: 880px; height: 440px; overflow: hidden; }
@@ -34,49 +35,53 @@
   .intro p { margin-top: 18px; font-size: 17px; line-height: 1.5; color: var(--ink-2); }
   .intro .meta { margin-top: 18px; font-size: 13px; color: var(--ink-3); letter-spacing: 0.01em; }
 
-  .panel { position: absolute; left: 310px; top: 30px; width: 740px; height: 440px; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 22px 20px; }
+  .panel { position: absolute; left: 310px; top: 30px; width: 740px; height: 440px; padding: 22px 20px; }
   .panel h2 { font-size: 18px; font-weight: 600; }
-  .panel .sub { margin-top: 2px; font-size: 13px; color: var(--ink-3); }
+  .panel .sub { margin-top: 2px; font-size: 13px; color: #8A8F98; display: flex; gap: 14px; align-items: center; }
+  .panel .sub span { display: inline-flex; align-items: center; gap: 5px; }
+  .panel .sub b { font-weight: 600; color: #F7F8F8; }
+  .panel .sub i { width: 7px; height: 7px; border-radius: 50%; background: var(--amber); }
+  .panel .sub i.w { background: #7C86F0; }
 
   .abody { margin-top: 16px; display: flex; gap: 8px; align-items: flex-start; }
   .grid { display: grid; grid-template-columns: repeat(2, 214px); grid-auto-rows: 124px; gap: 8px; }
   .card {
-    --tint: #FFFFFF08; --meta: #8A8F98;
+    --tint: #18191B; --meta: #8A8F98; --ink-c: #F7F8F8;
     display: flex; flex-direction: column; padding: 11px 12px 10px; border-radius: 8px; background: var(--tint); overflow: hidden;
   }
-  .card.needs { --tint: color-mix(in srgb, var(--warning) 34%, transparent); --meta: var(--orange); }
-  .card.error { --tint: color-mix(in srgb, var(--error) 34%, transparent); --meta: var(--red); }
-  .card.working { --tint: color-mix(in srgb, var(--accent) 16%, transparent); --meta: var(--on-tint); }
-  .card.agents { --tint: color-mix(in srgb, var(--accent) 10%, transparent); --meta: var(--on-tint); }
-  .card.done { --tint: color-mix(in srgb, var(--success) 14%, transparent); --meta: var(--on-tint); }
+  .card.needs { --tint: #F4C053; --meta: #4A3A0E; --ink-c: #0D0E10; }
+  .card.error { --tint: #411E25; --meta: var(--on-tint); }
+  .card.working { --tint: #26283E; --meta: var(--on-tint); }
+  .card.agents { --tint: #22243A; --meta: var(--on-tint); }
+  .card.done { --tint: #0D291B; --meta: var(--on-tint); }
 
   .top { display: flex; align-items: center; gap: 6px; height: 18px; }
-  .tag { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0 6px; border-radius: 4px; font-size: 10.5px; font-weight: 510; white-space: nowrap; background: #FFFFFF0F; color: var(--meta); }
-  .needs .tag.state { background: var(--warning); color: #0D0E10; }
-  .error .tag.state { background: #B5383C; color: #fff; }
-  .working .tag.state, .agents .tag.state { background: #2864BC; color: #fff; }
-  .done .tag.state { background: #1D7244; color: #fff; }
+  /* State tags at the top have no fill: the word and its mark in the state's color. Tags at the foot are plain gray. */
+  .tag { display: inline-flex; align-items: center; gap: 4px; height: 18px; padding: 0; font-size: 10.5px; font-weight: 510; white-space: nowrap; color: var(--meta); }
+  .needs .tag.state { color: #0D0E10; }
+  .error .tag.state { color: #FF8A93; }
+  .working .tag.state, .agents .tag.state { color: #8F97F0; }
+  .done .tag.state { color: #5FD38F; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #0D0E10; flex: none; }
   .time { margin-left: auto; display: inline-flex; align-items: center; gap: 3px; font-size: 10.5px; color: var(--meta); white-space: nowrap; }
-  .title { margin-top: 7px; font: 600 14px/18px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--ink); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .title { margin-top: 7px; font: 600 14px/18px -apple-system, BlinkMacSystemFont, system-ui, sans-serif; color: var(--ink-c); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .detail { margin-top: 3px; font-size: 11px; line-height: 15px; color: var(--meta); }
   .detail .line { display: flex; align-items: center; gap: 5px; white-space: nowrap; overflow: hidden; }
-  .detail b { font-weight: 400; color: var(--ink); }
+  .detail b { font-weight: 400; color: var(--ink-c); }
   .tags { margin-top: auto; display: flex; gap: 5px; }
-  /* A session's answers, as the card shows them: the first filled, the second on a veil. */
-  .tag.ans { height: 20px; padding: 0 8px; border-radius: 5px; font-weight: 510; background: #FFFFFF26; color: var(--ink); }
-  .tag.ans.pri { background: #F7F8F8; color: #0D0E10; }
+  /* A session's answers under an amber card: the first a black button with amber words, the second plain black words. */
+  .tag.ans { height: 20px; padding: 0 4px; font-weight: 510; color: #0D0E10; }
+  .tag.ans.pri { padding: 0 9px; border-radius: 5px; background: #0D0E10; color: var(--amber); }
   .bar { display: flex; align-items: center; gap: 8px; margin-top: 7px; }
   .bar .segs { flex: 1; display: flex; gap: 3px; }
   .bar .segs span { flex: 1; height: 2px; border-radius: 1px; background: #FFFFFF14; }
-  .bar .segs span.on { background: #6FA6E8; }
-  .bar .segs span.now { background: color-mix(in srgb, #6FA6E8 45%, transparent); }
+  .bar .segs span.on { background: #7C86F0; }
+  .bar .segs span.now { background: color-mix(in srgb, #7C86F0 45%, transparent); }
   .bar .n { font-size: 10px; color: var(--meta); }
   /* The week's usage, as the app draws it at the right of Active: two cards tall, the week
      bottom up, the blue line now. */
   .meter { width: 96px; height: 256px; display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 4px; }
-  /* Flush with the cards: "This week" from their top edge, the reset's baseline on the second row's bottom. */
-  .meter .m-lbl { text-box: trim-start cap alphabetic; }
-  .meter > :last-child { text-box: trim-end cap alphabetic; }
+  /* Flush with the cards: "This week"'s line from their top edge, the reset's line ending on the second row's bottom. */
   .m-lbl { font-size: 11px; line-height: 14px; letter-spacing: 0.01em; color: #8A8F98; }
   .m-pct { white-space: nowrap; font: 600 32px/34px ui-rounded, -apple-system, BlinkMacSystemFont, system-ui, sans-serif; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--ink); }
   .m-pct small { font-size: 17px; line-height: 1; letter-spacing: 0; margin-left: 1px; color: #8A8F98; }
@@ -125,18 +130,18 @@
 
   <div class="panel">
     <h2>Active</h2>
-    <div class="sub">Last 7 Days · 3 need you · 2 working</div>
+    <div class="sub"><span>Last 7 Days</span><span><i></i><b>3</b> need you</span><span><i class="w"></i><b>2</b> working</span></div>
     <div class="abody">
     <div class="grid">
       <div class="card needs">
-        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><path d="M20.5 12a8.5 8.5 0 0 1-12.4 7.6L3.5 20.5l1-4.4A8.5 8.5 0 1 1 20.5 12z"/><path d="M9.8 9.6a2.3 2.3 0 1 1 3.1 2.2c-.6.3-.9.7-.9 1.3"/><path d="M12 15.8h.01"/></svg>Needs you</span><span class="time"><svg viewBox="0 0 24 24"><path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/></svg>9m ago</span></div>
+        <div class="top"><span class="tag state"><span class="dot"></span>Needs you</span><span class="time"><svg viewBox="0 0 24 24"><path d="M20.5 10.5V7a2 2 0 0 0-2-2h-13a2 2 0 0 0-2 2v11.5a2 2 0 0 0 2 2H10"/><path d="M3.5 10h17"/><path d="M8 3v4"/><path d="M16 3v4"/><circle cx="17" cy="17" r="4.5"/><path d="M17 15v2.2l1.4.9"/></svg>9m ago</span></div>
         <div class="title">Release notes for 2.4</div>
         <div class="detail">Should I publish them to the changelog now?</div>
         <div class="tags"><span class="tag ans pri">Publish now</span><span class="tag ans">Wait for review</span></div>
       </div>
 
       <div class="card needs">
-        <div class="top"><span class="tag state"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7.5v5"/><path d="M12 16.5h.01"/></svg>Needs you</span><span class="time"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>1m ago</span></div>
+        <div class="top"><span class="tag state"><span class="dot"></span>Needs you</span><span class="time"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>1m ago</span></div>
         <div class="title">Upgrade the payments SDK</div>
         <div class="detail">Claude needs your permission to use Bash</div>
         <div class="tags"><span class="tag"><svg viewBox="0 0 24 24"><path d="M4 20h16a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.7-.9l-.8-1.2A2 2 0 0 0 7.9 3H4a2 2 0 0 0-2 2v13c0 1.1.9 2 2 2Z"/></svg>billing-api</span></div>

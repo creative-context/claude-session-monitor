@@ -4,7 +4,8 @@
 //
 //   bun test/scenarios.ts
 
-import { appendFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { appendFileSync, closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, rmSync, statSync, writeFileSync, writeSync } from "node:fs";
+import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeCron, nextRun, parseCron, prevRun } from "../cron.ts";
@@ -670,15 +671,90 @@ ev(id(148), { ev: "Stop", t: Date.now() - 60_000 });
   ev(id(149), { ev: "Stop", tp, t: Date.now() - 80_000 });
 }
 
+// 190–202. The model that advises a session while one is turned on, from its transcript: the
+// row turning it on or off (an advisor_tool attachment) or a call to it (a server tool, no hook
+// event) and its answer; the latest of these decides. advisorModel on every assistant row alone
+// means nothing. 190 has only that, a subagent's call and declaration, a tool result that quotes
+// a call and a request's list of tools that names the advisor; 191 asked the advisor, its model
+// from the call's row and then from the answer's usage; 192, 193, 194 and 196 have a call row;
+// 195 asked earlier, then its call scrolls out of the tail and its transcript goes before a
+// restart. 197 turned it on and never asked it; 198 turned it on, then off; 199 turned Opus on,
+// then a Fable advisor answered; 200 turned it on more than 8 MB before its transcript's end,
+// with a line longer than a read between; 201's transcript is written anew, shorter; 202 turns
+// it off while the server runs. Claude Code writes a call's row when its answer arrives, so none
+// of them is ever "asking".
+const SECRET_ADVICE = "compare the cart totals before the retry-QK83";
+const advCall = (cid: string, model = "claude-fable-5-2") => ({ type: "assistant", advisorModel: model,
+  message: { content: [{ type: "server_tool_use", id: cid, name: "advisor", input: { note: SECRET_ADVICE } }] } });
+const advAnswer = (cid: string, model?: string) => ({ type: "assistant", advisorModel: "claude-fable-5-2",
+  message: { content: [{ type: "advisor_tool_result", tool_use_id: cid, content: SECRET_ADVICE }], ...(model ? { usage: { iterations: [{ type: "message" }, { type: "advisor_message", model }] } } : {}) } });
+const advised = (text: string) => ({ type: "assistant", advisorModel: "claude-fable-5-2", message: { content: [{ type: "text", text }] } });
+const stopped = { type: "user", message: { content: [{ type: "text", text: "[Request interrupted by user]" }] } };
+const tpAdv = (n: number, rows: object[]) => transcript(`t${n}.jsonl`, rows);
+// The row Claude Code writes when the advisor is turned on (/advisor, or at a session's start), or off.
+const declare = (model = "claude-fable-5-2", on = true) => ({ type: "attachment", isSidechain: false,
+  attachment: { type: "advisor_tool", available: on, model, toolChange: on ? "add" : "remove" } });
+const filler = (n: number, len: number) => advised(`Row ${n} ${"y".repeat(len)}`);
+{
+  const tp = tpAdv(190, [advised("Looking at the list."), { ...advCall("srvtoolu_side190"), isSidechain: true }, { ...declare(), isSidechain: true },
+    { type: "api-request-shape", shape: { tools: [{ name: "Read" }, { name: "advisor", type: "advisor_20260301", model: "claude-opus-5-5", defer_loading: true }] } },
+    { type: "user", message: { content: [{ type: "tool_result", tool_use_id: "toolu_190", content: '{"type":"server_tool_use","id":"srvtoolu_q190","name":"advisor","input":{}}' }] } },
+    advised("The list is sorted.")]);
+  ev(id(190), { ev: "UserPromptSubmit", prompt: "Sort the seed list", tp });
+  ev(id(190), { ev: "Stop", tp });
+}
+for (const [n, rows] of [[191, [advised("Reading the tests."), advCall("srvtoolu_191", "claude-opus-5-5")]], [192, [advCall("srvtoolu_192")]],
+  [193, [advCall("srvtoolu_193"), stopped]], [194, [advCall("srvtoolu_194")]], [196, [advCall("srvtoolu_196")]]] as const) {
+  ev(id(n), { ev: "UserPromptSubmit", prompt: `Plan the beds ${n}`, tp: tpAdv(n, rows as unknown as object[]) });
+}
+const tp195 = tpAdv(195, [advCall("srvtoolu_195"), advAnswer("srvtoolu_195"), advised("The beds are planned.")]);
+ev(id(195), { ev: "UserPromptSubmit", prompt: "Plan the beds", tp: tp195 });
+ev(id(195), { ev: "Stop", tp: tp195 });
+for (const [n, rows] of [[197, [advised("Reading the beds."), declare(), advised("The beds are read.")]],
+  [198, [declare(), advised("Reading the beds."), declare("claude-fable-5-2", false), advised("The beds are read.")]],
+  [199, [declare("claude-opus-5-5"), advised("Reading the beds."), advCall("srvtoolu_199", "claude-opus-5-5"), advAnswer("srvtoolu_199", "claude-fable-5-2")]],
+  [201, [declare(), ...Array.from({ length: 40 }, (_, i) => filler(i, 2000))]],
+  [202, [declare(), advised("Reading the beds.")]]] as const) {
+  const tp = tpAdv(n, rows as unknown as object[]);
+  ev(id(n), { ev: "UserPromptSubmit", prompt: `Plan the beds ${n}`, tp });
+  ev(id(n), { ev: "Stop", tp });
+}
+// 200: the row turning it on, then a line of 5 MB (longer than one read), then about 10 MB of
+// lines of uneven lengths.
+const tp200 = join(dir, "t200.jsonl");
+const declared200 = JSON.stringify(declare());
+writeFileSync(tp200, [advised("Reading the beds."), declare(), filler(-1, 5 << 20)].map((r) => JSON.stringify(r)).join("\n") + "\n" +
+  Array.from({ length: 4000 }, (_, i) => JSON.stringify(filler(i, 300 + ((i * 7919) % 4700)))).join("\n") + "\n");
+ev(id(200), { ev: "UserPromptSubmit", prompt: "Plan the beds 200", tp: tp200 });
+ev(id(200), { ev: "Stop", tp: tp200 });
+
 const bad = mkdtempSync(join(tmpdir(), "csm-test-bad-")); // a folder with a broken database
-const start = (d = dir) => Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
-  env: {
-    ...process.env, CSM_PORT: String(PORT), CSM_DIR: d, CSM_ANSWER_GIVE_UP_MS: "3000", CSM_ANSWER_ARRIVE_MS: "15000",
-    CSM_APP_SESSIONS: join(d, "app"), CSM_PROJECTS: join(d, "no-projects"),
-  },
-  stdout: "ignore",
-  stderr: "inherit",
-});
+// What the server prints, as the app's server.log would hold it; its errors still show here.
+let serverOutput = "";
+const keep = async (stream: ReadableStream<Uint8Array>, echo: boolean) => {
+  const text = new TextDecoder();
+  for await (const chunk of stream) {
+    serverOutput += text.decode(chunk, { stream: true });
+    if (echo) process.stderr.write(chunk);
+  }
+};
+const start = (d = dir) => {
+  const p = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
+    env: {
+      ...process.env, CSM_PORT: String(PORT), CSM_DIR: d, CSM_ANSWER_GIVE_UP_MS: "3000", CSM_ANSWER_ARRIVE_MS: "15000",
+      // A permission's timers, shortened: held 1.5 s a round, its mod gone after 3 s of silence, dropped
+      // when its session shows no wait in 3 s, a decision no mod picked up fails after 2 s, and
+      // one handed over whose session still waits fails after 3 s.
+      CSM_PERMIT_HOLD_MS: "1500", CSM_PERMIT_HEARD_MS: "3000", CSM_PERMIT_SHOW_MS: "3000", CSM_PERMIT_GIVE_UP_MS: "2000",
+      CSM_APP_SESSIONS: join(d, "app"), CSM_PROJECTS: join(d, "no-projects"),
+    },
+    stdout: "pipe",
+    stderr: "pipe",
+  });
+  void keep(p.stdout, false).catch(() => {});
+  void keep(p.stderr, true).catch(() => {});
+  return p;
+};
 let server = start();
 
 async function history(q = ""): Promise<any> {
@@ -999,9 +1075,247 @@ try {
   check("18 a question over a day old doesn't", row(18)?.status === "asks" && row(18)?.needsYou === false, row(18));
   check("86 an archived one doesn't either", row(86)?.archived === true && row(86)?.needsYou === false, row(86));
 
+  // Allowing or denying a permission from the card. The tests play the plugin's hook: it sends
+  // the ask and holds, asks again on each 204, and stops on anything else.
+  const SECRET_WHAT = "rsync --delete ./garden-notes/ backup-box:/srv/plots-ZQX41";
+  {
+    const at = (n: number, e: Record<string, unknown>) => ev(id(n), { ...e, t: Date.now() });
+    const papi = (path: string, body?: unknown, o: { header?: boolean; method?: string; signal?: AbortSignal } = {}) =>
+      fetch(`http://127.0.0.1:${PORT}/api/permission/${path}`, {
+        method: o.method ?? "POST", headers: o.header === false ? {} : { "x-csm": "1" },
+        body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body), signal: o.signal,
+      });
+    const decide = (n: number, pid: string, allow: boolean) => papi(`${id(n)}/decide`, { id: pid, allow });
+    type Held = { rounds: number; status: number; decision?: string; endedAt: number; done: Promise<unknown> };
+    const quit = new AbortController(); // ends the mods still asking at the end
+    const holdPermit = (n: number, ask: Record<string, unknown>): Held => {
+      const h: Held = { rounds: 0, status: 0, endedAt: 0, done: Promise.resolve() };
+      h.done = (async () => {
+        try {
+          for (;;) {
+            h.rounds++;
+            const r = await papi(id(n), ask, { signal: quit.signal });
+            if (r.status === 204) continue;
+            h.status = r.status;
+            h.endedAt = Date.now();
+            if (r.status === 200) h.decision = (await r.json()).decision;
+            return;
+          }
+        } catch {
+          h.status = -1;
+        }
+      })();
+      return h;
+    };
+    const until = async (ok: (s: any[]) => boolean, ms = 6000) => {
+      const end = Date.now() + ms;
+      let list = await state();
+      while (!ok(list) && Date.now() < end) {
+        await Bun.sleep(100);
+        list = await state();
+      }
+      return list;
+    };
+    const waitOn = (n: number, tool: string, x: Record<string, unknown> = {}) => {
+      at(n, { ev: "UserPromptSubmit", prompt: `Task ${n}` });
+      at(n, { ev: "PreToolUse", tool, d: `Step ${n}` });
+      at(n, { ev: "PermissionRequest", tool, ...x });
+    };
+    const settled = (h: Held, ms = 6000) => Promise.race([h.done, Bun.sleep(ms)]);
+
+    // 170 allowed after a few rounds; 171 denied; 172 answered in the dialog; 173 a long command
+    // on several lines; 174 waits with no mod; 175's mod stops asking; 176's mod is between
+    // rounds at the click and never comes back; 177's decision is handed over but its session
+    // still waits; 178's ask comes before its session is known; 179's session never shows the
+    // wait; 180 has two asks at once (parallel subagents); 181's ask is asked twice.
+    for (const n of [170, 171, 172, 173, 174, 175, 176, 177, 180, 181]) waitOn(n, n === 180 ? "Write" : "Bash");
+    at(179, { ev: "UserPromptSubmit", prompt: "Task 179" });
+    at(179, { ev: "PreToolUse", tool: "Read", d: "Step 179" });
+    let list = await until((l) => [170, 171, 172, 173, 174, 175, 176, 177, 180, 181].every((n) => find(l, n)?.status === "waiting"));
+    check("permit: with no mod asking, a permission wait has no permit and needs you", !find(list, 174)?.permit && find(list, 174)?.needsYou === true && !find(list, 4)?.permit, find(list, 174));
+
+    const h170 = holdPermit(170, { id: "p170", tool: "Bash", what: SECRET_WHAT });
+    const h171 = holdPermit(171, { id: "p171", tool: "Bash", what: "make lint", agent: "agent-171" });
+    const h172 = holdPermit(172, { id: "p172", tool: "Bash", what: "make test" });
+    const long = "printf 'first line'\n\n   && echo \tsecond " + "x".repeat(600);
+    const h173 = holdPermit(173, { id: "p173", tool: "Bash", what: long });
+    const h177 = holdPermit(177, { id: "p177", tool: "Bash", what: "make deploy-preview" });
+    const h179 = holdPermit(179, { id: "p179", tool: "Read", what: "/work/plots/beds.md" });
+    const h180a = holdPermit(180, { id: "p180a", tool: "Write", what: "/work/plots/a.md", agent: "agent-a" });
+    const h180b = holdPermit(180, { id: "p180b", tool: "Write", what: "/work/plots/b.md", agent: "agent-b" });
+    // 175 and 176: one request each, which goes away at once.
+    for (const n of [175, 176]) {
+      const gone = new AbortController();
+      papi(id(n), { id: `p${n}`, tool: "Bash", what: `make step-${n}` }, { signal: gone.signal }).catch(() => {});
+      setTimeout(() => gone.abort(), 200);
+    }
+    // 181: a newer request for the same ask ends the older one with 204.
+    const first181 = papi(id(181), { id: "p181", tool: "Bash", what: "make tidy" });
+    await Bun.sleep(150);
+    const second181 = papi(id(181), { id: "p181", tool: "Bash", what: "make tidy" }, { signal: AbortSignal.timeout(500) }).catch(() => null);
+    check("permit: a newer request for the same ask ends the older one with 204", (await first181).status === 204);
+    await second181;
+
+    list = await until((l) => !!find(l, 170)?.permit && !!find(l, 173)?.permit && !!find(l, 176)?.permit);
+    const p170 = find(list, 170)?.permit;
+    check("permit: a mod holding the ask gives the card what it asks, held", p170?.id === "p170" && p170?.tool === "Bash" && p170?.what === SECRET_WHAT &&
+      p170?.state === "held" && p170?.allow === undefined && find(list, 170)?.needsYou === true, find(list, 170));
+    const w173 = find(list, 173)?.permit?.what ?? "";
+    check("permit: a long ask on several lines is one line, cut to 300", w173.length === 300 && w173.startsWith("printf 'first line' && echo second xxx") && !/\s\s|\n|\t/.test(w173), w173);
+    check("permit: two asks in one session, the card shows the oldest", find(list, 180)?.permit?.id === "p180a", find(list, 180)?.permit);
+
+    // The routes' checks.
+    check("permit: without the header, refused", (await papi(id(170), { id: "p170", tool: "Bash", what: "x" }, { header: false })).status === 403 &&
+      (await papi(`${id(170)}/decide`, { id: "p170", allow: true }, { header: false })).status === 403);
+    check("permit: a session ID that isn't one, 404", (await papi("not-a-session", { id: "x", tool: "Bash", what: "x" })).status === 404 &&
+      (await papi("not-a-session/decide", { id: "x", allow: true })).status === 404);
+    check("permit: only POST", (await papi(id(170), undefined, { method: "GET" })).status === 405);
+    check("permit: a body it doesn't take, 400", (await papi(id(170), "not json")).status === 400 &&
+      (await papi(id(170), { id: "", tool: "Bash", what: "x" })).status === 400 && (await papi(id(170), { id: "p", tool: "Bash" })).status === 400 &&
+      (await papi(id(170), { id: "p", tool: "x".repeat(101), what: "x" })).status === 400 && (await papi(`${id(170)}/decide`, { id: "p170", allow: "yes" })).status === 400);
+    check("permit: a decision for an ask it doesn't have, 404", (await decide(170, "p999", true)).status === 404);
+    check("permit: a decision for a session that isn't waiting, 409", (await decide(179, "p179", true)).status === 409);
+
+    // 176: decided while its mod is between rounds: on its way, so it doesn't need you; no mod comes back for it.
+    check("permit: 176 decided between rounds is taken", (await decide(176, "p176", true)).status === 204);
+    list = await state();
+    check("permit: 176 decided and on its way: it doesn't need you", find(list, 176)?.permit?.state === "sending" && find(list, 176)?.permit?.allow === true &&
+      find(list, 176)?.needsYou === false && !snap.attention.some((a: any) => a.id === id(176)), find(list, 176));
+
+    // 170 allowed after a few rounds; 171 denied; 177 allowed, then its session keeps waiting.
+    while (h170.rounds < 3) await Bun.sleep(100);
+    list = await state();
+    check("permit: 204 rounds keep the ask", find(list, 170)?.permit?.id === "p170" && find(list, 170)?.permit?.state === "held" && h170.status === 0, [h170, find(list, 170)?.permit]);
+    check("permit: 170 allowed", (await decide(170, "p170", true)).status === 204);
+    check("permit: 171 denied", (await decide(171, "p171", false)).status === 204);
+    check("permit: 177 allowed", (await decide(177, "p177", true)).status === 204);
+    await Promise.all([settled(h170), settled(h171), settled(h177)]);
+    check("permit: the held request gets the allow", h170.status === 200 && h170.decision === "allow", h170);
+    check("permit: the held request gets the deny", h171.status === 200 && h171.decision === "deny", h171);
+    list = await state();
+    check("permit: allowed and handed over, it doesn't need you", find(list, 170)?.permit?.state === "sent" && find(list, 170)?.permit?.allow === true && find(list, 170)?.needsYou === false, find(list, 170));
+    check("permit: denied and handed over, the card knows it was a deny", find(list, 171)?.permit?.state === "sent" && find(list, 171)?.permit?.allow === false, find(list, 171)?.permit);
+    check("permit: a second decision for the same ask, 409", (await decide(170, "p170", false)).status === 409);
+    at(170, { ev: "PostToolUse", tool: "Bash" }); // the tool ran
+    at(171, { ev: "PostToolUseFailure", tool: "Bash" }); // refused
+    // 172 answered in the app's dialog: its held request ends with 410 as soon as the line is read.
+    const wrote172 = Date.now();
+    at(172, { ev: "PostToolUse", tool: "Bash" });
+    // 178's hook line comes after its ask, which comes before its session is known.
+    const h178 = holdPermit(178, { id: "p178", tool: "Bash", what: "make docs" });
+    await Bun.sleep(300);
+    at(178, { ev: "UserPromptSubmit", prompt: "Task 178" });
+    at(178, { ev: "PermissionRequest", tool: "Bash" });
+    await settled(h172, 3000);
+    check("permit: answered in the dialog, the held request ends with 410 at once", h172.status === 410 && h172.endedAt - wrote172 < 1500, [h172, h172.endedAt - wrote172]);
+    list = await until((l) => !!find(l, 178)?.permit && !find(l, 170)?.permit);
+    check("permit: once the session moves on, the permit goes", find(list, 170)?.status === "working" && !find(list, 170)?.permit && !find(list, 171)?.permit && !find(list, 172)?.permit, [find(list, 170), find(list, 171)?.permit]);
+    check("permit: a settled ask can't be decided, 409", (await decide(170, "p170", true)).status === 409);
+    check("permit: an ask that came before its hook line shows once the session waits", find(list, 178)?.permit?.id === "p178" && find(list, 178)?.permit?.state === "held", find(list, 178));
+    check("permit: 178 allowed", (await decide(178, "p178", true)).status === 204);
+    await settled(h178);
+    check("permit: 178's held request gets the allow", h178.decision === "allow", h178);
+
+    // 180: one agent's wait clears, and the other ask falls back to its dialog.
+    at(180, { ev: "PostToolUse", tool: "Write" });
+    await Promise.all([settled(h180a, 3000), settled(h180b, 3000)]);
+    check("permit: when the session moves on, every ask it held ends with 410", h180a.status === 410 && h180b.status === 410, [h180a, h180b]);
+
+    // After the timers: 175's mod stopped asking; 176's decision was never picked up; 177's
+    // session keeps waiting after its allow (and stays sent); 179's session never showed the wait.
+    await settled(h179, 5000);
+    list = await until((l) => !find(l, 175)?.permit && find(l, 176)?.permit?.state === "failed", 6000);
+    check("permit: a mod that stops asking takes the permit with it", find(list, 175)?.status === "waiting" && !find(list, 175)?.permit && find(list, 175)?.needsYou === true, find(list, 175));
+    check("permit: a decision no mod picked up fails, and it needs you again", find(list, 176)?.permit?.state === "failed" && find(list, 176)?.needsYou === true &&
+      snap.attention.find((a: any) => a.id === id(176))?.words === "Couldn't send your answer", [find(list, 176), snap.attention.find((a: any) => a.id === id(176))]);
+    await Bun.sleep(4000); // well past the old 3 s window
+    list = await state();
+    check("permit: handed over while the session keeps waiting, it stays sent and doesn't need you", find(list, 177)?.permit?.state === "sent" && find(list, 177)?.needsYou === false, find(list, 177));
+    check("permit: an ask whose session never shows the wait ends with 410", h179.status === 410, h179);
+    check("permit: a dropped ask asked again gets 410", (await papi(id(179), { id: "p179", tool: "Read", what: "/work/plots/beds.md" })).status === 410);
+    at(176, { ev: "PostToolUse", tool: "Bash" });
+    list = await until((l) => !find(l, 176)?.permit);
+    check("permit: a failed one goes once the session moves on", find(list, 176)?.status === "working" && !find(list, 176)?.permit, find(list, 176));
+    at(177, { ev: "PostToolUse", tool: "Bash" });
+    list = await until((l) => !find(l, 177)?.permit);
+    check("permit: a sent one goes once the session moves on", find(list, 177)?.status === "working" && !find(list, 177)?.permit, find(list, 177));
+    quit.abort();
+  }
+
+  // 190–202. The advisor, from the transcript (scanned at startup, then the 3 s tick reads it).
+  {
+    const adv = async (ok: (l: any[]) => boolean, ms = 8000) => {
+      const end = Date.now() + ms;
+      let list = await state();
+      while (!ok(list) && Date.now() < end) {
+        await Bun.sleep(150);
+        list = await state();
+      }
+      return list;
+    };
+    const a = (l: any[], n: number) => find(l, n)?.advisor;
+    let list = await adv((l) => [191, 192, 193, 194, 196, 197, 199, 200, 201, 202].every((n) => a(l, n)?.model));
+    check("190 advisorModel on every row, a subagent's call or declaration, a quoted call or a request's tools: no advisor", find(list, 190) && !a(list, 190), find(list, 190));
+    check("197 turned on and never asked: the chip, with the declared model", a(list, 197)?.model === "claude-fable-5-2", a(list, 197));
+    check("198 turned on, then off: no chip", find(list, 198) && !a(list, 198), find(list, 198));
+    check("199 Opus turned on, then a Fable advisor answered: Fable", a(list, 199)?.model === "claude-fable-5-2", a(list, 199));
+    check("200 turned on more than 8 MB before the end, a 5 MB line between: found", a(list, 200)?.model === "claude-fable-5-2" && statSync(tp200).size > (13 << 20), a(list, 200));
+    check("191 after a call: the model from the call's row, and nothing else in the chip", a(list, 191)?.model === "claude-opus-5-5" && JSON.stringify(a(list, 191)) === '{"model":"claude-opus-5-5"}', a(list, 191));
+    check("192, 193, 194 and 196 after a call: the chip, with no asking", [192, 193, 194, 196].every((n) => a(list, n)?.model === "claude-fable-5-2" && !("asking" in a(list, n))), [192, 193, 194, 196].map((n) => a(list, n)));
+    check("195 asked earlier: the advisor", a(list, 195)?.model === "claude-fable-5-2", a(list, 195));
+    appendFileSync(join(dir, "t191.jsonl"), JSON.stringify(advAnswer("srvtoolu_191", "claude-fable-5-2")) + "\n");
+    // Its call scrolls out of the tail: more than 256 KB after it.
+    appendFileSync(tp195, Array.from({ length: 300 }, (_, i) => JSON.stringify(advised(`Row ${i} ${"x".repeat(1000)}`))).join("\n") + "\n");
+    list = await adv((l) => a(l, 191)?.model === "claude-fable-5-2");
+    check("191 the answer came: the model from its usage wins over the configured one", a(list, 191)?.model === "claude-fable-5-2", find(list, 191));
+    await Bun.sleep(3500); // the tail read has had its ticks
+    list = await state();
+    check("195 its call scrolled out of the tail: the advisor stays", a(list, 195)?.model === "claude-fable-5-2", a(list, 195));
+    // 201's transcript written anew, shorter than what was read of it, turning Opus on: read from scratch.
+    writeFileSync(join(dir, "t201.jsonl"), [advised("Starting over."), declare("claude-opus-5-5")].map((r) => JSON.stringify(r)).join("\n") + "\n");
+    // 202 turned off while the server runs (its chip is in sessions.db by now).
+    appendFileSync(join(dir, "t202.jsonl"), JSON.stringify(declare("claude-fable-5-2", false)) + "\n");
+    list = await adv((l) => a(l, 201)?.model === "claude-opus-5-5" && !a(l, 202));
+    check("201 its transcript written anew and shorter: read again from the start", a(list, 201)?.model === "claude-opus-5-5", a(list, 201));
+    check("202 turned off while running: the chip goes", find(list, 202) && !a(list, 202), find(list, 202));
+    check("advisor: /api/state carries only the model", [191, 197, 199, 200, 201].every((n) => Object.keys(a(list, n) ?? {}).join() === "model"), [191, 197, 199, 200, 201].map((n) => a(list, n)));
+    const shown = JSON.stringify(snap);
+    check("advisor: what the session asks and the answer reach neither the page nor the log", !shown.includes(SECRET_ADVICE) && !serverOutput.includes(SECRET_ADVICE));
+  }
+
   // A restart loses nothing: the week comes back from the database.
   server.kill();
   await server.exited;
+  {
+    // What a permission asks lives in memory only: in no file of the server's folder, and in nothing it printed.
+    const files = readdirSync(dir).filter((f) => f.startsWith("sessions.db") || f.endsWith(".log") || f.endsWith(".jsonl"));
+    const holding = files.filter((f) => readFileSync(join(dir, f), "latin1").includes(SECRET_WHAT));
+    check("permit: what it asks reaches neither sessions.db nor the log", files.some((f) => f === "sessions.db") && holding.length === 0 && !serverOutput.includes(SECRET_WHAT), holding);
+    const advice = files.filter((f) => !/^t\d+\.jsonl$/.test(f) && readFileSync(join(dir, f), "latin1").includes(SECRET_ADVICE));
+    check("advisor: what the session asks and the answer reach no file of the server's", advice.length === 0 && files.includes("sessions.db"), advice);
+    // How far each transcript was read is kept with the model.
+    const db = new Database(join(dir, "sessions.db"), { readonly: true });
+    const row = (n: number) => db.query("SELECT advisor, advisor_read FROM sessions WHERE sid = ?").get(id(n)) as { advisor: string | null; advisor_read: number | null } | null;
+    const kept = { 200: row(200), 198: row(198), 202: row(202), 197: row(197) };
+    db.close();
+    check("200 sessions.db keeps the model and how far its transcript was read: all of it", kept[200]?.advisor === "claude-fable-5-2" && kept[200]?.advisor_read === statSync(tp200).size, kept[200]);
+    check("198 and 202 turned off: sessions.db keeps no model, with how far it read", kept[198]?.advisor === null && kept[198]?.advisor_read === statSync(join(dir, "t198.jsonl")).size &&
+      kept[202]?.advisor === null && kept[202]?.advisor_read === statSync(join(dir, "t202.jsonl")).size, [kept[198], kept[202]]);
+    check("advisor: sessions.db keeps only a model name and a number", Object.values(kept).every((r) => r && (r.advisor === null || /^claude-[a-z0-9.-]+$/.test(r.advisor)) && Number.isInteger(r.advisor_read)), kept);
+  }
+  // 200's row turning the advisor on becomes a line of the same length that says nothing: a
+  // restart that read the transcript from the start again would lose the chip.
+  {
+    const text = readFileSync(tp200, "latin1");
+    const at = text.indexOf(declared200);
+    const blank = JSON.stringify({ type: "x", pad: "" });
+    const same = blank.slice(0, -2) + "z".repeat(declared200.length - blank.length) + '"}';
+    check("200 the row turning it on is overwritten in place", at > 0 && same.length === declared200.length);
+    const fd = openSync(tp200, "r+");
+    writeSync(fd, Buffer.from(same), 0, same.length, at);
+    closeSync(fd);
+  }
+  rmSync(tp195); // so after the restart, 195's advisor can only come from sessions.db
   server = start();
   s = await state();
   // The Claude app writes 147's file again after the restart (its last activity moves on):
@@ -1025,6 +1339,14 @@ try {
   check("147 after a restart, a next-step box that asks still asks, whatever the app's note says", find(s, 147)?.status === "asks" && find(s, 147)?.needsYou === true, find(s, 147));
   check("135 after a restart, the buttons come back from the transcript", JSON.stringify(find(s, 135)?.answers) === JSON.stringify([{ label: "Yes, post it" }, { label: "Verify", app: "verify" }]) &&
     find(s, 135)?.canAnswer === false && find(s, 135)?.status === "asks", find(s, 135));
+  check("195 after a restart, the advisor comes back from sessions.db", find(s, 195)?.advisor?.model === "claude-fable-5-2", find(s, 195));
+  {
+    await Bun.sleep(1500); // the first passes have had their time
+    const again = await state();
+    check("200 after a restart, its transcript isn't read from the start again: the chip stays", find(again, 200)?.advisor?.model === "claude-fable-5-2", find(again, 200));
+    check("197 and 201 after a restart, the chips stay", find(again, 197)?.advisor?.model === "claude-fable-5-2" && find(again, 201)?.advisor?.model === "claude-opus-5-5", [find(again, 197), find(again, 201)]);
+    check("198 and 202 after a restart, turned off stays off", find(again, 198) && !find(again, 198)?.advisor && find(again, 202) && !find(again, 202)?.advisor, [find(again, 198), find(again, 202)]);
+  }
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
 
   // A sessions.db that isn't a database is moved aside as sessions.db.bad, and the server starts fresh.

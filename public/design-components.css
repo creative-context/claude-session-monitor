@@ -1,4 +1,4 @@
-/* mac-app-design 0.14.0 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.15.0 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Components: the pieces both apps draw, with their states. Class names are the first
    app's, so nothing renames; a few aliases name a state by its meaning (needs, soft). */
 
@@ -42,14 +42,15 @@ header { display: flex; align-items: center; gap: 8px; height: 24px; flex: none;
 header .name { flex: none; font-family: var(--font-family-heading); font-size: var(--csm-text-title); line-height: var(--csm-lh-title);
   font-weight: var(--font-weight-heading); margin-right: 6px; }
 header .spacer { flex: 1; }
-/* Counts: the number reads first, in white; the words after it in gray. What needs you
-   stays orange. Each one is a button with a chevron that opens what's behind it. */
+/* Counts: no fill; the number reads first, in white; the words after it in gray; the mark in
+   its color, amber for what needs you. Each one is a button with a chevron that opens what's
+   behind it. */
 #counts { display: flex; gap: 8px; min-width: 0; overflow: hidden; }
-#counts .tag { flex: none; }
+#counts .tag { flex: none; background-color: transparent; }
 #counts .tag > span:not(.pdot):not(.sdot) { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
 #counts .tag .word { color: var(--color-text-secondary); font-weight: 400; }
-#counts .tag.s-waiting > span:not(.pdot), #counts .tag.s-waiting .word,
-#counts .tag.s-needs > span:not(.pdot), #counts .tag.s-needs .word { color: var(--color-text-orange); }
+#counts .tag .pdot { color: var(--color-needs); }
+#counts .tag svg.i:not(.chev) { color: var(--color-text-secondary); }
 #counts .tag.working .sdot { color: var(--color-accent); }
 #counts.tight .tag .word { display: none; }
 #counts.tighter .tag.low { display: none; }
@@ -66,15 +67,15 @@ header .spacer { flex: 1; }
   display: inline-flex; align-items: center; gap: 6px;
   height: 28px; padding: 0 12px;
   border-radius: var(--radius-element);
-  background: var(--obsidian-veil-selected); color: var(--color-text-primary);
+  background: var(--color-fill); color: var(--color-text-primary);
   font-size: var(--csm-text-body);
 }
-.btn:hover { background: var(--color-overlay-pressed); }
+.btn:hover { background: var(--color-fill-hover); }
 .btn:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
 .btn svg.i { width: 13px; height: 13px; }
 .btn.small { height: 22px; padding: 0 8px; font-size: var(--csm-text-meta); }
 .btn.primary { background: var(--color-accent); color: var(--color-on-accent); }
-.btn.primary:hover { background: #3A80E0; }
+.btn.primary:hover { background: var(--color-accent-hover); }
 .btn.ghost { background: none; color: var(--color-text-secondary); }
 .btn.ghost:hover { background: var(--color-overlay-hover); color: var(--obsidian-text-hover); }
 .btn.danger { background: #B5383C; color: var(--color-on-accent); }
@@ -91,14 +92,14 @@ header .spacer { flex: 1; }
 .icon-btn svg.i { width: 15px; height: 15px; }
 
 /* ---------- view switch (in a browser; an app has it in its toolbar) ---------- */
-.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-container); background: var(--color-background-card); }
+.seg { display: inline-flex; gap: 2px; padding: 2px; border-radius: var(--radius-container); background: var(--color-background-region); }
 .seg button, .seg a {
   all: unset; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;
   height: 24px; padding: 0 10px; border-radius: var(--radius-element);
   color: var(--color-text-secondary); font-size: var(--csm-text-body);
 }
 .seg button:hover, .seg a:hover { color: var(--obsidian-text-hover); }
-.seg button[aria-selected="true"], .seg a[aria-current="page"] { background: var(--color-overlay-pressed); color: var(--color-text-primary); }
+.seg button[aria-selected="true"], .seg a[aria-current="page"] { background: var(--color-fill-hover); color: var(--color-text-primary); }
 .seg a:focus-visible, .seg button:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
 
 /* ---------- fields ---------- */
@@ -107,7 +108,7 @@ header .spacer { flex: 1; }
 .search input, .field {
   all: unset; box-sizing: border-box; width: 100%; height: 28px;
   padding: 0 10px; border-radius: var(--radius-element);
-  background: var(--color-background-card); color: var(--color-text-primary); font-size: var(--csm-text-body);
+  background: var(--color-background-region); color: var(--color-text-primary); font-size: var(--csm-text-body);
 }
 .search input { padding-left: 28px; }
 .search input:focus, .field:focus { background: var(--obsidian-veil-selected); }
@@ -117,7 +118,7 @@ header .spacer { flex: 1; }
   position: relative; cursor: pointer; transition: background var(--duration-fast); }
 .switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--color-text-primary);
   transition: transform 150ms var(--ease-standard); }
-/* On in the system blue, as macOS draws it: a page with many switches keeps orange for "needs you". */
+/* On in the accent: a page with many switches keeps amber for "needs you". */
 .switch:checked { background: var(--color-accent); }
 .switch:checked::after { transform: translateX(12px); }
 /* A small segmented choice inside a panel. */
@@ -133,7 +134,7 @@ header .spacer { flex: 1; }
   font-family: var(--font-family-heading); font-size: var(--csm-text-body); line-height: var(--csm-lh-body);
   font-weight: var(--font-weight-medium); color: var(--obsidian-text-hover);
 }
-.group-head svg.i { width: 14px; height: 14px; }
+.group-head svg.i { width: 14px; height: 14px; color: var(--color-text-secondary); }
 .group.active .group-head svg.i { width: 14px; height: 14px; }
 .group-head .count, .group-head .hint { color: var(--color-text-secondary); font-family: var(--font-family-body); font-weight: 400; }
 /* The zone that matters now is a title; the rest are labels. */
@@ -148,18 +149,21 @@ header .spacer { flex: 1; }
   background: var(--color-background-card); color: var(--color-text-secondary); font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
 .quiet b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
 
-/* ---------- banner: something wrong (red) or new (blue) ---------- */
+/* ---------- banner: something wrong or new, on a card's surface; its icon carries the color ---------- */
 .banner { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; padding: 8px 12px; border-radius: var(--radius-container);
-  background: color-mix(in srgb, var(--color-error) 18%, transparent); color: var(--color-text-red); }
+  background: var(--color-background-card); color: var(--obsidian-text-hover); }
 .banner svg.i { width: 14px; height: 14px; }
+.banner > svg.i { color: var(--color-error); }
 .banner b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
-.banner.update { background: var(--color-accent-muted); color: var(--color-text-accent); }
+.banner.update > svg.i { color: var(--color-mark-working); }
 .banner .btn { margin-left: auto; height: 24px; }
 .banner .x { all: unset; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--color-text-secondary); }
 .banner .x:hover { background: var(--obsidian-veil-selected); color: var(--color-text-primary); }
 .banner .x:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
 
-/* ---------- card: surfaces, no lines; the whole card takes its state's color ---------- */
+/* ---------- card: solid surfaces, no lines. What needs you is a bright amber card, the only light
+   surface in the window; errors, work and the zone's done cards take a quiet tint; the rest
+   share one gray surface. ---------- */
 @property --tint { syntax: "<color>"; inherits: false; initial-value: transparent; }
 .card {
   --tint: var(--color-background-card);
@@ -174,39 +178,54 @@ header .spacer { flex: 1; }
 /* Raised: a card that rises above a tinted region (a column on its own surface), so the page,
    the region and the card read as three depths. One lighter step and a soft shadow, no line.
    Its meta takes the on-tint gray to keep 4.5:1 on the lighter step. The states below keep
-   their own tint and meta; work steps up in its own blue. */
+   their own tint and meta; work steps up in its own indigo. */
 .card.raised { --tint: color-mix(in srgb, #FFFFFF 7%, var(--color-background-card)); --meta: var(--csm-text-on-tint); box-shadow: 0 1px 2px #00000080; }
-/* Needs you and errors get the strongest tint; work a quieter blue; done a faint green. */
-.card.waiting, .card.asks, .card.needs { --tint: color-mix(in srgb, var(--color-warning) 34%, transparent); --meta: var(--color-text-orange); }
-.card.error { --tint: color-mix(in srgb, var(--color-error) 34%, transparent); --meta: var(--color-text-red); }
-.card.working { --tint: color-mix(in srgb, var(--color-accent) 16%, transparent); --meta: var(--csm-text-on-tint); }
-.card.working.background, .card.working.soft { --tint: color-mix(in srgb, var(--color-accent) 10%, transparent); }
-/* Raised work takes its step in its own color, a little more blue, so it still rises from a blue region. */
+/* Needs you: the amber card, with black words (--meta is the question's near-black). An old
+   question (.stale) stays a plain card. --dot is the state's dot, for a page that draws one. */
+.card:is(.waiting, .asks, .needs):not(.stale) { --tint: var(--color-needs); --meta: var(--color-on-needs-text); --dot: var(--color-on-needs); }
+/* Errors crimson and work indigo, a quiet step of their color; their gray words take --color-text-tinted. */
+.card.error:not(.stale) { --tint: var(--color-tint-error); --meta: var(--color-text-tinted); }
+.card.working:not(.stale) { --tint: var(--color-tint-working); --meta: var(--color-text-tinted); --dot: var(--color-mark-working); }
+/* Raised work takes its step in its own color, a little more indigo, so it still rises from an indigo region. */
 .card.raised.working { --tint: color-mix(in srgb, var(--color-accent) 20%, var(--color-background-card)); }
 .card.raised.working.background, .card.raised.working.soft { --tint: color-mix(in srgb, var(--color-accent) 14%, var(--color-background-card)); }
-.card.done { --tint: color-mix(in srgb, var(--color-success) 14%, transparent); --meta: var(--csm-text-on-tint); }
 /* Old news keeps its tag's color but drops the loud card. */
 .card.stale { --tint: var(--color-background-card); --meta: var(--color-text-secondary); }
-/* Hover and press add one step of light on top of the state color; press responds on the way down. */
-.card:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
-.card:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); transform: scale(0.985); }
+/* Done: tinted only in the zone that matters now (.group.active); elsewhere a plain card. */
+.group.active .card.done { --tint: var(--color-tint-done); --meta: var(--color-text-tinted); }
+/* Hover and press: the card's next solid step; press responds on the way down. Selected (its
+   details are open) is hover held. Each tint has its own hover step. */
+.card:hover, .card.selected { background: var(--color-card-hover); }
+.card:active { background: var(--color-card-pressed); transform: scale(0.985); }
+.card:is(.waiting, .asks, .needs):not(.stale):is(:hover, .selected) { background: var(--color-needs-hover); }
+.card:is(.waiting, .asks, .needs):not(.stale):active { background: var(--color-needs-pressed); }
+.card.error:not(.stale):is(:hover, .selected) { background: var(--color-tint-error-hover); }
+.card.working:not(.stale):is(:hover, .selected) { background: var(--color-tint-working-hover); }
+.group.active .card.done:is(:hover, .selected) { background: var(--color-tint-done-hover); }
 .card:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
 .card.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
-/* Selected (its details are open): a step up in surface, as hover but held, and no line. */
-.card.selected { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
 .card.new { animation: enter 320ms var(--ease-standard) both; }
 .card.fresh .tag svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
 
 /* Its parts, top to bottom: state tag and time; title; detail lines; tags at the foot. */
 .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
 .card .top .tag { font-weight: 600; }
-/* Only what needs you gets a solid tag; work and done are soft, so they don't pull the eye. */
+/* Small tags in a card: work and done soft; what needs you solid, as on an old question. */
 .card .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); }
 .card .tag.s-waiting, .card .tag.s-asks, .card.needs .top .tag { background: var(--color-warning); color: var(--color-on-light); }
 .card .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); }
 .card .tag.s-error { background: #B5383C; color: var(--color-on-accent); }
-.card.stale .tag.s-asks { background: var(--color-warning-muted); color: var(--color-text-orange); }
+/* An old question's tag, asked or waiting, drops to the soft orange: with no fill at the top of
+   a card it is the orange words and dot, 9.3:1 on the card. */
+.card.stale .tag.s-asks, .card.stale .tag.s-waiting { background: var(--color-warning-muted); color: var(--color-text-orange); }
 .card.stale .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); }
+/* The state at the top of a card is its words and its mark in the state's color, nothing behind. */
+.card .top .tag:is(.s-working, .s-done, .s-error, .s-missed, .s-idle, .s-ended, .s-asks, .s-waiting) { background: none; padding: 0; gap: 6px; }
+.card .top .tag.s-error { color: var(--color-text-red); }
+.card .top .tag.s-error > svg.i { color: var(--color-error); }
+/* On the amber card the state is its words in black and the beating dot. */
+.card:is(.waiting, .asks, .needs):not(.stale) .top .tag { background: none; padding: 0; color: var(--color-on-needs); font-weight: 600; }
+.card:is(.waiting, .asks, .needs):not(.stale) .top .tag > :is(.pdot, svg.i) { color: var(--color-on-needs); }
 .time { display: inline-flex; align-items: center; gap: 4px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; }
 .card .time { font-size: 11.5px; font-weight: 500; font-variant-numeric: tabular-nums; color: var(--meta); }
 .title {
@@ -216,12 +235,15 @@ header .spacer { flex: 1; }
   display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere;
 }
 .card .title { margin-top: var(--card-title-gap); font-size: var(--card-title-size); line-height: var(--card-title-lh); -webkit-line-clamp: var(--card-title-lines); }
+.card:is(.waiting, .asks, .needs):not(.stale) .title { color: var(--color-on-needs); }
 .detail { margin-top: 4px; color: var(--color-text-secondary); }
 .card .detail { margin-top: var(--card-detail-gap); font-size: var(--card-detail-size); line-height: var(--card-detail-lh); }
 .detail .sub { color: var(--color-text-secondary); }
+/* A card's words are its gray (--meta); what it names (b) a step brighter. On the amber card
+   all of them are the question's near-black; on an old one, all gray. */
 .card .detail, .card .detail .sub { color: var(--meta); }
-.card.waiting .detail, .card.waiting .detail b, .card.asks .detail, .card.asks .detail b, .card.needs .detail { color: var(--color-text-orange); }
-.card.error .detail { color: var(--color-text-red); }
+.card .detail b { color: var(--obsidian-text-hover); }
+.card:is(.waiting, .asks, .needs):not(.stale) :is(.detail b, .detail .line[data-what] .txt) { color: var(--meta); }
 .card.stale .detail, .card.stale .detail b { color: var(--color-text-secondary); }
 .detail .line { display: flex; align-items: center; gap: 6px; min-width: 0; white-space: nowrap; }
 .detail .line .txt { overflow: hidden; text-overflow: ellipsis; min-width: 0; }
@@ -231,16 +253,21 @@ header .spacer { flex: 1; }
 .detail .wrap { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; overflow-wrap: anywhere; }
 .detail b { color: var(--color-text-primary); font-weight: 400; }
 .tags { margin-top: auto; display: flex; gap: 4px; overflow: hidden; }
-.card .tags { padding-top: var(--card-tags-gap); }
+.card .tags { padding-top: var(--card-tags-gap); gap: 14px; }
 .tags .tag { flex: 0 1 auto; }
-.card .tags .tag { color: var(--meta); }
+/* Tags at a card's foot: plain words in the card's gray, with their icons, no fill. */
+.card .tags .tag { color: var(--meta); background: none; padding: 0; }
 /* A name from the file system (a folder) is the one thing set in mono. */
 .tags .tag.name { flex: 0 100 auto; min-width: 40px; }
 .card .tags .tag.name { font-family: var(--font-family-mono); font-size: 10.5px; font-weight: 500; }
 /* A button among the tags: what to do next, on the right. */
-.tags .act, .card .tags .act { margin-left: auto; flex: none; background: var(--color-overlay-pressed); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
-.tags .act:hover { background: #FFFFFF26; }
-.card.waiting .act, .card.asks .act, .card.needs .act { background: #FFFFFF26; }
+.tags .act, .card .tags .act { margin-left: auto; flex: none; padding: 0 6px; background: var(--color-fill); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+.tags .act:hover, .card .tags .act:hover { background: var(--color-fill-hover); }
+/* On the amber card, a tag in a fit card's row is plain words in its near-black, and a button
+   among the tags is black with amber words, like its answers. */
+.card:is(.waiting, .asks, .needs):not(.stale) > .r2 > .tag { background: none; padding: 0; color: var(--meta); }
+.card:is(.waiting, .asks, .needs):not(.stale) :is(.tags, .r2) .act { padding: 0 6px; background: var(--color-on-needs); color: var(--color-needs); }
+.card:is(.waiting, .asks, .needs):not(.stale) :is(.tags, .r2) .act:hover { background: var(--color-on-needs-hover); }
 /* A card as tall as its words, for lists that stack many (.card.fit). Two rows instead of four:
    the title, up to two lines, with the time on its right (.r1); then one row of where it stands
    (.r2): a tag, a detail (.det, an icon and its .txt), a name in mono, and a button on the right.
@@ -258,12 +285,11 @@ header .spacer { flex: 1; }
 .card.fit > .r2 svg.i { width: 12px; height: 12px; flex: none; }
 .card.fit > .r2 > .tag { flex: none; height: 18px; padding: 0 6px; font-size: 11px; font-weight: 600; }
 .card.fit > .r2 > .tag.name { flex: 0 100 auto; min-width: 0; overflow: hidden; font-family: var(--font-family-mono); font-size: 10.5px; font-weight: 500; background: none; padding: 0; color: var(--meta); }
-.card.fit > .r2 > .act { margin-left: auto; background: var(--color-overlay-pressed); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
-.card.fit > .r2 > .act:hover { background: #FFFFFF26; }
-.card.fit.waiting > .r2 > .act, .card.fit.asks > .r2 > .act, .card.fit.needs > .r2 > .act { background: #FFFFFF26; }
+.card.fit > .r2 > .act { margin-left: auto; background: var(--color-fill); color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
+.card.fit > .r2 > .act:hover { background: var(--color-fill-hover); }
 /* Paused or closed: a step down in brightness, not opacity. */
 .idle .title, .ended .title { color: var(--csm-text-on-tint); }
-.idle .detail, .ended .detail, .idle .detail b, .ended .detail b { color: var(--color-text-secondary); }
+.idle .detail, .ended .detail { color: var(--color-text-secondary); }
 /* Cards fill as many columns as fit; one column, as wide as the window, when it's narrower than a card. */
 .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, var(--csm-card-w)), 1fr)); grid-auto-rows: var(--csm-card-h); gap: 8px; }
 @media (prefers-contrast: more) { .card, .hrow { box-shadow: inset 0 0 0 1px #FFFFFF40; } .card.raised { box-shadow: inset 0 0 0 1px #FFFFFF40, 0 1px 2px #00000080; } }
@@ -274,17 +300,16 @@ header .spacer { flex: 1; }
 /* A control inside a card (an answer, a mic, a tag that opens something) presses itself, not
    the card: mark it .ctl, and while it's pressed the card neither sinks nor darkens. A button
    sinks itself to 0.95 on the way down; a .tag stays put. Reduce Motion keeps them still. */
-.card:active:has(.ctl:active) { background: var(--card-bg, var(--tint)); transform: none; }
+.card:active:has(.ctl:active), .card:is(.waiting, .asks, .needs):not(.stale):active:has(.ctl:active) { background: var(--card-bg, var(--tint)); transform: none; }
 .card .ctl:not(.tag) { transition-property: background-color, transform; transition-duration: var(--duration-fast); transition-timing-function: var(--ease-standard); }
 .card .ctl:not(.tag):active { transform: scale(0.95); }
 @media (prefers-reduced-motion: reduce) { .card .ctl:not(.tag):active { transform: none; } }
-/* Lifted: a card with a drawer coming out from under it (.pop.anchored.drawer). On top, and
-   opaque (its tint over the page's color), so the drawer starts under its round corners and
-   reads as coming from beneath it. Its own shadow falls on the drawer, round at its corners
-   like the card: there from the first frame to the last, never animated. Hover and press keep
-   its plain color. */
-.card.lifted, .card.lifted:hover, .card.lifted:active { z-index: 31; --card-bg: linear-gradient(var(--tint), var(--tint)), var(--color-background-body); background: var(--card-bg);
-  box-shadow: 0 3px 10px -1px #0000008C, 0 1px 3px #00000059; }
+/* Lifted: a card with a drawer coming out from under it (.pop.anchored.drawer). On top, so
+   the drawer starts under its round corners and reads as coming from beneath it. Solid: the
+   card's own surface, its tint included (amber, done, working, error), with no shadow. Hover
+   and press keep that color. */
+.card.lifted, .card.lifted:hover, .card.lifted:active { z-index: 31; --card-bg: var(--tint); background: var(--card-bg); box-shadow: none; }
+.card:is(.waiting, .asks, .needs):not(.stale).lifted, .card:is(.waiting, .asks, .needs):not(.stale).lifted:is(:hover, :active) { --card-bg: var(--color-needs); }
 
 /* ---------- history row: one line per item, a second one for what it said ---------- */
 .hlist { display: flex; flex-direction: column; gap: 4px; }
@@ -296,19 +321,19 @@ header .spacer { flex: 1; }
   padding: 10px 12px; border-radius: var(--radius-container); background: var(--tint);
   transition: --tint 450ms var(--ease-standard), box-shadow 700ms var(--ease-standard), opacity 220ms var(--ease-standard);
 }
-.hrow.live.s-working { --tint: color-mix(in srgb, var(--color-accent) 14%, transparent); }
-.hrow.live.s-waiting, .hrow.live.s-asks { --tint: color-mix(in srgb, var(--color-warning) 24%, transparent); }
-.hrow.live.s-error { --tint: color-mix(in srgb, var(--color-error) 24%, transparent); }
-.hrow:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
-.hrow:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); }
+/* Rows share the card's surface whatever their state; one that needs you now (.live) is amber. */
+.hrow.live:is(.s-waiting, .s-asks) { --tint: var(--color-needs); }
+.hrow:hover { background: var(--color-card-hover); }
+.hrow:active { background: var(--color-card-pressed); }
+.hrow.live:is(.s-waiting, .s-asks):is(:hover, :active) { background: var(--color-needs-hover); }
 .hrow:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
 .hrow .hicon { grid-row: 1 / 3; align-self: start; padding-top: 2px; color: var(--color-text-secondary); }
 .hrow .hicon svg.i { width: 16px; height: 16px; }
 .hrow:not(:has(.hsnip)) .hicon { grid-row: 1; align-self: center; padding-top: 0; }
-.hrow.s-waiting .hicon, .hrow.s-asks .hicon { color: var(--color-text-orange); }
+.hrow.s-waiting .hicon, .hrow.s-asks .hicon { color: var(--color-needs); }
 .hrow.s-error .hicon { color: var(--color-text-red); }
 .hrow.s-done .hicon { color: var(--color-text-green); }
-.hrow.s-working .hicon { color: var(--color-text-accent); }
+.hrow.s-working .hicon { color: var(--color-mark-working); }
 .hrow .htitle { display: flex; align-items: baseline; gap: 8px; min-width: 0; font-family: var(--font-family-heading);
   font-weight: var(--font-weight-heading); font-size: var(--csm-text-body); color: var(--color-text-primary); white-space: nowrap; }
 .hrow .htitle .hstate { font-family: var(--font-family-body); flex: none; }
@@ -317,6 +342,9 @@ header .spacer { flex: 1; }
 .hrow .hsnip { grid-column: 2 / 5; color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .hrow.s-asks .hsnip, .hrow.s-waiting .hsnip { color: var(--color-text-orange); }
 .hrow.s-error .hsnip { color: var(--color-text-red); }
+.hrow .tag.name { background: none; padding: 0; }
+.hrow.live:is(.s-waiting, .s-asks) :is(.htitle, .htitle .t, .hicon, .hstate) { color: var(--color-on-needs); }
+.hrow.live:is(.s-waiting, .s-asks) :is(.hsnip, .htime, .tag.name, .tag.name svg.i) { color: var(--color-on-needs-text); }
 .more { display: flex; justify-content: center; margin-top: 12px; }
 
 /* ---------- popover: a raised card with what's behind a count ---------- */
@@ -329,7 +357,7 @@ header .spacer { flex: 1; }
 .pop.open { opacity: 1; visibility: visible; transform: none; transition-delay: 0s; }
 .pop-head { display: flex; align-items: center; gap: 6px; padding: 6px 8px 8px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta);
   font-weight: var(--font-weight-medium); color: var(--color-text-secondary); }
-.pop-head svg.i { width: 12px; height: 12px; }
+.pop-head svg.i { width: 12px; height: 12px; color: var(--color-text-secondary); }
 .prow { all: unset; box-sizing: border-box; width: 100%;
   display: grid; grid-template-columns: 14px minmax(0, 1fr) auto; column-gap: 8px; row-gap: 1px; align-items: center;
   padding: 6px 8px; border-radius: 6px; }
@@ -342,7 +370,8 @@ header .spacer { flex: 1; }
   color: var(--color-text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .prow .pm { font-size: var(--csm-text-meta); color: var(--color-text-secondary); white-space: nowrap; }
 .prow .ps { grid-column: 2 / 4; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.prow.s-waiting .pi, .prow.s-asks .pi, .prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
+.prow.s-waiting .pi, .prow.s-asks .pi { color: var(--color-needs); }
+.prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
 .prow.s-needs .pm { color: var(--color-text-orange); }
 .prow.s-error .pi, .prow.s-error .ps { color: var(--color-text-red); }
 .prow.s-working .pi { color: var(--color-text-accent); }
@@ -374,9 +403,10 @@ header .spacer { flex: 1; }
    it. It closes the same way back, quicker and speeding up. .above (no room below) grows
    upward: the page moves its top as it grows, so its foot stays at the card. Never 0 px tall:
    an empty clip would drop its words from the page's text, and VoiceOver's; the 1 px it keeps
-   is under the card. Reduce Motion only fades it. */
+   is under the card. Reduce Motion only fades it. Its surface is the fields' color, a tray a
+   step below the cards, so it stays apart from any card it comes out of, plain or tinted. */
 .pop.anchored.drawer { z-index: 30; padding: 0; height: 1px; overflow: hidden; transform: none; display: flex; flex-direction: column; justify-content: flex-end;
-  border-radius: 0 0 var(--radius-container) var(--radius-container);
+  border-radius: 0 0 var(--radius-container) var(--radius-container); background: var(--color-background-region);
   --drawer-out: cubic-bezier(0.4, 0, 1, 1); /* back in, speeding up as it goes */
   transition: height var(--duration-exit) var(--drawer-out), top var(--duration-exit) var(--drawer-out), opacity 60ms linear calc(var(--duration-exit) - 60ms), visibility 0s linear var(--duration-exit); }
 .pop.anchored.drawer.open { height: var(--h, auto); opacity: 1; transform: none;
@@ -410,6 +440,33 @@ header .spacer { flex: 1; }
 .pop > .scroll-fade { --fade-color: var(--color-surface-raised); --fade-size: 24px; margin-inline: -6px; }
 .pop > .scroll-fade.up { top: -6px; }
 .pop > .scroll-fade.down { bottom: -6px; }
+
+/* ---------- the Whole edge: a list's top edge without a band ---------- */
+/* An alternative to the bands for a list of cards, where a dark band over a light card would
+   read as a smear. Put data-scroll-edge="whole" on the box that scrolls: its bands hide, and
+   each card or row going under the top edge is cut at the edge line, keeping its round
+   corners, and fades whole as it goes, gone by 70% of the way under; a group head only fades.
+   The bottom edge is a plain cut. Each piece's own view timeline drives it, so the browser
+   works it out in the scroll's own frame; view(block 0px) keeps the box's scroll-padding from
+   moving the edge line. A card that just arrived (.card.new) keeps its entry alongside.
+   Where view timelines aren't supported, or under Reduce Motion (which stops every animation),
+   the page's script does it: on a card, row or group head going under the top edge it sets
+   data-edge="up", --sf (0 to 1, how much of it still shows) and, on cards and rows, --cut (how
+   much of it is past the edge). */
+[data-scroll-edge="whole"] > .scroll-fade { visibility: hidden; }
+[data-scroll-edge="whole"] :is(.card, .hrow, .group-head) { filter: opacity(var(--sf, 1)); }
+[data-scroll-edge="whole"] :is(.card, .hrow)[data-edge="up"] { clip-path: inset(var(--cut) 0 0 0 round var(--radius-container)); }
+@keyframes csm-whole { 0% { clip-path: inset(0 0 0 0 round var(--radius-container)); filter: opacity(1); } 70% { filter: opacity(0); } 100% { clip-path: inset(100% 0 0 0 round var(--radius-container)); filter: opacity(0); } }
+@keyframes csm-whole-fade { 0% { filter: opacity(1); } 70%, 100% { filter: opacity(0); } }
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    [data-scroll-edge="whole"] :is(.card, .hrow) { animation: csm-whole 1ms linear both; animation-timeline: view(block 0px); animation-range: exit 0% exit 100%; }
+    [data-scroll-edge="whole"] .group-head { animation: csm-whole-fade 1ms linear both; animation-timeline: view(block 0px); animation-range: exit 0% exit 100%; }
+    [data-scroll-edge="whole"] .card.new {
+      animation: enter 320ms var(--ease-standard) both, csm-whole 1ms linear both;
+      animation-timeline: auto, view(block 0px); animation-range: normal, exit 0% exit 100%; }
+  }
+}
 
 /* ---------- panel: a raised surface on the right with one item's details ---------- */
 .panel { position: absolute; z-index: 20; right: 16px; width: min(340px, calc(100% - 32px)); overflow: auto; scrollbar-width: none;

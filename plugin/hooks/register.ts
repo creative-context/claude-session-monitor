@@ -1,6 +1,6 @@
 import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 
-// Claude Session Monitor's side inside each session. Two jobs, nothing on screen:
+// Claude Session Monitor's side inside each session. Three jobs, nothing on screen:
 //
 // Usage, from the readings Claude Code already takes: each time the plan's limits change,
 // the two percentages and when they reset go to ~/.claude-session-monitor/usage.json, the
@@ -18,6 +18,14 @@ import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 // hands over a label the session itself offered or your own words, and only after your click.
 // It sends nothing but the session's ID in the address, and with the app closed it just asks
 // again every 15 s. It never runs in the app's own usage check (CSM_PROBE).
+//
+// Permissions: when the session asks for a permission, its card in the app shows what it asks
+// for with Allow and Deny. This sends the app's local server (127.0.0.1 only) the session's ID
+// in the address and, in the body, the tool's name, what it asks for as one line of up to 300
+// characters (the command, the file, the address…), an ID for the ask and the subagent's ID
+// if one asks; then it waits for your click and returns it to the session as the hook's
+// decision. The session's own dialog shows all the while: answered there, or with the app
+// closed, this steps aside and the dialog decides.
 
 // ---------------------------------------------------------------- usage
 
@@ -113,9 +121,87 @@ async function keepListening($: EngineInterface) {
   if (!running) await listen($)
 }
 
+// ---------------------------------------------------------------- permissions
+
+// Their dialogs are a question or a plan for you; a hook's allow doesn't settle them.
+const SKIP = new Set(['AskUserQuestion', 'ExitPlanMode'])
+const MAX_WHAT = 300
+const ASK_FOR_MS = 60 * 60_000 // after an hour of rounds the dialog alone decides
+const DENIED = "Denied from the session's card."
+const FIELDS = ['command', 'file_path', 'path', 'url', 'query', 'pattern', 'title', 'prompt', 'description']
+
+const str = (v: unknown): string | undefined => (typeof v === 'string' && v.trim() ? v : undefined)
+
+// What the permission is for, as one line: the command, the file, the address, the search...
+export function whatOf(tool: string, input: unknown): string {
+  const x = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>
+  let what: string | undefined
+  if (tool === 'Bash') what = str(x.command)
+  else if (['Edit', 'Write', 'Read', 'MultiEdit'].includes(tool)) what = str(x.file_path)
+  else if (tool === 'NotebookEdit') what = str(x.notebook_path)
+  else if (tool === 'WebFetch') what = str(x.url)
+  else if (tool === 'WebSearch') what = str(x.query)
+  else if (tool === 'Glob' || tool === 'Grep') {
+    const p = str(x.pattern)
+    what = p && (str(x.path) ? `${p} in ${x.path}` : p)
+  } else if (tool === 'Skill') what = str(x.skill)
+  what ??= FIELDS.map((k) => str(x[k])).find((v) => v !== undefined)
+  if (what === undefined) {
+    try {
+      what = JSON.stringify(input) ?? ''
+    } catch {
+      what = ''
+    }
+  }
+  return what.slice(0, MAX_WHAT * 20).replace(/\s+/g, ' ').trim().slice(0, MAX_WHAT)
+}
+
+let asked = 0 // with the clock, an ID unique in this session
+
+// Your decision from the card, or null to leave it to the dialog: the app is closed, the
+// ask was settled there, or a reply it doesn't expect.
+export async function permit($: EngineInterface, e: { session_id?: string; tool_name: string; tool_input: unknown; agent_id?: string }): Promise<'allow' | 'deny' | null> {
+  const port = Number(await $.env.get('CSM_PORT')) || PORT
+  const sid = e.session_id || (await $.session.id())
+  const began = await $.clock.now()
+  const agent = typeof e.agent_id === 'string' && e.agent_id && e.agent_id.length <= 64 ? e.agent_id : undefined
+  const body = JSON.stringify({
+    id: `${began.toString(36)}-${++asked}`,
+    tool: String(e.tool_name).slice(0, 100),
+    what: whatOf(e.tool_name, e.tool_input),
+    ...(agent ? { agent } : {}),
+  })
+  const url = `http://127.0.0.1:${port}/api/permission/${encodeURIComponent(sid)}`
+  let quick = 0 // rounds the server ended at once: a server that never holds is left alone
+  for (;;) {
+    const sent = await $.clock.now()
+    const r = await $.http.fetch(url, { method: 'POST', headers: { 'x-csm': '1', 'content-type': 'application/json' }, body })
+    if (r.status === 200) {
+      try {
+        const d = JSON.parse(r.text)?.decision
+        return d === 'allow' || d === 'deny' ? d : null
+      } catch {
+        return null
+      }
+    }
+    if (r.status !== 204) return null // 410: settled in the dialog; anything else: not ours to guess
+    const now = await $.clock.now()
+    if (now - began >= ASK_FOR_MS) return null
+    quick = now - sent < 1_000 ? quick + 1 : 0
+    if (quick >= 3) return null
+  }
+}
+
 // ---------------------------------------------------------------- hooks
 
 export const register: Register = (on) => {
+  on('classic.PermissionRequest', async ($, e, next) => {
+    if (SKIP.has(e.tool_name) || (await $.env.get('CSM_PROBE'))) return next(e)
+    const d = await permit($, e).catch(() => null)
+    if (d === 'allow') return { decision: { behavior: 'allow' as const } }
+    if (d === 'deny') return { decision: { behavior: 'deny' as const, message: DENIED } }
+    return next(e)
+  })
   on('session.start', async ($, e, next) => {
     await first($)
     const started = await next(e)

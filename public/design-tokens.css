@@ -1,51 +1,83 @@
-/* mac-app-design 0.14.0 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.15.0 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Tokens: colors, type, space, shape and motion for the family's Mac apps.
-   Dark only. The Obsidian theme's names and values stay as they are;
-   the --csm-* names are the family's own, kept from the first app so nothing renames. */
+   Dark only. Names stay as they came, so nothing renames; the --csm-* names are the
+   family's own, kept from the first app. */
 
 :root {
   color-scheme: dark;
 
-  /* Surfaces: veils of white on a near-black body, never lines. */
+  /* Surfaces: solid steps of gray on a near-black body, never lines. The page is the darkest;
+     regions (fields, the search, the view switch) a step up; cards a step above that, with
+     their own hover and press steps. */
   --color-background-body: #030304;     /* darker than the theme's #08090A */
-  --color-background-card: #FFFFFF08;   /* 3% veil */
+  --color-background-region: #0D0E0F;   /* fields, the search, the view switch */
+  --color-background-card: #18191B;     /* every card and row, whatever its state, unless a tint below */
+  --color-card-hover: #1E1F21;
+  --color-card-pressed: #232426;
   --color-overlay-hover: #FFFFFF0A;     /* 4% */
   --obsidian-veil-selected: #FFFFFF0F;  /* 6% */
   --color-overlay-pressed: #FFFFFF14;   /* 8% */
-  --color-surface-raised: #202125;      /* popovers and panels: lifted by light and a soft shadow; with no line at their edge, this step is what sets them apart (secondary text 4.95:1) */
-  --shadow-raised: 0 12px 32px #00000080; /* a soft shadow only: no line at the edge, the surface's own step is enough */
+  --color-surface-raised: #1C1D20;      /* popovers and panels: lifted by light and a soft shadow; with no line at their edge, this step is what sets them apart */
+  --shadow-raised: 0 12px 32px #000000A0; /* a soft shadow only: no line at the edge, the surface's own step is enough */
+  /* Fills: white veils for buttons and controls on a dark surface. */
+  --color-fill: #FFFFFF12;              /* a button at rest */
+  --color-fill-hover: #FFFFFF1F;        /* a button on hover; the selected view */
+  --color-fill-strong: #FFFFFF26;       /* a second answer beside the first, so it stands out from its card */
+  --color-fill-strong-hover: #FFFFFF33;
 
   /* Text */
   --color-text-primary: #F7F8F8;
-  --obsidian-text-hover: #D5D8DC;
+  --obsidian-text-hover: #D0D6E0;
   --color-text-secondary: #8A8F98;
   --color-text-disabled: #62666D;       /* only for things that are off, never for text to read */
-  --csm-text-on-tint: #A3A8B0;          /* secondary text on colored cards, 5.4:1 or more */
+  --csm-text-on-tint: #B4BAC4;          /* secondary text a step brighter: on a raised card, a paused or closed card's title, a live row's time */
+  --color-text-tinted: #A4AAB4;         /* the words on tinted cards: 6.7:1 on done, 6.2:1 on error and on working, 5.5:1 or more on their hover */
 
-  /* State, by meaning: needs you (warning), working (accent), done (success), error.
-     Fills a step darker than the theme's, so white or dark text on them reaches 5.6:1. */
-  --color-accent: #2D72D2;
-  --color-accent-muted: #2D72D23D;
-  --color-text-accent: #6FA6E8;
-  --color-warning: #C87619;
-  --color-warning-muted: #C8761940;
-  --color-text-orange: #FDB876;
-  --color-success: #238551;
-  --color-success-muted: #23855140;
-  --color-text-green: #A5F690;
-  --color-error: #CD4246;
-  --color-error-muted: #CD424640;
-  --color-text-red: #FFB2B8;
+  /* Actions in indigo: the primary button, the switch that's on. */
+  --color-accent: #5E6AD2;
+  --color-accent-hover: #5560C4;
+  --color-accent-muted: #7170FF24;
+  --color-text-accent: #A8A8FF;
+  --color-mark-working: #8B8BFF;        /* the working state's mark: a row's icon, a dot */
+  /* State, by meaning: warning (orange: missed, a week running hot), done (success), error.
+     The -muted fills are for small tags; the text colors read on the page and on cards. */
+  --color-warning: #F2994A;
+  --color-warning-muted: #F2994A1F;
+  --color-text-orange: #F5AE6B;
+  --color-success: #68CC58;
+  --color-success-muted: #68CC581F;
+  --color-text-green: #8FDB82;
+  --color-error: #EB5757;
+  --color-error-muted: #EB57571F;
+  --color-text-red: #FF8F8F;
   --color-on-accent: #FFFFFF;
-  --color-on-light: #0D0E10;
+  --color-on-light: #08090A;
+  /* Needs you: a bright amber card, the only light surface in the window, with black words
+     and black answers (amber words on black, 12.5:1). The question reads in a near-black
+     (10.5:1). Hover and press step lighter and deeper; a black answer steps to a dark amber. */
+  --color-needs: #F4C053;
+  --color-needs-hover: #F7CB6E;
+  --color-needs-pressed: #EDB540;
+  --color-on-needs: #000000;
+  --color-on-needs-text: #1F1808;
+  --color-on-needs-hover: #262013;      /* a black answer on amber, on hover */
+  /* Tinted cards: a quiet step of their state's color, at one lightness, so they never turn
+     muddy. Done (only the zone that matters now) is the quietest, errors crimson, working
+     a calm indigo. Their gray words take --color-text-tinted. */
+  --color-tint-done: #0D291B;
+  --color-tint-done-hover: #153122;
+  --color-tint-error: #411E25;
+  --color-tint-error-hover: #49252C;
+  --color-tint-working: #26283E;
+  --color-tint-working-hover: #2E3046;
 
-  /* Type: Apple's system fonts, no font files. Three sizes, each with a fixed line height. */
+  /* Type: the system fonts, no font files. Three sizes, each with a fixed line height. */
   --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;
   --font-family-heading: var(--font-family-body);
   --font-family-mono: ui-monospace, "SF Mono", Menlo, monospace;
-  --font-family-figure: ui-rounded, var(--font-family-body); /* big figures, as in Apple's activity widgets */
+  --font-family-figure: ui-rounded, var(--font-family-body); /* big figures in rounded numerals */
   --font-weight-medium: 510;
-  --font-weight-heading: 600; /* titles in Semibold, as in Mail and Finder */
+  --font-weight-heading: 600; /* titles in Semibold */
   --csm-text-title: 1rem;       /* 16px: card and window titles */
   --csm-lh-title: 20px;
   --csm-text-body: 0.75rem;     /* 12px: what's going on */
@@ -84,36 +116,36 @@
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
 
   /* Data viz: one quiet fill, tracks a step above the card, "now" in the accent, and the
-     state colors for how it's going. Whose turn: orange you, blue Claude, gray others. */
+     state colors for how it's going. Whose turn: white you, indigo Claude, gray others. */
   --viz-fill: #C4C8CF;
   --viz-track: #FFFFFF0D;
   --viz-track-strong: #FFFFFF1C;
   --viz-now: var(--color-text-accent);
   --viz-done: var(--color-success);
   --turn-you: #E6E6E8;         /* neutral: orange stays for "needs you", a state, not whose it is */
-  --turn-claude: #6FA6E8;
+  --turn-claude: #8B8BFF;
   --turn-others: #8A8F98;      /* text and icons */
-  --turn-others-fill: #62666D; /* fills: far enough from blue (ΔE 22.8) to tell apart in a bar */
+  --turn-others-fill: #62666D; /* fills: far enough from the indigo to tell apart in a bar */
 }
 
 /* Compact density: what a short window shows (under 600 pt tall), or always, for an app
-   that sets <html data-density="compact">. 130 px cards, the title on one line. */
+   that sets <html data-density="compact">. 134 px cards, the title on one line. */
 @media (max-height: 600px) {
   :root:not([data-density="regular"]) {
-    --csm-card-h: 130px;
+    --csm-card-h: 134px;
     --card-title-size: 13.5px; --card-title-lh: 17px; --card-title-lines: 1; --card-title-gap: 10px;
-    --card-detail-size: 11.5px; --card-detail-lh: 15px; --card-detail-gap: 3px;
+    --card-detail-size: 11.5px; --card-detail-lh: 16px; --card-detail-gap: 1px;
     --card-tags-gap: 8px;
   }
 }
 :root[data-density="compact"] {
-  --csm-card-h: 130px;
+  --csm-card-h: 134px;
   --card-title-size: 13.5px; --card-title-lh: 17px; --card-title-lines: 1; --card-title-gap: 10px;
-  --card-detail-size: 11.5px; --card-detail-lh: 15px; --card-detail-gap: 3px;
+  --card-detail-size: 11.5px; --card-detail-lh: 16px; --card-detail-gap: 1px;
   --card-tags-gap: 8px;
 }
 
 /* Increase Contrast (macOS Accessibility): brighter secondary text. */
 @media (prefers-contrast: more) {
-  :root { --color-text-secondary: #B4B9C1; --csm-text-on-tint: #C4C8CE; }
+  :root { --color-text-secondary: #B4B9C1; --color-text-tinted: #C4C8CE; --csm-text-on-tint: #D0D6E0; }
 }

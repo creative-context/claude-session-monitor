@@ -8,6 +8,7 @@ import { runName, activeAgents, activeCommands } from "./agents.ts";
 import { type Blocked, blockedWords, madeTasks, reminderView, taskList } from "./tasks.ts";
 import { usageView } from "./usage.ts";
 import { canAnswer, sayable } from "./answers.ts";
+import { permitOf } from "./permissions.ts";
 
 // What the card shows. A finished turn splits into done, asks (it ended with a question
 // for you) and error. Most urgent first.
@@ -20,9 +21,14 @@ export const needsYou = (shown: Shown, last: number, now: number) =>
   shown === "waiting" || ((shown === "asks" || shown === "error") && now - last < DAY_MS);
 
 // The same rule for a live session, with the answer you gave from its card: one on its way
-// means you answered; one that couldn't be sent needs you again.
+// means you answered; one that couldn't be sent needs you again. The same for a permission
+// you allowed or denied from its card.
 export function sessionNeedsYou(s: Session, shown: Shown, now: number) {
   if ((shown === "asks" || shown === "error") && s.reply) return s.reply.state === "failed";
+  if (shown === "waiting") {
+    const p = permitOf(s, now);
+    if (p && (p.state === "sending" || p.state === "sent")) return false;
+  }
   return needsYou(shown, s.last, now);
 }
 
@@ -102,11 +108,16 @@ export function snapshot() {
         canSay: sayable(s) && canAnswer(s.sid, now),
         // The answer you gave from the card, a button's or your words, while it waits on you.
         reply: (shown === "asks" || shown === "done" || shown === "error") && s.reply ? { text: s.reply.text, state: s.reply.state, said: s.reply.i < 0 || undefined } : undefined,
+        // The permission it waits on, while the plugin's hook holds it: what it asks, with
+        // Allow and Deny, then your decision on its way (src/permissions.ts). In memory only.
+        permit: permitOf(s, now),
         error: s.errorText,
         note: s.note,
         model: s.model,
         effort: s.effort,
         ultra: s.ultra || undefined,
+        // The model that advises it (src/advisor.ts).
+        advisor: s.advisor?.model ? { model: s.advisor.model } : undefined,
         agents: agents.slice(0, 6).map((a) => ({
           id: a.id,
           label: a.label,
@@ -143,13 +154,13 @@ export const SERVER = { version: process.env.CSM_VERSION || "dev", pid: process.
 // sessions waiting on you or asking, then tasks that can't run, then turns that ended on
 // an error. The count on the header, the Dock and the menu bar is its length.
 export type Attention = { kind: "session" | "error" | "blocked"; id: string; title: string; words: string; sid?: string; run?: string; error?: boolean };
-type SessionLike = { sid: string; title: string; status: Shown; needsYou: boolean; wait?: string; ask?: string; error?: string; reply?: { state: string } };
+type SessionLike = { sid: string; title: string; status: Shown; needsYou: boolean; wait?: string; ask?: string; error?: string; reply?: { state: string }; permit?: { state: string } };
 type TaskLike = { id: string; name: string; needsYou: boolean; blocked: Blocked | null };
 const WORDS_MAX = 300;
 export function attentionOf(list: SessionLike[], taskViews: TaskLike[], now: number): Attention[] {
   const one = (s: SessionLike): Attention => {
     const error = s.status === "error";
-    const words = s.status === "waiting" ? s.wait || "Waiting for your answer"
+    const words = s.status === "waiting" ? (s.permit?.state === "failed" ? "Couldn't send your answer" : s.wait || "Waiting for your answer")
       : error ? s.error || "The turn ended with an error"
       : s.reply?.state === "failed" ? "Couldn't send your answer"
       : s.ask || "It asked you something";

@@ -8,7 +8,12 @@
 // inside the window, following its card as the list scrolls), listening with the words and
 // the level, stopped and editable, sending, sent, refused, each error, the moved-on note,
 // Esc, Cancel and Close every time, Tab kept inside, the card under it unchanged, and one
-// card at a time; no mic in a plain browser.
+// card at a time; no mic in a plain browser. A permission on its card: what it asks on one
+// line in mono, Allow and Deny POSTing the decision, Allowing…, Allowed, Denied, not sent
+// (needs you again), ⌘↩ opening the session, and a card with no plugin as before. The advisor:
+// its chip after the model's tags, each tag's letters moved by the ink table and up by the
+// screen pixels the height table says for the scale (1×, 2×, and 1× zoomed 1.25), and the
+// order the tags give way in as a card narrows, in a wide, short 1568 × 324 window at 1× and 2×.
 // In each window size the page has a layout for,
 // in a browser and inside the app (?embed). Opening a session is caught, never sent.
 // Screenshots of each state go in the folder given.
@@ -35,7 +40,9 @@ const PORT = 4751;
 // An answer no mod takes counts as not sent after 1.5 s, not 20 s, and a session that got one
 // asks again 1.5 s into its turn, not 8 s.
 const demo = Bun.spawn(["bun", join(import.meta.dir, "demo.ts"), String(PORT), "--edge"], {
-  stdout: "ignore", stderr: "ignore", env: { ...process.env, CSM_ANSWER_GIVE_UP_MS: "1500", CSM_DEMO_TURN_MS: "1500" },
+  // A permission decided while no mod holds its ask counts as not sent after 1.5 s, and the
+  // demo's sessions run the tool 3 s after a click, so Allowed and Denied stay long enough to see.
+  stdout: "ignore", stderr: "ignore", env: { ...process.env, CSM_ANSWER_GIVE_UP_MS: "1500", CSM_DEMO_TURN_MS: "1500", CSM_PERMIT_GIVE_UP_MS: "1500", CSM_DEMO_PERMIT_MS: "3000" },
 });
 const base = `http://127.0.0.1:${PORT}`;
 for (let i = 0; i < 80; i++) { try { if ((await fetch(base + "/api/state")).ok) break; } catch {} await Bun.sleep(100); }
@@ -86,6 +93,34 @@ const SEND = "Release notes for 2.4"; // its mod is there: answers go from the c
 const APP = "Fix the login redirect loop"; // its first answer is the app's (Commit)
 const NOMOD = "Rename the image folders"; // no mod: its answers open the session
 const LONG = "Migrate the billing exports to the new storage layout"; // 40-character answers
+// The demo's sessions waiting on a permission, by title.
+const PERMIT = "Upgrade the payments SDK"; // its plugin holds the ask: a short command
+const LONGCMD = "Clean up the downloads folder"; // a very long command
+const LONGPATH = "Add tests for the identity check step"; // a long path to write
+const NOPERMIT = "Tag the release candidate"; // no plugin: the card as before
+const permitOf = async (sid: string) => ((await (await fetch(`${base}/api/state`)).json()) as any).sessions.find((x: any) => x.sid === sid)?.permit;
+// The ask's line under the wait: one line in mono, inside the card, the whole text in its tooltip;
+// and the wait's line above it, one line too.
+const askOf = (c: any) => c.evaluate((el: HTMLElement) => {
+  const r = el.getBoundingClientRect();
+  const lines = [...el.querySelectorAll(":scope > .detail > .line")] as HTMLElement[];
+  const line = el.querySelector(":scope > .detail > .line[data-what]") as HTMLElement | null;
+  const txt = line?.querySelector(".txt") as HTMLElement | null;
+  const lh = parseFloat(getComputedStyle(el.querySelector(".detail")!).lineHeight);
+  const one = (e: HTMLElement) => e.getBoundingClientRect().height <= lh * 1.4;
+  const b = txt?.getBoundingClientRect();
+  return {
+    has: !!line, title: line?.getAttribute("title") ?? "", text: txt?.textContent ?? "",
+    one: !!txt && lines.every(one), mono: !!txt && /mono|SF Mono|Menlo/i.test(getComputedStyle(txt).fontFamily),
+    inside: !!b && b.right <= r.right - parseFloat(getComputedStyle(el).paddingRight) + 0.5 && b.left >= r.left,
+    cut: !!txt && txt.scrollWidth > txt.clientWidth + 1,
+    buttons: [...el.querySelectorAll("[data-permit]")].map((x) => x.textContent!.trim() + "|" + x.getAttribute("title")),
+    tag: el.querySelector(".top .tag")?.textContent?.trim() ?? "", aria: el.getAttribute("aria-label") ?? "",
+  };
+});
+// The demo's permission sessions run the tool after a click, then ask again: wait for all of
+// them to be held, so Active isn't moving under a measurement.
+const permitsHeld = async (page: any) => { for (const t of [PERMIT, LONGCMD, LONGPATH]) await footIs(page, t, ".ans.permit .pri"); };
 const card = (page: any, title: string) => page.locator("#week .card", { has: page.locator(".title", { hasText: title }) });
 const sidOf = (c: any) => c.getAttribute("data-sid");
 // A card's size and its foot: the same height as a card without answers, the foot inside its
@@ -119,7 +154,8 @@ const metaOf = (c: any) => c.evaluate((el: HTMLElement) => {
   const t = time.getBoundingClientRect(), g = (el.querySelector(":scope > .top > .tag") as HTMLElement).getBoundingClientRect();
   return {
     w: Math.round(r.width), h: Math.round(r.height), sized: !isCard || Math.round(r.height) === Math.round(want), isCard,
-    model: shown(".mdl"), effort: shown(".eff"), ultra: shown(".uc"), any: visible(meta),
+    model: shown(".mdl"), effort: shown(".eff"), ultra: shown(".uc"), advisor: shown(".advr"), any: visible(meta),
+    cls: meta?.className ?? "", timeShown: visible(time),
     text: visible(meta) ? meta!.innerText.replace(/\s+/g, " ").trim() : "",
     fits: t.right <= r.right - parseFloat(getComputedStyle(el).paddingRight) + 0.5 && (!isCard || g.right <= t.left + 0.5)
       && (!meta || meta.scrollWidth <= meta.clientWidth + 1),
@@ -140,6 +176,7 @@ try {
     await catchOpens(page);
     await page.goto(base + "/" + mode);
     await page.waitForSelector("#week .card");
+    await permitsHeld(page);
     await settle(page);
     const shot = (what: string) => page.screenshot({ path: join(OUT, `${size.name}${mode ? "-app" : ""}-${what}.png`) });
 
@@ -191,7 +228,9 @@ try {
     // The count popover: in a short window its list scrolls, and fades into its raised surface.
     await page.evaluate(() => (document.querySelector('[data-view="week"]') as HTMLElement).click());
     await page.evaluate(() => document.getElementById("content")!.scrollTo({ top: 0 }));
-    const count = page.locator("#counts [data-pop]").last();
+    // The last count that shows: with the view switch and the search in the header, a narrow
+    // window keeps only the first counts.
+    const count = page.locator("#counts [data-pop]:visible").last();
     if (await count.isVisible()) {
       await count.hover();
       await page.waitForSelector("#pop.open");
@@ -270,6 +309,71 @@ try {
     ok(await opensFor(page, await sidOf(nomod), () => nomod.locator(".ans .sec").click()), `${tag}: with no mod, an answer opens the session`);
     ok((await nomod.locator(".ans .sec").getAttribute("title")) === "Opens the session: answer there", `${tag}: its tip says answer there`);
     ok(!(await page.locator("#week .card.sent").count()), `${tag}: nothing was sent by those`);
+
+    // A permission on its card: what it asks under the wait, one line in mono, with Allow and Deny.
+    await page.evaluate(() => document.getElementById("content")!.scrollTo({ top: 0 }));
+    for (const t of [PERMIT, LONGCMD, LONGPATH]) {
+      await footIs(page, t, ".ans.permit .pri");
+      const c = card(page, t);
+      const p = await permitOf(await sidOf(c));
+      const m = await measure(c), a = await askOf(c);
+      ok(m.sized && m.footIn && !m.spill && a.one && a.inside && a.mono && a.title === p.what && a.text === p.what,
+        `permit: ${tag}, "${t}": what it asks on one line in mono, inside the card, the whole of it in the tooltip; Allow and Deny fit, the card keeps its height (${m.h}${a.cut ? ", cut with an ellipsis" : ""})`);
+      if (t !== PERMIT && size.width >= 600) ok(a.cut, `permit: ${tag}, "${t}": the long ask is cut at the card's width`);
+      ok(a.buttons.join() === `Allow|Allow ${p.tool} (the session runs it),Deny|Deny ${p.tool} (the session doesn't run it)` && a.tag === "Needs you"
+        && a.aria.includes("Answers: Allow, Deny") && a.aria.includes("Command-Return opens the session"),
+        `permit: ${tag}, "${t}": Allow and Deny with their tips, Needs you, and VoiceOver says them`);
+    }
+    await card(page, PERMIT).scrollIntoViewIfNeeded();
+    await shot("permit-held");
+    await card(page, LONGCMD).scrollIntoViewIfNeeded();
+    await shot("permit-long");
+    // No plugin in its session: the card as before, the folder in the foot, and a click opens it.
+    const none = card(page, NOPERMIT);
+    const na = await askOf(none);
+    ok(!na.has && !na.buttons.length && !(await none.locator(".ans, .sentline").count()) && (size.width < 300 || (await none.locator(".tags .tag.name").count()) === 1),
+      `permit: ${tag}: with no plugin, the permission's card is as before`);
+    ok(await opensFor(page, await sidOf(none), () => none.locator(".title").click()), `permit: ${tag}: and a click on it opens the session`);
+    await none.scrollIntoViewIfNeeded();
+    await shot("permit-none");
+
+    // Allow: the decision goes at once with the ask's ID, the card turns blue, Working, Allowed.
+    for (const [t, allow] of [[PERMIT, true], [LONGCMD, false]] as const) {
+      const c = card(page, t);
+      const sid = await sidOf(c);
+      await footIs(page, t, ".ans.permit .pri");
+      const p = await permitOf(sid);
+      const before = await measure(c);
+      const req = page.waitForRequest((r: any) => r.url().endsWith(`/api/permission/${sid}/decide`) && r.method() === "POST");
+      await c.locator(allow ? ".ans.permit .pri" : ".ans.permit .sec").click();
+      const sent = await req;
+      const body = sent.postDataJSON();
+      ok(body.id === p.id && body.allow === allow && Object.keys(body).length === 2 && sent.headers()["x-csm"] === "1",
+        `permit: ${tag}: ${allow ? "Allow" : "Deny"} POSTs {"id": "${p.id}", "allow": ${allow}} with x-csm`);
+      await footIs(page, t, ".sentline");
+      const m = await measure(c), a = await askOf(c);
+      const word = allow ? "Allowed" : "Denied";
+      ok(/\bsent\b/.test(m.cls) && /\bworking\b/.test(m.cls) && m.foot === word && a.tag.includes("Working") && a.has && a.one
+        && (await c.locator(".detail").textContent())!.includes(allow ? "You allowed it" : "You denied it") && m.h === before.h && m.footIn && !m.spill,
+        `permit: ${tag}: the card says ${word}, in blue, Working, what you decided above what it asked (${before.h} → ${m.h})`);
+      ok(!opened.includes(sid), `permit: ${tag}: ${allow ? "allowing" : "denying"} doesn't open the session`);
+      await c.scrollIntoViewIfNeeded();
+      await shot(allow ? "permit-allowed" : "permit-denied");
+    }
+    await page.close();
+  }
+
+  // A wide, short window: Active's first two rows beside the week's
+  // usage, with a permission held.
+  {
+    const page = await browser.newPage({ viewport: { width: 1570, height: 330 }, deviceScaleFactor: 2 });
+    await page.goto(base + "/?embed");
+    await permitsHeld(page);
+    await page.evaluate(() => document.getElementById("content")!.scrollTo({ top: 0 }));
+    await settle(page);
+    const m = await measure(card(page, PERMIT)), a = await askOf(card(page, PERMIT));
+    ok(m.sized && m.footIn && !m.spill && a.one && a.inside, `permit: wide and short (1570×330): the held card fits, its height as its neighbors' (${m.h})`);
+    await page.screenshot({ path: join(OUT, "frame-wide-short-permit.png") });
     await page.close();
   }
 
@@ -285,8 +389,8 @@ try {
     const tag = `${size.name}, the model`;
     const ultra = card(page, SEND);
     const m = await metaOf(ultra);
-    ok(m.tip.startsWith("Opus 5.5 · Extra effort · Ultracode\n"), `${tag}: the time's tooltip says it in words (${JSON.stringify(m.tip)})`);
-    ok(m.aria.includes("Opus 5.5. Extra effort. Ultracode"), `${tag}: VoiceOver says it too`);
+    ok(m.tip.startsWith("Opus 5.5 · Extra effort · Ultracode · Advised by Fable 5.2\n"), `${tag}: the time's tooltip says it in words (${JSON.stringify(m.tip)})`);
+    ok(m.aria.includes("Opus 5.5. Extra effort. Ultracode. Advised by Fable 5.2"), `${tag}: VoiceOver says it too`);
     const uc = await ultra.locator(".uc").evaluate((el: HTMLElement) => ({ text: el.textContent, svg: !!el.querySelector("svg"), line: getComputedStyle(el).borderTopWidth === "1px" && getComputedStyle(el).borderTopStyle === "solid" }));
     ok(uc.text === "UC" && !uc.svg && uc.line, `${tag}: ultracode is UC in a tag drawn in a line (${JSON.stringify(uc)})`);
     ok((await ultra.locator(".msep").evaluate((el) => el.textContent)) === "", `${tag}: no dot between the model and the time`);
@@ -321,6 +425,108 @@ try {
     }
     if (!m.isCard) await page.screenshot({ path: join(OUT, `${size.name}-model.png`) });
     await page.close();
+  }
+
+  // The advisor (/advisor) on a session's card: a round chip with its initial after the model's
+  // tags and "Advised by …" in the tooltip. Every tag's letters sit on their ink by a fixed
+  // table across, and go up by the whole screen pixels a second table says for the scale they
+  // are drawn at (its zoom times the screen's); the expected raises are written out again
+  // here and checked on the computed transform. A wide, short 1568 × 324 window, at 1×, at 2×
+  // and at 1× with --csm-scale 1.25 (a 125% zoom). As a card narrows, the model's name goes first,
+  // then the effort, then the advisor, then all of it. The demo: the release notes have the
+  // full row (Opus 5.5 X UC F), the checkout fix has its F, and the pricing FAQ (with --edge) ran in a terminal: its model and an O only.
+  {
+    const INK: Record<string, number> = { "eff L": 0.5, "eff M": 0.25, "eff H": 0.25, "eff X": 0.25, "eff MAX": 0.5, "uc UC": 0.5, "advr F": 0.5, "advr O": 0.25, "advr S": 0.25, "advr H": 0.25 };
+    // Screen pixels each letter goes up, by the scale (the table's rounding, written out).
+    const UP: Record<string, Record<string, number>> = {
+      "1": { "uc UC": 1, "advr O": 1, "advr S": 1, "advr H": 1 },
+      "2": { "eff L": 1, "eff M": 1, "eff H": 1, "eff X": 1, "eff MAX": 1 },
+      "1.25": {},
+    };
+    const FAQ = "Sketch the pricing page FAQ";
+    const letters = (page: any) => page.evaluate(() => [...document.querySelectorAll("#week .card > .top > .time > .meta > :is(.eff, .uc, .advr) > i")]
+      .filter((i) => (i as HTMLElement).getClientRects().length)
+      .map((i) => { const m = new DOMMatrixReadOnly(getComputedStyle(i).transform === "none" ? undefined : getComputedStyle(i).transform); return { key: `${i.parentElement!.classList[0]} ${i.textContent}`, x: m.e, y: m.f }; }));
+    const parts = (c: any) => c.evaluate((el: HTMLElement) => [...el.querySelectorAll(":scope > .top > .time > .meta > *")].map((x) => `${x.className}:${x.textContent}`));
+    const chipOf = (c: any) => c.locator(".advr").evaluate((el: HTMLElement) => {
+      const cs = getComputedStyle(el), uc = el.parentElement!.querySelector(".uc, .mdl") as HTMLElement, r = el.getBoundingClientRect();
+      return { w: r.width, h: r.height, border: `${cs.borderTopWidth} ${cs.borderTopStyle}`, round: cs.borderTopLeftRadius === "50%" || parseFloat(cs.borderTopLeftRadius) >= 8,
+        size: cs.fontSize, weight: cs.fontWeight, sameColor: cs.color === getComputedStyle(uc).color, inI: el.firstElementChild?.tagName === "I" };
+    });
+    for (const [scale, zoom] of [[1, 1], [2, 1], [1, 1.25]] as const) {
+      const page = await browser.newPage({ viewport: { width: 1568, height: 324 }, deviceScaleFactor: scale });
+      await catchOpens(page);
+      await page.goto(base + "/?embed");
+      await page.waitForSelector("#week .card .advr");
+      // The app sets --csm-scale (zoom × backing) on a zoom change; the page redraws the letters.
+      if (zoom !== 1) await page.evaluate((k: number) => document.documentElement.style.setProperty("--csm-scale", String(k)), scale * zoom);
+      await settle(page);
+      const drawn = scale * zoom;
+      const tag = `advisor at ${zoom !== 1 ? `${scale}× zoomed ${zoom}` : `${scale}×`}, 1568 × 324`;
+      const full = card(page, SEND);
+      ok(JSON.stringify(await parts(full)) === JSON.stringify(["mdl:Opus 5.5", "eff:X", "uc:UC", "advr:F"]), `${tag}: the release notes' row is the model, X, UC, then the advisor's F (${JSON.stringify(await parts(full))})`);
+      const chip = await chipOf(full);
+      ok(chip.w === 16 && chip.h === 16 && chip.border === "1px solid" && chip.round && chip.size === "9.5px" && chip.weight === "700" && chip.sameColor && chip.inI,
+        `${tag}: the chip is a 16 × 16 circle in a 1 px line, 9.5 px bold, the tags' color (${JSON.stringify(chip)})`);
+      const m = await metaOf(full);
+      ok(m.tip.includes("Advised by Fable 5.2") && m.aria.includes("Advised by Fable 5.2"), `${tag}: the tooltip and VoiceOver say "Advised by Fable 5.2"`);
+      const all = await page.locator("#week .card").evaluateAll((els: HTMLElement[]) => els.length);
+      let spills = 0;
+      for (let i = 0; i < all; i++) { const f = await metaOf(page.locator("#week .card").nth(i)); if (f.isCard && !f.fits) spills++; }
+      ok(spills === 0, `${tag}: no card's top row spills (${all} cards)`);
+      // Each letter on the page moved by the tables: right by the ink's, up by the height's.
+      const upOf = (key: string) => -(UP[String(drawn)][key] ?? 0) / drawn;
+      const seen = await letters(page);
+      const wrong = seen.filter((l: any) => Math.abs(l.x - (INK[l.key] ?? 0)) > 0.01 || Math.abs(l.y - upOf(l.key)) > 0.01);
+      const keys = [...new Set(seen.map((l: any) => l.key))].sort();
+      ok(seen.length > 0 && wrong.length === 0, `${tag}: every tag's letters moved by the table (${keys.join(", ")})${wrong.length ? ` wrong: ${JSON.stringify(wrong)}` : ""}`);
+      for (const k of ["eff L", "eff M", "eff H", "eff X", "uc UC", "advr F", "advr O"]) ok(keys.includes(k), `${tag}: the demo shows ${k}`);
+      const yOf = (k: string) => seen.find((l: any) => l.key === k)?.y;
+      const near = (a: number | undefined, b: number) => a !== undefined && Math.abs(a - b) < 0.01;
+      if (drawn === 1) ok(["uc UC", "advr O"].every((k) => near(yOf(k), -1)) && ["eff L", "eff M", "eff X", "advr F"].every((k) => near(yOf(k), 0)), `${tag}: UC and O go up 1 px, the effort's letters and F do not`);
+      if (drawn === 2) ok(["eff L", "eff M", "eff H", "eff X"].every((k) => near(yOf(k), -0.5)) && ["uc UC", "advr O", "advr F"].every((k) => near(yOf(k), 0)), `${tag}: the effort's letters go up 0.5 CSS px, UC, O and F do not`);
+      if (drawn === 1.25) ok(seen.every((l: any) => near(l.y, 0)), `${tag}: nothing goes up`);
+      const sx = (n: string) => join(OUT, `advisor-${scale}x${zoom !== 1 ? `-zoom${zoom}` : ""}-${n}.png`);
+      await page.screenshot({ path: sx("frame") });
+      await full.screenshot({ path: sx("full-row") });
+
+      // A model and the chip only: the pricing FAQ, in a terminal, advised by Opus 5.5.
+      const faq = card(page, FAQ);
+      ok(JSON.stringify(await parts(faq)) === JSON.stringify(["mdl:Haiku 4.5", "advr:O"]), `${tag}: a terminal session shows its model and the chip only (${JSON.stringify(await parts(faq))})`);
+      { const tp = (await metaOf(faq)).tip; ok(tp.split("\n")[0] === "Haiku 4.5 · Advised by Opus 5.5", `${tag}: its tooltip says "Haiku 4.5 · Advised by Opus 5.5" (${JSON.stringify(tp)})`); }
+      await faq.screenshot({ path: sx("model-only") });
+
+      if (scale === 1 && zoom === 1) {
+        // Giving way, card by card narrower: what shows is always the end of the order
+        // model, effort, advisor, UC (the model's name goes first, all of it last), the time
+        // stays, nothing spills, and once a part has gone it doesn't come back.
+        for (const [title, order] of [[SEND, ["model", "effort", "advisor", "ultra"]], ["Fix the login redirect loop", ["model", "effort", "advisor"]], [FAQ, ["model", "advisor"]]] as const) {
+          const c = card(page, title);
+          const steps: string[] = [];
+          let last = 99, bad = "", narrowest = 0;
+          for (let w = 400; w >= 150; w -= 2) {
+            await c.evaluate((el: HTMLElement, w: number) => { el.style.width = `${w}px`; }, w);
+            await page.waitForTimeout(40);
+            const f: any = await metaOf(c);
+            if (!f.isCard) break;
+            narrowest = w;
+            const shown = order.map((k) => !!f[k]);
+            const n = shown.filter(Boolean).length;
+            const suffix = shown.every((x, i) => !x || shown.slice(i).every(Boolean));
+            if (!suffix || n > last || !f.fits || !f.timeShown || !f.sized) bad ||= `${w} px: ${JSON.stringify(order.filter((k) => f[k]))}${f.fits ? "" : " spills"}${f.sized ? "" : ` ${f.h} px high`}`;
+            if (n !== last) {
+              steps.push(`${w}: ${order.filter((k) => f[k]).join(" ") || "time only"}${/no-/.test(f.cls) ? ` (${f.cls.replace("meta", "").trim()})` : ""}`);
+              const short = title === SEND ? "full" : title === FAQ ? "faq" : "login";
+              if (scale === 1) await c.screenshot({ path: sx(`narrow-${short}-${w}`) });
+              last = n;
+            }
+          }
+          ok(!bad && steps.length === order.length + 1, `${tag}: "${title}" gives way in order down to ${narrowest} px: ${steps.join(" · ")}${bad ? ` · wrong at ${bad}` : ""}`);
+          await c.evaluate((el: HTMLElement) => { el.style.width = ""; });
+        }
+      }
+      await page.close();
+    }
   }
 
   // The rest changes the demo's sessions for good, so it runs once, in the app's window and
@@ -361,6 +567,58 @@ try {
       await page.waitForSelector(`#week .card.working:not(.sent)[data-sid="${sid}"]`, { timeout: 10_000 });
       ok(true, `${tag}: the session picks it up and works on it`);
       await shot("answer-picked-up");
+    }
+
+    // ⌘↩ on a permission's card opens the session; no key allows.
+    {
+      const pc = card(page, PERMIT);
+      const psid = await sidOf(pc);
+      await footIs(page, PERMIT, ".ans.permit .pri");
+      let posted = 0;
+      const count = (r: any) => { if (r.url().includes("/api/permission/")) posted++; };
+      page.on("request", count);
+      await pc.focus();
+      ok(await opensFor(page, psid, () => page.keyboard.press("Meta+Enter")), `permit: ${tag}: ⌘↩ on a permission's card opens the session`);
+      await page.waitForTimeout(300);
+      page.off("request", count);
+      ok(posted === 0 && (await pc.locator(".ans.permit").count()) === 1, `permit: ${tag}: and allows nothing`);
+      // Refused (settled in the meantime): the click opens the session instead.
+      await page.route("**/api/permission/*/decide", (r: any) => r.fulfill({ status: 409 }), { times: 1 });
+      ok(await opensFor(page, psid, () => pc.locator(".ans.permit .pri").click()), `permit: ${tag}: a decision the server refuses opens the session`);
+      ok((await pc.locator(".ans.permit").count()) === 1, `permit: ${tag}: and the card still asks`);
+    }
+    // Not sent: the plugin asked once, then went away between two rounds, so your Allow waits
+    // (Allowing…), then nothing took it: the card says so and needs you again.
+    {
+      const nc = card(page, NOPERMIT);
+      const nsid = await sidOf(nc);
+      if (size.name === "wide") {
+        const nh = (await measure(nc)).h;
+        await fetch(`${base}/api/permission/${nsid}`, { method: "POST", headers: { "x-csm": "1" }, body: JSON.stringify({ id: "page-1", tool: "Bash", what: "git tag -a v3.1.0-rc.1 -m 'Release candidate 1'" }), signal: AbortSignal.timeout(300) }).catch(() => {});
+        await footIs(page, NOPERMIT, ".ans.permit .pri");
+        await nc.locator(".ans.permit .pri").click();
+        await footIs(page, NOPERMIT, ".sentline:not(.failed)");
+        const g = await measure(nc);
+        ok(g.foot === "Allowing…" && /\bsent\b/.test(g.cls) && g.h === nh, `permit: ${tag}: while no mod has taken it, the card says Allowing… ("${g.foot}", ${g.h})`);
+        await nc.scrollIntoViewIfNeeded();
+        await shot("permit-sending");
+        await footIs(page, NOPERMIT, ".sentline.failed");
+        const f = await measure(nc), a = await askOf(nc);
+        const st = (await (await fetch(`${base}/api/state`)).json()) as any;
+        const ss = st.sessions.find((x: any) => x.sid === nsid);
+        ok(/\bwaiting\b/.test(f.cls) && !/\bsent\b/.test(f.cls) && f.foot.startsWith("Couldn't send") && a.tag === "Needs you" && a.has && f.h === nh && !f.spill
+          && ss.needsYou === true && a.aria.includes("Couldn't send your answer"),
+          `permit: ${tag}: a decision nothing took says so, Needs you again ("${f.foot}", ${f.h})`);
+        await shot("permit-failed");
+        ok(await opensFor(page, nsid, () => nc.locator(".sentline [data-open-sid]").click()), `permit: ${tag}: its Open opens the session`);
+        ok(await opensFor(page, nsid, () => nc.locator(".title").click()), `permit: ${tag}: and so does a click on the card`);
+      } else {
+        await footIs(page, NOPERMIT, ".sentline.failed");
+        const f = await measure(nc);
+        ok(f.footIn && !f.spill, `permit: ${tag}: the not-sent row fits`);
+        await nc.scrollIntoViewIfNeeded();
+        await shot("permit-failed");
+      }
     }
 
     // Not sent: its mod asked once and went away, so nothing took it. The card needs you again.
@@ -412,17 +670,46 @@ try {
         h: Math.round(m.getBoundingClientRect().height), scrolled: Math.round(c.scrollTop) };
     });
     const start = await at();
-    // Flush with the cards: "This week" (its capitals) at the first row's top edge, its last
-    // line (the 5-hour window in the demo, its baseline) on the second row's bottom edge.
+    // Flush with the cards, the tile a box as tall as two cards: "This week"'s own line starts on
+    // the first row's top edge and its last line's (the 5-hour window in the demo, then the reset
+    // without it) ends on the second row's bottom edge, the letters inside, with the room the
+    // line keeps over its capitals and under its baseline, like a card's text.
     const flush = await page.evaluate(() => {
       const m = document.querySelector(".abody > .meter") as HTMLElement;
       const rows = [...m.parentElement!.querySelectorAll(".grid > .card")].map((c) => c.getBoundingClientRect());
       const second = rows.find((r) => r.top > rows[0].bottom)!;
-      return { top: m.querySelector(".m-lbl")!.getBoundingClientRect().top - rows[0].top,
-        bottom: m.lastElementChild!.getBoundingClientRect().bottom - second.bottom, last: m.lastElementChild!.className };
+      // A baseline: an empty inline block sits its bottom on it. A capital's height: 1cap.
+      const probe = (el: Element, h = "0") => {
+        const p = document.createElement("span");
+        p.style.cssText = `display:inline-block;width:0;height:${h};vertical-align:baseline`;
+        el.append(p);
+        const r = p.getBoundingClientRect();
+        p.remove();
+        return r;
+      };
+      // Where the line's box ends against the edge, and how far under the letters' baseline.
+      const line = (box: Element, text: Element) => ({ bottom: box.getBoundingClientRect().bottom - second.bottom,
+        under: box.getBoundingClientRect().bottom - probe(text).bottom });
+      const five = m.querySelector(".m-five")!, reset = m.querySelector(".m-reset")!;
+      const withFive = line(five, five.firstElementChild!), last = m.lastElementChild!.className;
+      // The line above the 5-hour window, halfway between the reset's baseline and its capitals.
+      const rule = five.getBoundingClientRect().top, caps = probe(five.firstElementChild!, "1cap").top;
+      const half = { above: rule - probe(reset).bottom, below: caps - rule };
+      const next = five.nextSibling;
+      five.remove();
+      m.getBoundingClientRect();
+      const without = line(reset, reset);
+      m.insertBefore(five, next);
+      const lbl = m.querySelector(".m-lbl")!;
+      const trim = (el: Element) => getComputedStyle(el).getPropertyValue("text-box-trim") || "none";
+      return { top: lbl.getBoundingClientRect().top - rows[0].top, over: probe(lbl, "1cap").top - lbl.getBoundingClientRect().top,
+        last, withFive, without, half, trim: [lbl, reset, five.firstElementChild!].map(trim).join(" ") };
     });
-    ok(Math.abs(flush.top) < 0.5 && Math.abs(flush.bottom) < 0.5 && flush.last === "m-five",
-      `the week's usage spans the first two rows: This week at their top (${flush.top.toFixed(1)}), the 5-hour line on the second's bottom (${flush.bottom.toFixed(1)})`);
+    const sits = (l: { bottom: number; under: number }) => Math.abs(l.bottom) < 0.5 && l.under > 2.5 && l.under < 4;
+    ok(Math.abs(flush.top) < 0.5 && flush.over > 2.5 && flush.over < 4 && flush.last === "m-five" && sits(flush.withFive) && sits(flush.without) && flush.trim === "none none none",
+      `the week's usage spans the first two rows: This week's line on their top (${flush.top.toFixed(1)}), its capitals ${flush.over.toFixed(1)} px inside; the last line's box on the second's bottom, its letters ${flush.withFive.under.toFixed(1)} px inside: the 5-hour line (${flush.withFive.bottom.toFixed(1)}), the reset without it (${flush.without.bottom.toFixed(1)}, ${flush.without.under.toFixed(1)} px)`);
+    ok(Math.abs(flush.half.above - flush.half.below) < 0.6,
+      `the line above the 5-hour window, halfway between the reset's baseline and its capitals (${flush.half.above.toFixed(1)}, ${flush.half.below.toFixed(1)})`);
     const room = start.body - start.top - start.h; // how far Active's cards go on below it
     ok(room > 60, `the demo's Active is taller than the usage tile (${room} px more)`);
     await page.evaluate((y: number) => document.getElementById("content")!.scrollTo({ top: y }), Math.min(room, 200));
@@ -609,7 +896,10 @@ try {
       ok(now.html === before.html && now.inner === before.inner && now.top, `${tag}: ${what}: the card under it is the same, its top row in sight`);
     };
     const closed = async (what: string) => {
-      ok(!(await D.count()) && !(await mic.evaluate((el: HTMLElement) => el.classList.contains("on"))), `${tag}: ${what} closes it and the mic is off`);
+      // The close can lag the click (twice in a row in one run, cause not pinned down): give it a moment.
+      await D.waitFor({ state: "detached", timeout: 2000 }).catch(() => {});
+      const left = await D.count(), on = await mic.evaluate((el: HTMLElement) => el.classList.contains("on"));
+      ok(!left && !on, `${tag}: ${what} closes it and the mic is off${left || on ? ` (still open: ${left}, phase ${await phase()}, mic on: ${on})` : ""}`);
     };
 
     // Idle: the mic sits at the end of the foot.

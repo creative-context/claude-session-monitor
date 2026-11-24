@@ -17,9 +17,11 @@ import { checkProcesses, checkQuietTurns, checkRelayed, checkTurns, relinkRelays
 import { db, forgetOld, history, loadRecent, openDatabase, persist } from "./src/db.ts";
 import { readDesktopSessions } from "./src/desktop.ts";
 import { scanAllAgents } from "./src/agents.ts";
+import { scanAdvisors } from "./src/advisor.ts";
 import { loadHistory, PROBE_EVERY, probeUsage, readUsage, usageView } from "./src/usage.ts";
 import { SERVER, snapshot } from "./src/snapshot.ts";
 import { answerRoutes, checkAnswers } from "./src/answers.ts";
+import { checkPermits, permissionRoutes } from "./src/permissions.ts";
 import { createServer, parentGone as kitParentGone, safe } from "./src/server-kit.ts";
 
 // Next to this file, both in a checkout and in the app, where server.js is the bundle.
@@ -36,6 +38,8 @@ const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 function routes(req: Request, url: URL): Response | Promise<Response> | undefined {
   // Answering a session from its card, and its answers mod asking for one (src/answers.ts).
   if (url.pathname.startsWith("/api/answer/")) return answerRoutes(req, url);
+  // Allowing or denying a permission from the card, and the plugin's hook holding it (src/permissions.ts).
+  if (url.pathname.startsWith("/api/permission/")) return permissionRoutes(req, url);
 
   if (url.pathname === "/api/history") {
     persist(); // so this week's latest changes are in it
@@ -198,6 +202,7 @@ export function start() {
       safe("loadRecent", loadRecent)(); // the last week, as it was when the server stopped
       safe("replay", replay)(); // then whatever the hooks wrote since
       for (const s of sessions.values()) safe("hydrate", () => hydrate(s))();
+      safe("scanAdvisors", scanAdvisors)(); // which sessions have an advisor on, from their transcripts
       safe("readDesktopSessions", readDesktopSessions)();
       safe("checkProcesses", checkProcesses)();
       safe("scanAllAgents", scanAllAgents)();
@@ -206,6 +211,9 @@ export function start() {
       safe("checkRelayed", checkRelayed)(); // and which of those were answered meanwhile
       safe("persist", persist)();
       onBump((write) => {
+        // A change to a session can settle a permission held from its card: the held request
+        // ends in the same pass as the event, not on the next tick.
+        if (write) safe("checkPermits", () => checkPermits())();
         sendSoon();
         if (write) writeSoon();
       });
@@ -228,9 +236,11 @@ export function start() {
       [1, "checkQuietTurns", checkQuietTurns],
       [1, "checkRelayed", checkRelayed],
       [1, "scanAllAgents", scanAllAgents],
+      [1, "scanAdvisors", scanAdvisors], // turning the advisor on or off has no hook event
       [1, "checkTurns", checkTurns], // in case a timeout was missed
       [1, "watchLog", watchLog],
       [1, "checkAnswers", checkAnswers], // a card whose session's mod stopped asking can't send
+      [1, "checkPermits", () => checkPermits()], // a permission whose mod stopped asking, or whose session moved on
       [2, "pump", pump], // in case a file event was missed
       [2, "usage", usageTick],
       [3, "checkProcesses", checkProcesses],

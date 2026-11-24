@@ -17,7 +17,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" alt="The app's Active zone with demo data, the week's usage at its right, on pace: a working session stops on a permission, turns orange with a beating dot and moves to the first place; then the pointer clicks the mic on another session that asks a question: a composer opens out from under its card and listens, the words come in, and ending with “send message” sends them; the card turns blue, says Sent, and the session goes back to working; the pointer rests on the week's usage and its card opens with the week's curve; then the first session gets its permission and the second asks again, as at the start" width="100%">
+  <img src="docs/demo.gif" alt="The app's Active zone with demo data, the week's usage at its right, on pace: a working session stops on a permission, turns amber with a beating dot and moves to the first place; then the pointer clicks the mic on another session that asks a question: a composer opens out from under its card and listens, the words come in, and ending with “send message” sends them; the card turns indigo, says Sent, and the session goes back to working; the pointer rests on the week's usage and its card opens with the week's curve; then the first session gets its permission and the second asks again, as at the start" width="100%">
 </p>
 
 With a few Claude Code sessions going at once, the one that needs you is easy to miss. It sits in another window, waiting on a permission or a question, while you watch the one that's working. This app puts every session on one screen, colored by what it needs from you. It works with the Claude desktop app and with `claude` in a terminal, and your sessions never leave your Mac.
@@ -27,7 +27,7 @@ With a few Claude Code sessions going at once, the one that needs you is easy to
 - **What needs you comes first:** a permission, a question, a turn that ended asking you something, an error, or a scheduled task that can't start. The same count shows on the Dock icon and in the menu bar.
 - **It reads how a turn ended,** so "which one do you want?" counts as needing you and "anything else?" doesn't.
 - **The work behind each session:** the tool it's using, the step of its plan, its subagents and workflows.
-- **Answer from the card:** click one of a session's next-step answers on its card, or say your own, and it goes on working ([with the plugin](docs/guide.md#the-plugin)).
+- **Answer from the card:** click one of a session's next-step answers on its card, or say your own, or allow or deny a permission, and it goes on working ([with the plugin](docs/guide.md#the-plugin)).
 - **Scheduled tasks:** when each runs next, how the last run went, and runs that never happened.
 - **Weekly usage:** how much of your plan's week you've used, whether you're on pace, and when you'd run out.
 - **A real Mac app:** standard menus, Settings, keyboard navigation, VoiceOver labels and Reduce Motion.

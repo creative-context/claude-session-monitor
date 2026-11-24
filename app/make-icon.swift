@@ -1,4 +1,4 @@
-// Draws the app icon at 1024 px in the Obsidian style: a near-black tile with three
+// Draws the app icon at 1024 px in the app's style: a near-black tile with three
 // session cards as white veils, each with a status dot (working, needs you, done).
 //
 //   swift app/make-icon.swift build/icon-1024.png

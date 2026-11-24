@@ -7,6 +7,10 @@
 //                               session, one closed mid-turn, many agents, an idle one
 //   bun test/demo.ts --hot    → a week running hot: the forecast and its card; --limit, a week used up
 //   bun test/demo.ts --gif    → only four sessions, for docs/demo.gif: a line on stdin plays its story
+//
+// Sessions waiting on a permission have the plugin's permission side, played here: their card
+// shows what they ask with Allow and Deny. A click runs or refuses the tool a moment later
+// (CSM_DEMO_PERMIT_MS, 1.5 s), and a few seconds after (CSM_DEMO_TURN_MS) it asks again.
 
 import { appendFileSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -56,11 +60,21 @@ function asksWithAnswers(prompt: string, name: string, at: number, recap: string
   return sid;
 }
 
+// Sessions waiting on a permission whose plugin holds the ask (played below): the tool, and
+// what it asks for, made up.
+type Permit = { sid: string; cwd: string; tool: string; what: string; msg: string };
+const permits: Permit[] = [];
+function waitsOn(sid: string, cwd: string, at: number, tool: string, what: string, mod = true) {
+  const msg = `Claude needs your permission to use ${tool}`;
+  ev(sid, at, { ev: "Notification", nt: "permission_prompt", msg, cwd });
+  if (mod) permits.push({ sid, cwd, tool, what, msg });
+}
+
 // Active, last two hours
 let s = id();
 ev(s, now - 3 * MIN, { ev: "UserPromptSubmit", prompt: "Upgrade the payments SDK", cwd: project("billing-api") });
 ev(s, now - 2 * MIN, { ev: "PreToolUse", tool: "Bash", d: "Install the new SDK version", cwd: project("billing-api") });
-ev(s, now - 1 * MIN, { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", cwd: project("billing-api") });
+waitsOn(s, project("billing-api"), now - 1 * MIN, "Bash", "npm install payments-sdk --save-exact");
 
 const releaseRun = asksWithAnswers("Release notes for 2.4", "docs", now - 9 * MIN,
   "Drafted the release notes from the merged pull requests, grouped by feature.",
@@ -75,7 +89,9 @@ asksWithAnswers("Rename the image folders", "media", now - 12 * MIN,
   "Should I keep the old folder names as redirects?", [{ l: "Keep redirects" }, { l: "Drop them" }], false);
 
 s = id();
-ev(s, now - 14 * MIN, { ev: "UserPromptSubmit", prompt: "Fix the flaky checkout test", cwd: project("web-app") });
+// Not in the GIF: there its transcript has no advisor (see advisorOn() below).
+const tpCheckout = join(dir, `${s}.jsonl`);
+ev(s, now - 14 * MIN, { ev: "UserPromptSubmit", prompt: "Fix the flaky checkout test", cwd: project("web-app"), ...(GIF ? {} : { tp: tpCheckout }) });
 ev(s, now - 13 * MIN, {
   ev: "PreToolUse", tool: "mcp__ccd_turn__update_plan", cwd: project("web-app"),
   x: { items: [
@@ -158,6 +174,35 @@ finished("Rename environment variables", project("infra"), now - 5 * 24 * H, "Re
 // Older than a week: only in History.
 finished("Set up the staging database", project("infra"), now - 9 * 24 * H, "Staging runs on its own database now, refreshed nightly.");
 
+
+// Sessions with an advisor turned on (/advisor): their transcripts say so, with the row Claude
+// Code writes when it's turned on, and some with a call to it (a server tool, no hook event)
+// and its answer. Every assistant row names the advisor's model, which alone means nothing.
+// Only IDs and the model are read; the made-up rows hold no question or answer. Not in the
+// GIF: its story's cards stay as they were.
+const ADVISOR = "claude-fable-5-2";
+const advisorOn = (model = ADVISOR) => ({ type: "attachment", isSidechain: false, attachment: { type: "advisor_tool", available: true, model, toolChange: "add" } });
+const advisorCall = (n: string) => ({ type: "assistant", advisorModel: ADVISOR, message: { content: [{ type: "server_tool_use", id: `srvtoolu_demo_${n}`, name: "advisor", input: {} }] } });
+const advisorAnswer = (n: string) => ({ type: "assistant", advisorModel: ADVISOR, message: {
+  content: [{ type: "advisor_tool_result", tool_use_id: `srvtoolu_demo_${n}`, content: "" }],
+  usage: { iterations: [{ type: "message" }, { type: "advisor_message", model: ADVISOR }] } } });
+const toolRow = (n: string, name: string) => ({ type: "assistant", advisorModel: ADVISOR, message: { content: [{ type: "tool_use", id: `toolu_demo_${n}`, name, input: {} }] } });
+const toolDone = (n: string) => ({ type: "user", message: { content: [{ type: "tool_result", tool_use_id: `toolu_demo_${n}`, content: "ok" }] } });
+const rows = (file: string, list: object[]) => appendFileSync(file, list.map((r) => JSON.stringify(r)).join("\n") + "\n");
+// The checkout fix turned its advisor on, ran its tests and asked it, and it answered.
+if (!GIF) {
+  rows(tpCheckout, [{ type: "user", message: { content: "Fix the flaky checkout test" } }, advisorOn(),
+    toolRow("ck1", "Bash"), toolDone("ck1"), advisorCall("ck1"), advisorAnswer("ck1")]);
+  ev(checkout, now - 15_000, { ev: "PostToolUse", tool: "Bash", cwd: project("web-app"), tp: tpCheckout });
+  // The release notes (ultracode on, so its card's tags are all there) turned theirs on and
+  // asked it earlier in their turn; the login fix turned its on and hasn't asked it yet, so its
+  // chip comes from that row alone. Rows with no text, so how their turns ended reads the same.
+  for (const [sid, n, cwd, at] of [[releaseRun, "rn", project("docs"), now - 9 * MIN], [loginFix, "lf", project("web-app"), now - 4 * MIN]] as const) {
+    const file = join(dir, `${sid}.jsonl`);
+    rows(file, [advisorOn(), toolRow(`${n}1`, "Read"), toolDone(`${n}1`), ...(sid === loginFix ? [] : [advisorCall(n), advisorAnswer(n)])]);
+    ev(sid, at - 2 * MIN, { ev: "PostToolUse", tool: "Read", cwd, tp: file });
+  }
+}
 
 // Scheduled tasks, the way the Claude app keeps them: scheduled-tasks.json, plus one
 // session file per run that names its task.
@@ -247,6 +292,20 @@ runOf(finished("Sunday backup check", project("infra"), backupAt + 9 * MIN, "All
   "backup-check", "Sunday backup check", project("infra"), backupAt);
 
 if (EDGE) {
+  // A session in a terminal that asked another model for advice: only its model and the
+  // advisor's chip on its card (O, a round letter). Rows with IDs and models only.
+  s = id();
+  const tpAdvised = join(dir, `${s}.jsonl`);
+  rows(tpAdvised, [
+    { type: "user", message: { content: "Sketch the pricing page FAQ" } }, advisorOn("claude-opus-5-5"),
+    { type: "assistant", advisorModel: "claude-opus-5-5", message: { model: "claude-haiku-4-5", content: [{ type: "server_tool_use", id: "srvtoolu_demo_pf", name: "advisor", input: {} }] } },
+    { type: "assistant", advisorModel: "claude-opus-5-5", message: { model: "claude-haiku-4-5", content: [{ type: "advisor_tool_result", tool_use_id: "srvtoolu_demo_pf", content: "" }],
+      usage: { iterations: [{ type: "message" }, { type: "advisor_message", model: "claude-opus-5-5" }] } } },
+    { type: "assistant", advisorModel: "claude-opus-5-5", message: { model: "claude-haiku-4-5", content: [{ type: "text", text: "The FAQ draft is ready." }] } },
+  ]);
+  ev(s, now - 80 * MIN, { ev: "UserPromptSubmit", prompt: "Sketch the pricing page FAQ", cwd: project("marketing-site"), tp: tpAdvised });
+  closeTurn(s, project("marketing-site"), now - 78 * MIN, "Drafted eight questions with short answers in pricing/faq.md.");
+
   // A usage limit ends the turn with an API error, like a server error does.
   s = id();
   const tpLimit = join(dir, `${s}.jsonl`);
@@ -285,6 +344,21 @@ if (EDGE) {
     ev: "Notification", nt: "permission_prompt", cwd: project("scripts"),
     msg: "Claude needs your permission to use Bash: move 1,284 files older than 90 days from Downloads to an archive folder and delete the empty folders left behind",
   });
+  // Its plugin holds the ask: a very long command.
+  permits.push({
+    sid: s, cwd: project("scripts"), tool: "Bash",
+    msg: "Claude needs your permission to use Bash: move 1,284 files older than 90 days from Downloads to an archive folder and delete the empty folders left behind",
+    what: "find ~/Downloads -type f -mtime +90 -print0 | xargs -0 -I{} mv {} ~/Archive/downloads-before-2026/ && find ~/Downloads -mindepth 1 -type d -empty -delete && du -sh ~/Archive/downloads-before-2026",
+  });
+  // A long path to write, under a long folder name.
+  s = id();
+  ev(s, now - 11 * MIN, { ev: "UserPromptSubmit", prompt: "Add tests for the identity check step", cwd: project("customer-onboarding-experience-platform-monorepo") });
+  waitsOn(s, project("customer-onboarding-experience-platform-monorepo"), now - 10 * MIN, "Write",
+    `${project("customer-onboarding-experience-platform-monorepo")}/packages/onboarding-flows/src/steps/verify-identity/__tests__/verify-identity-document-upload.test.tsx`);
+  // A permission with no plugin in its session: the card is as before, and a click opens it.
+  s = id();
+  ev(s, now - 13 * MIN, { ev: "UserPromptSubmit", prompt: "Tag the release candidate", cwd: project("cli") });
+  ev(s, now - 12 * MIN, { ev: "PermissionRequest", tool: "Bash", cwd: project("cli") });
 
   // A workflow with many agents and a lot of tokens.
   s = id();
@@ -422,7 +496,34 @@ const mods = (GIF ? listening.filter((sid) => sid === releaseRun) : listening).m
     onAnswer: () => setTimeout(() => closeTurn(sid, a.cwd, Date.now(), a.recap, a.ask || undefined, a.acts.length ? a.acts : undefined), TURN_MS),
   });
 });
+// The plugin's permission side, in the sessions that have it: it tells the server what the
+// session asks and holds (each request up to 20 s, again on 204) until you click. Then the tool
+// runs (or is refused) a moment later, and a few seconds after that the session asks again.
+const PERMIT_MS = Number(process.env.CSM_DEMO_PERMIT_MS) || 1500;
+const permitStop = new AbortController();
+const playPermit = async (p: Permit) => {
+  let k = 0;
+  while (!permitStop.signal.aborted) {
+    const ask = JSON.stringify({ id: `demo-${++k}`, tool: p.tool, what: p.what });
+    let r: Response | null = null;
+    try {
+      do r = await fetch(`http://127.0.0.1:${PORT}/api/permission/${p.sid}`, { method: "POST", headers: { "x-csm": "1" }, body: ask, signal: permitStop.signal });
+      while (r.status === 204);
+    } catch {
+      if (!permitStop.signal.aborted) await Bun.sleep(500); // the server isn't up yet
+      continue;
+    }
+    if (r.status !== 200) { await Bun.sleep(1000); continue; } // settled some other way: ask again
+    const { decision } = (await r.json()) as { decision: string };
+    await Bun.sleep(PERMIT_MS);
+    ev(p.sid, Date.now(), { ev: decision === "allow" ? "PostToolUse" : "PostToolUseFailure", tool: p.tool, cwd: p.cwd });
+    await Bun.sleep(TURN_MS);
+    if (!permitStop.signal.aborted) ev(p.sid, Date.now(), { ev: "Notification", nt: "permission_prompt", msg: p.msg, cwd: p.cwd });
+  }
+};
+if (!GIF) for (const p of permits) void playPermit(p);
 const stop = () => {
+  permitStop.abort();
   for (const m of mods) m.stop();
   server.kill();
   rmSync(dir, { recursive: true, force: true });

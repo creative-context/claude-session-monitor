@@ -21,8 +21,8 @@ let stripURL = URL(string: "http://127.0.0.1:\(port)/?embed")!
 let stateURL = URL(string: "http://127.0.0.1:\(port)/api/state")!
 let appName = "Claude Session Monitor"
 
-// Obsidian surfaces: the window paints the body color so nothing shows through.
-let obsidianBody = NSColor(srgbRed: 0x03 / 255, green: 0x03 / 255, blue: 0x04 / 255, alpha: 1) // the page's --color-background-body
+// Dark surfaces: the window paints the body color so nothing shows through.
+let pageBody = NSColor(srgbRed: 0x03 / 255, green: 0x03 / 255, blue: 0x04 / 255, alpha: 1) // the page's --color-background-body
 
 extension NSToolbarItem.Identifier {
     static let view = NSToolbarItem.Identifier("view")
@@ -165,8 +165,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         window.title = appName
         window.titleVisibility = .hidden
         window.titlebarAppearsTransparent = true
-        window.appearance = NSAppearance(named: .darkAqua) // the Obsidian theme is dark only
-        window.backgroundColor = obsidianBody
+        window.appearance = NSAppearance(named: .darkAqua) // the look is dark only
+        window.backgroundColor = pageBody
         window.isReleasedWhenClosed = false
         // Down to a sliver of the screen: under 640 the page turns compact and the view
         // switch shows only its icons; under 300 it's a strip of just the essentials, and

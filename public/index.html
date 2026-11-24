@@ -34,22 +34,21 @@
 
   /* In the app (?embed) the window has a transparent title bar: the header sits on the
      same line as the window buttons (left) and the toolbar (right), which holds the
-     view switch, search, status and sound in place of the page's own. */
+     view tabs, search, status and sound in place of the page's own. */
   body.embed .strip { padding-top: var(--csm-chrome-top, 12px); }
   body.embed header { padding-right: var(--csm-chrome-right, 0px); }
-  body.embed #link, body.embed #sound, body.embed .nav { display: none; }
+  body.embed :is(#link, #sound, header .seg, header .search) { display: none; }
   .lights { display: none; flex: none; width: var(--csm-lights-w, 56px); height: 1px; margin-right: -8px; }
   body.embed .lights { display: block; }
 
 
   /* ---------- header ---------- */
   /* The plan's weekly usage, from the status line: quiet gray, orange from 80%. */
-  .usage { display: inline-flex; align-items: center; gap: 7px; flex: none; height: var(--csm-tag-h); padding: 0 8px; border-radius: var(--radius-inner); background: var(--obsidian-veil-selected); font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); margin-right: 6px; cursor: default; }
+  .usage { display: inline-flex; align-items: center; gap: 7px; flex: none; height: var(--csm-tag-h); padding: 0 8px; border-radius: var(--radius-inner); background: none; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); margin-right: 6px; cursor: default; }
   .usage[hidden] { display: none; }
   .usage .u-bar { width: 84px; height: 6px; border-radius: 3px; background: var(--color-overlay-pressed); overflow: hidden; }
   .usage .u-bar i { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--obsidian-text-hover); transition: width 600ms var(--ease-standard), background-color 200ms var(--ease-standard); }
   .usage .u-pct { color: var(--color-text-primary); font-weight: var(--font-weight-heading); font-variant-numeric: tabular-nums; }
-  .usage.high { background: var(--color-warning-muted); }
   .usage.high .u-bar i { background: var(--color-warning); }
   .usage.high .u-pct { color: var(--color-text-orange); }
   @media (prefers-reduced-motion: reduce) { .usage .u-bar i { transition: background-color 200ms linear; } }
@@ -59,8 +58,15 @@
   .link i { width: 6px; height: 6px; border-radius: 50%; background: #26A756; }
   .link.off i { background: var(--color-error); }
 
-  /* ---------- view switch and search (in the browser; the app has them in its toolbar) ---------- */
-  .nav { display: flex; align-items: center; gap: 8px; flex: none; }
+  /* ---------- view tabs and search (in the browser; the app has them in its toolbar) ----------
+     They sit in the header's row, the tabs and then the search, before the week's usage. When
+     the header runs short the tabs keep their icons and drop their words (the words stay as tips). */
+  header .seg { flex: none; margin-left: 8px; }
+  header .seg button { height: 22px; } /* 26 px in all, as tall as the search beside it */
+  header .search { flex: 0 1 240px; min-width: 120px; margin: 0 6px 0 8px; }
+  header .search input { height: 26px; }
+  header .search svg.i { top: 6px; }
+  @container (max-width: 940px) { header .seg button > span { display: none; } }
 
   /* ---------- groups ---------- */
   .group + .group { margin-top: 20px; }
@@ -78,12 +84,12 @@
   .qrow { display: flex; align-items: center; gap: 4px; height: 10px; }
   .qpill { width: 24px; height: 8px; border-radius: 3px; background: #FFFFFF26; transition: background-color 450ms var(--ease-standard); }
   .qcard .calm, .qcard .pdot, .qok { display: none; }
-  .qcard .calm { transform: scale(0.8); transform-origin: left center; color: var(--color-text-accent); }
+  .qcard .calm { transform: scale(0.8); transform-origin: left center; color: var(--color-mark-working); }
   .qcard .pdot { transform: scale(0.85); color: var(--color-text-orange); }
   .qok svg.i { width: 10px; height: 10px; color: var(--color-text-green); }
-  .qcard.work { background: color-mix(in srgb, var(--color-accent) 16%, transparent); } .qcard.work .qpill { background: var(--color-accent-muted); } .qcard.work .calm { display: inline-flex; }
-  .qcard.need { background: color-mix(in srgb, var(--color-warning) 34%, transparent); } .qcard.need .qpill { background: var(--color-warning); } .qcard.need .pdot { display: inline-grid; }
-  .qcard.done { background: color-mix(in srgb, var(--color-success) 14%, transparent); } .qcard.done .qpill { background: var(--color-success-muted); } .qcard.done .qok { display: inline-flex; }
+  .qcard.work { background: var(--color-background-card); } .qcard.work .qpill { background: #7170FF59; } .qcard.work .calm { display: inline-flex; }
+  .qcard.need { background: var(--color-background-card); } .qcard.need .qpill { background: var(--color-warning); } .qcard.need .pdot { display: inline-grid; }
+  .qcard.done { background: var(--color-background-card); } .qcard.done .qpill { background: var(--color-success-muted); } .qcard.done .qok { display: inline-flex; }
   .wside .hlist { max-width: none; } /* as wide as the cards above, so the edges line up */
   @container list (min-width: 1100px) {
     #history .hlist, #history .group-head { max-width: none; } /* as wide as Last 7 Days, so both columns have room */
@@ -113,10 +119,9 @@
        place), and goes with Active once its cards end. */
     position: sticky; top: 0;
     display: flex; flex-direction: column; align-items: center; text-align: center; padding: 0 4px; cursor: default; }
-  /* Flush with the cards beside it: "This week" starts at their top edge (its capitals) and the
-     last line ends on the second row's bottom edge (its baseline); the days take what's between. */
-  .meter .m-lbl { text-box: trim-start cap alphabetic; }
-  .meter > :last-child { text-box: trim-end cap alphabetic; }
+  /* Flush with the cards beside it: the tile is a box as tall as two cards, so "This week"
+     starts on their top edge and the last line ends on the second row's bottom edge, each with
+     its whole line, not its letters, which sit inside it like a card's text. */
   /* While the layout glides the cards, it lifts Active out of the flow and puts it back in
      place with a translate; the sticky top would then count Active's place twice and the
      meter would drop by it. The translate already holds that place, so no top meanwhile. */
@@ -128,7 +133,7 @@
   .meter.hot { --over: var(--color-warning); --say: var(--color-text-orange); }
   .meter.limit { --fill: var(--color-error); --over: var(--color-error); --say: var(--color-text-red); }
   .meter .m-lbl { font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); letter-spacing: 0.01em; color: var(--color-text-secondary); }
-  /* The figure in SF Pro Rounded, as in Apple's activity widgets. */
+  /* The figure in rounded digits, like a gauge's reading. */
   /* The digits sit on the column's axis, over the day blocks; the % follows on the same
      baseline, same family and weight, a step quieter. An invisible % on the left balances it. */
   .meter .m-pct { display: block; white-space: nowrap; font-family: ui-rounded, var(--font-family-body); font-size: 32px; line-height: 34px; font-weight: var(--font-weight-heading); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
@@ -176,11 +181,12 @@
     .ucard, .ucard.below { transform: none; transition: opacity 120ms linear, visibility 0s linear 120ms; }
     .ucard.open { transform: none; transition: opacity 220ms linear, visibility 0s; }
   }
-  /* When it runs out: the one solid block, in the color of the state's tag (5.6:1 and 5.8:1). */
-  .uc-out { border-radius: 6px; padding: 10px 10px 11px; background: var(--color-warning); color: var(--color-on-light); }
-  .uc-out.limit { background: #B5383C; color: var(--color-on-accent); }
-  .uc-out .l { font-size: 11.5px; line-height: 15px; }
-  .uc-out .t { margin: 1px 0 2px; font-size: 17px; line-height: 22px; font-weight: var(--font-weight-heading); letter-spacing: -0.01em; }
+  /* When it runs out: no solid block, so the amber cards stay the only light surface. The label
+     and the note in gray, the date between them in orange (8.9:1), red once the week is used up (7.7:1). */
+  .uc-out { border-radius: 6px; padding: 8px 10px 2px; color: var(--color-text-primary); }
+  .uc-out .l { font-size: 11.5px; line-height: 15px; color: var(--color-text-secondary); }
+  .uc-out .t { margin: 2px 0 -1px; font-size: 17px; line-height: 22px; font-weight: var(--font-weight-heading); letter-spacing: -0.01em; color: var(--color-text-orange); }
+  .uc-out.limit .t { color: var(--color-text-red); }
   .uc-chart { padding: 10px 10px 0; }
   .uc-out + .uc-chart { padding-top: 12px; }
   .uc-chart svg { display: block; overflow: visible; }
@@ -198,11 +204,11 @@
   /* As the header strip writes it: the data in white, the words in gray. */
   .uc-foot { padding: 10px 10px 6px; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
   .uc-foot b { color: var(--color-text-primary); font-weight: var(--font-weight-heading); }
-  /* The 5-hour window, last, on the second row's bottom edge. Its words are trimmed to their
-     capitals, so its baseline is that edge and the bar sits centered on the letters; the line
-     above it sits halfway between the reset's baseline and these capitals. */
-  .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-top: 8px; box-shadow: 0 -1px 0 #FFFFFF0F; font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
-  .meter .m-five > span { text-box: trim-both cap alphabetic; }
+  /* The 5-hour window, last: its line's box ends on the second row's bottom edge. In SF Pro
+     the capitals sit in the middle of the line, so the bar, centered on the line, is centered
+     on them; the line above sits halfway between the reset's baseline and these capitals, the
+     padding less the room the line keeps above them. */
+  .meter .m-five { align-self: stretch; display: flex; align-items: center; gap: 6px; margin-top: 5px; padding-top: calc(8px - (1lh - 1cap) / 2); font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); color: var(--color-text-secondary); }
   .meter .m-five i { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); position: relative; overflow: hidden; }
   .meter .m-five i b { position: absolute; inset: 0 auto 0 0; border-radius: inherit; background: var(--color-text-secondary); }
   .meter .m-five .v { color: var(--color-text-primary); font-variant-numeric: tabular-nums; }
@@ -228,7 +234,8 @@
   /* ---------- cards: the design system draws them; these are this page's own ---------- */
   .group:not(.active) .card.done { --tint: var(--color-background-card); }
   .group:not(.active) .card.done { --meta: var(--color-text-secondary); }
-  .card .detail .cur { font-weight: 500; color: var(--csm-text-on-tint); }
+  .card .detail b, .card .detail .cur { color: var(--obsidian-text-hover); }
+  .card .detail .cur { font-weight: 500; }
   /* Cards are always compact (130 px), so the plan's bar takes the folder's place, at the foot of the card. */
   .card:has(.bar) .tags { display: none; }
   .card .bar { margin-top: auto; padding-bottom: 6px; }
@@ -240,26 +247,23 @@
      row is taller than the 2 px line so its tooltip is easy to hover. */
   .bar { display: flex; align-items: center; gap: 8px; height: 12px; margin-top: 2px; }
   .bar .segs { flex: 1; display: flex; align-items: center; gap: 4px; }
-  .bar .segs span { flex: 1; height: 4px; border-radius: 2px; background: var(--color-overlay-pressed); }
-  .bar .segs span.on { background: var(--color-text-accent); }
-  .bar .segs span.now { background: color-mix(in srgb, var(--color-text-accent) 45%, transparent); }
+  .bar .segs span { flex: 1; height: 4px; border-radius: 2px; background: var(--color-fill); }
+  .bar .segs span.on { background: var(--color-mark-working); }
+  .bar .segs span.now { background: color-mix(in srgb, var(--color-mark-working) 45%, transparent); }
   /* The step in progress breathes while the session works, in step with its spinner. */
-  .card.working .bar .segs span.now { background: var(--color-text-accent); animation: step 2.4s ease-in-out infinite; }
+  .card.working .bar .segs span.now { background: var(--color-mark-working); animation: step 2.4s ease-in-out infinite; }
 
 
   /* ---------- history ---------- */
   /* A readable line length: the time stays near the title on a wide window. */
   .hlist { display: flex; flex-direction: column; gap: 4px; max-width: 960px; }
   #history .group-head { max-width: 960px; }
-  mark { background: color-mix(in srgb, var(--color-warning) 40%, transparent); color: inherit; border-radius: 2px; }
-  .hrow.live.s-working { --tint: color-mix(in srgb, var(--color-accent) 14%, transparent); }
-  .hrow.live.s-waiting, .hrow.live.s-asks { --tint: color-mix(in srgb, var(--color-warning) 24%, transparent); }
-  .hrow.live.s-error { --tint: color-mix(in srgb, var(--color-error) 24%, transparent); }
+  mark { background: #F2994A40; color: inherit; border-radius: 2px; }
+  /* A row keeps the card surface whatever its state, which its mark and words say; only a row that
+     needs you is amber, as its card is (the design system draws that). */
   .hrow.live .htime { color: var(--csm-text-on-tint); }
   .hrow.live.s-waiting .htime, .hrow.live.s-asks .htime { color: var(--color-text-orange); }
   .hrow.live.s-error .htime { color: var(--color-text-red); }
-  .hrow:hover { background: linear-gradient(var(--obsidian-veil-selected), var(--obsidian-veil-selected)), var(--tint); }
-  .hrow:active { background: linear-gradient(var(--color-overlay-pressed), var(--color-overlay-pressed)), var(--tint); }
   .hrow .hicon svg.spin { animation: spin 2.4s linear infinite; }
   .hrow .tag.name { max-width: 160px; }
   .hrow.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
@@ -275,20 +279,31 @@
   #scheduled .card.done, #scheduled .card.unrun, #scheduled .card.ended, #scheduled .card.paused, #scheduled .card.missed, #scheduled .card.queued {
     --tint: var(--color-background-card); --meta: var(--color-text-secondary);
   }
+  #scheduled .group.active .card.done { --meta: var(--color-text-tinted); } /* done keeps the tinted cards' gray, on the plain surface */
   #scheduled .card.paused .title { color: var(--color-text-secondary); }
-  .tag.s-missed { background: var(--color-warning-muted); color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
-  #scheduled .card .tag.s-idle { background: var(--obsidian-veil-selected); }
+  .tag.s-missed { color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
+  /* The state's tag has no fill: the word and its mark in their color. */
+  .card .top .tag:is(.s-working, .s-done, .s-error, .s-missed, .s-idle, .s-ended, .s-asks, .s-waiting) { background: none; padding: 0; gap: 6px; }
+  #scheduled .card .tag.s-idle { background: none; }
   /* The last runs, oldest on the left: one dot each, in the color of how it ended. */
   .dots { display: inline-flex; align-items: center; gap: 4px; }
   .dots i { width: 7px; height: 7px; border-radius: 50%; background: var(--color-overlay-pressed); }
   .dots i.r-done { background: var(--color-success); }
-  .dots i.r-waiting, .dots i.r-asks { background: var(--color-warning); }
+  .dots i.r-waiting, .dots i.r-asks { background: var(--color-needs); }
   .dots i.r-error { background: var(--color-error); }
-  .dots i.r-working { background: var(--color-text-accent); }
+  .dots i.r-working { background: var(--color-mark-working); }
+  /* On an amber card the runs that needed you are black, the rest a dim black, so they show. */
+  .card:is(.waiting, .asks, .needs):not(.stale) .dots i { background: #00000033; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .dots i:is(.r-waiting, .r-asks) { background: var(--color-on-needs); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .dots i.r-done { background: #2E6B24; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .dots i.r-error { background: #A3261F; }
   .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
   /* A scheduled task a session set up: its tag on the card opens it in Scheduled. */
+  .card .tags { gap: 14px; }
+  .card .tags .tag.name, .card .tags .tag.rel { background: none; padding: 0; color: var(--meta); }
   .card .tags .tag.rel { flex: 0 1 auto; min-width: 25px; cursor: pointer; }
-  .card .tags .tag.rel:hover { color: var(--color-text-primary); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .detail svg.i { color: var(--meta); }
+  .card .tags .tag.rel:hover { color: var(--obsidian-text-hover); }
   /* Pointing at a session with relatives spotlights its family: it and the sessions it's
      related to stay as they are, everything else steps back, and their relation tags light up. */
   .family :is(.card, .hrow):not(.rel-lit):not(.rel-self), .family .meter { opacity: 0.3; }
@@ -299,16 +314,21 @@
   #content .grid > .card { transition-duration: 450ms, var(--duration-fast), 0s, 160ms; }
   #content .hrow { transition-duration: 450ms, 700ms, 160ms; }
   @media (prefers-reduced-motion: reduce) { #content .card { transition-duration: 450ms, 160ms; } }
-  :is(.rel-lit, .rel-self) .tag.rel { color: var(--color-text-primary); background: #FFFFFF24; }
-  .card .tags .tag[data-show-task]:hover { color: var(--color-text-primary); background: var(--obsidian-veil-selected); }
+  :is(.rel-lit, .rel-self) .tags .tag.rel { color: var(--color-text-primary); background: none; }
+  .card .tags .tag[data-show-task]:hover { color: var(--obsidian-text-hover); background: none; }
+  /* On an amber card the foot tags stay in its dark ink: lit and pointed at, they go black. */
+  .card:is(.waiting, .asks, .needs):not(.stale) .tags .tag:is(.rel, [data-show-task]):hover,
+  .card:is(.waiting, .asks, .needs):not(.stale):is(.rel-lit, .rel-self) .tags .tag.rel { color: var(--color-on-needs); }
   .top .time { margin-left: auto; }
 
-  /* The model, its effort and ultracode, beside the time and in its color. The effort is its
-     initial knocked out of a solid square (L, M, H, X), and Max is written whole, so it never
-     reads as Medium. Each card measures itself: as it narrows, the model goes first (under
-     about 283 px), then the effort (under about 223); the time always stays, and the tooltip
-     says it all in words. A wide state tag can still crowd them: then the script drops the
-     model, the effort, then all of it (fitMeta). */
+  /* The model, its effort, ultracode and the advisor, beside the time and in its color. The
+     effort is its initial knocked out of a solid square (L, M, H, X), and Max is written whole,
+     so it never reads as Medium. The advisor (/advisor) is the initial of the model that advises
+     the session, in a circle: a second model, where the squares are settings. Each card measures
+     itself: as it narrows, the model goes first (under about 283 px), then the effort (under
+     about 223); the time always stays, and the tooltip says it all in words. A wide state tag
+     can still crowd them: then the script drops the model, the effort, the advisor, then all
+     of it (fitMeta). */
   .grid > .card { container-type: inline-size; }
   .card .top .time { min-width: 0; }
   /* With no meta left to give way, the time keeps its own width again, so the state tag gives way instead. */
@@ -327,18 +347,31 @@
     flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
     min-width: 16px; height: 16px; padding: 0 3px; border-radius: 3.5px; background: currentColor;
     font-size: 10.5px; line-height: 1; font-weight: 700; letter-spacing: 0.01em;
-    -webkit-text-fill-color: var(--color-background-body);
+    -webkit-text-fill-color: var(--eff-fill);
   }
+  /* The letter is cut out of its chip in the card's own color. --tint doesn't reach it (it's
+     registered so it can fade between states, and registered values don't inherit), so the card
+     hands its color down under another name. */
+  .card { --eff-fill: var(--tint); }
   .card .time .meta .eff.max { padding: 0 4px; }
-  .card .time .meta .mdl + .eff { margin-left: 3px; } /* a little more air after the model's name */
+  /* The advisor: its initial in a 16 px circle drawn in a 1 px line, after the session's own tags. */
+  .card .time .meta .advr {
+    flex: none; display: inline-flex; align-items: center; justify-content: center; box-sizing: border-box;
+    width: 16px; height: 16px; border: 1px solid currentColor; border-radius: 50%;
+    font-size: 9.5px; line-height: 1; font-weight: 700;
+  }
+  /* The letters sit on their ink's center, not their advance's: centerInk moves each by the measured INK table. */
+  .card .time .meta :is(.eff, .uc, .advr) > i { font-style: normal; text-indent: 0; transform: translate(var(--ink-x, 0), var(--ink-y, 0)); }
+  .card .time .meta .mdl + :is(.eff, .advr) { margin-left: 3px; } /* a little more air after the model's name */
   .card .time .msep { width: 3px; } /* a little air between the model and the time, no dot */
   @container (max-width: 259px) { .card .time .meta .mdl { display: none; } }
   @container (max-width: 199px) {
     .card .time .meta .eff { display: none; }
-    .card .time .meta:not(:has(.uc)), .card .time .meta:not(:has(.uc)) + .msep { display: none; }
+    .card .time .meta:not(:has(.uc, .advr)), .card .time .meta:not(:has(.uc, .advr)) + .msep { display: none; }
   }
-  .card .time .meta.no-mdl .mdl, .card .time .meta.no-eff :is(.mdl, .eff) { display: none; }
-  .card .time .meta.no-eff:not(:has(.uc)), .card .time .meta.no-eff:not(:has(.uc)) + .msep,
+  .card .time .meta.no-mdl .mdl, .card .time .meta.no-eff :is(.mdl, .eff), .card .time .meta.no-adv :is(.mdl, .eff, .advr) { display: none; }
+  .card .time .meta.no-eff:not(:has(.uc, .advr)), .card .time .meta.no-eff:not(:has(.uc, .advr)) + .msep,
+  .card .time .meta.no-adv:not(:has(.uc)), .card .time .meta.no-adv:not(:has(.uc)) + .msep,
   .card .time .meta.no-meta, .card .time .meta.no-meta + .msep { display: none; }
 
   /* ---------- answers: a question's buttons at the card's foot ----------
@@ -352,15 +385,19 @@
     transition: background-color var(--duration-fast) var(--ease-standard); }
   .card .a-b > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .card .a-b svg.i { width: 12px; height: 12px; flex: none; opacity: 0.8; }
-  .ans .pri { flex: 0 0 auto; max-width: 62%; background: #F7F8F8; color: var(--color-on-light); }
-  .ans .pri:hover { background: #FFFFFF; }
-  .ans .sec, .sentline .a-b { background: #FFFFFF26; color: var(--color-text-primary); }
-  .ans .sec:hover, .sentline .a-b:hover { background: #FFFFFF33; }
+  .ans .pri { flex: 0 0 auto; max-width: 62%; background: var(--color-accent); color: var(--color-on-accent); }
+  .ans .pri:hover { background: var(--color-accent-hover); }
+  .ans .sec, .sentline .a-b { background: var(--color-fill-strong); color: var(--color-text-primary); }
+  .ans .sec:hover, .sentline .a-b:hover { background: var(--color-fill-strong-hover); }
   /* Sent: the card turns to work in blue, and for 5 s the answer can be taken back. */
   .card.sent .detail, .card.sent .detail b { color: var(--color-text-primary); }
   .card > .sentline { height: 22px; box-sizing: content-box; font-size: var(--csm-text-meta); color: var(--meta); white-space: nowrap; }
   .sentline .say { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
   .sentline .a-b { flex: none; }
+  /* A permission's ask under its wait: what it would run, open or fetch, one line in mono
+     at the card's width (the whole of it in the tooltip). Allow and Deny are answers. */
+  .card .detail .line[data-what] .txt { font-family: var(--font-family-mono); font-size: 11px; color: var(--color-text-primary); }
+  .card .detail .line[data-what] svg.i { flex: none; }
 
   /* ---------- dictation: the app's mic on a card that waits on you ----------
      A round mic at the end of the foot. Pressed, it stays on and a composer comes out of it:
@@ -369,13 +406,26 @@
      send. The card under it doesn't change. Five bars beside "Listening" follow the mic's
      level, calmly, in transform only; Reduce Motion keeps only their color. */
   .card .mic-b { order: 99; flex: none; margin-left: auto; box-sizing: border-box; width: 24px; height: 22px; display: inline-flex; align-items: center; justify-content: center;
-    border-radius: var(--radius-element); background: #FFFFFF26; color: var(--color-text-primary); transition: background-color var(--duration-fast) var(--ease-standard); }
-  .card .mic-b:hover { background: #FFFFFF33; }
+    border-radius: var(--radius-element); background: var(--color-fill-strong); color: var(--color-text-primary); transition: background-color var(--duration-fast) var(--ease-standard); }
+  .card .mic-b:hover { background: var(--color-fill-strong-hover); }
   /* Its answers, the mic and the tags that open something are .ctl: they press themselves, not
      the card (the design system's rule). */
-  .card .mic-b.on, .card .mic-b.on:hover { background: #F7F8F8; color: var(--color-on-light); }
+  .card .mic-b.on, .card .mic-b.on:hover { background: var(--color-accent); color: var(--color-on-accent); }
   .card .mic-b svg.i { width: 14px; height: 14px; }
   .card .mic-b:focus-visible, .dict :is(.d-b, .d-edit):focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+  /* On the amber card (what needs you): only its two inks, black and amber. The first answer and
+     the mic are black with amber words, the second answer is plain black words, and the mic
+     in use wears a black ring 2 px out. */
+  .card:is(.waiting, .asks, .needs):not(.stale) .ans .pri { background: var(--color-on-needs); color: var(--color-needs); font-weight: 600; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .ans .pri:hover { background: var(--color-on-needs-hover); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .ans .sec { background: none; color: var(--color-on-needs); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .ans .sec:hover { background: #0000001F; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .sentline .a-b { background: #0000001C; color: var(--color-on-needs); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .sentline .a-b:hover { background: #0000002B; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .mic-b { background: var(--color-on-needs); color: var(--color-needs); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .mic-b:hover { background: var(--color-on-needs-hover); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on, .card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on:hover { background: var(--color-on-needs); color: var(--color-needs); box-shadow: 0 0 0 2px var(--color-needs), 0 0 0 3.5px var(--color-on-needs); }
+  .card:is(.waiting, .asks, .needs):not(.stale) :is(.ans .a-b, .mic-b):focus-visible { outline-color: var(--color-on-needs); }
   .content { position: relative; } /* the composer is placed in it */
   /* The composer is the design system's drawer (.pop.anchored.drawer) from under its card,
      which is .lifted while it's out and while it slides back. */
@@ -410,10 +460,13 @@
   .dict .d-b { all: unset; flex: none; box-sizing: border-box; height: 22px; padding: 0 9px; display: inline-flex; align-items: center; gap: 4px; border-radius: var(--radius-element);
     font-size: var(--csm-text-meta); font-weight: var(--font-weight-medium); white-space: nowrap; cursor: pointer; transition: background-color var(--duration-fast) var(--ease-standard); }
   .dict .d-b:first-of-type { margin-left: auto; }
-  .dict .d-b.pri { background: #F7F8F8; color: var(--color-on-light); }
-  .dict .d-b.pri:hover { background: #FFFFFF; }
-  .dict .d-b.sec { background: #FFFFFF26; color: var(--color-text-primary); }
-  .dict .d-b.sec:hover { background: #FFFFFF33; }
+  .dict .d-b.pri { background: var(--color-accent); color: var(--color-on-accent); }
+  .dict .d-b.pri:hover { background: var(--color-accent-hover); }
+  .dict .d-b.sec { background: var(--color-fill-strong); color: var(--color-text-primary); }
+  .dict .d-b.sec:hover { background: var(--color-fill-strong-hover); }
+  /* Under an amber card its Send turns the card's pair over: amber with black words. */
+  html:has(.card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on) .dict .d-b.pri { background: var(--color-needs); color: var(--color-on-needs); font-weight: 600; }
+  html:has(.card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on) .dict .d-b.pri:hover { background: var(--color-needs-hover); }
   .dict .d-b[aria-disabled="true"] { opacity: 0.6; cursor: default; }
   /* Under the words while it listens: the closing phrase that sends, or, once you said it
      (the head then says Sending…), a thin bar that fills for the 1.2 s you have to talk on or press Esc. */
@@ -441,19 +494,19 @@
   .mini {
     position: absolute; width: 96px; height: 62px; padding: 10px;
     display: flex; flex-direction: column; gap: 7px;
-    border-radius: 10px;
+    border-radius: 10px; background: var(--color-background-card); box-shadow: 0 6px 18px #00000059;
   }
   .mini i { width: 8px; height: 8px; border-radius: 50%; }
   .mini b { height: 5px; border-radius: 3px; background: #FFFFFF2E; }
   .mini b + b { width: 60%; background: #FFFFFF14; }
-  .mini.m1 { left: 0; top: 22px; background: color-mix(in srgb, var(--color-accent) 22%, var(--color-background-body)); }
-  .mini.m1 i { background: var(--color-text-accent); }
-  .mini.m2 { left: 44px; top: 0; z-index: 1; background: color-mix(in srgb, var(--color-warning) 34%, var(--color-background-body)); }
-  .mini.m2 i { background: #FB8C00; }
-  .mini.m3 { left: 88px; top: 26px; background: color-mix(in srgb, var(--color-success) 16%, var(--color-background-body)); }
-  .mini.m3 i { background: #26A756; }
+  .mini.m1 { left: 0; top: 22px; }
+  .mini.m1 i { background: var(--color-mark-working); }
+  .mini.m2 { left: 44px; top: 0; z-index: 1; }
+  .mini.m2 i { background: var(--color-warning); }
+  .mini.m3 { left: 88px; top: 26px; }
+  .mini.m3 i { background: var(--color-success); }
   .badge svg.spin { animation: spin 2.4s linear infinite; }
-  .badge.off { color: var(--color-text-red); background: var(--color-error-muted); }
+  .badge.off { color: var(--color-text-red); background: none; }
   .empty-state.loading { animation: enter 320ms 300ms var(--ease-standard) both; } /* no flash on a fast load */
 
 
@@ -501,7 +554,6 @@
       height: auto; display: grid; grid-template-columns: 8px minmax(0, 1fr) auto; column-gap: 10px; align-items: start; padding: 10px 12px; }
     .card.waiting, .card.asks { --dot: var(--color-text-orange); }
     .card.error { --dot: var(--color-text-red); }
-    .card.working { --dot: var(--color-text-accent); }
     .card.done { --dot: var(--color-text-green); }
     .group:not(.active) .card.done, .card.stale { --dot: var(--color-text-disabled); }
     /* An old question or error keeps a dimmer dot of its color, as its tag did. */
@@ -514,7 +566,7 @@
     .card > .top > .time > :is(.meta, .msep) { display: none; } /* a row keeps the model to its time's tooltip */
     .card > .title { grid-column: 2; grid-row: 1; margin: 0; font-size: 13px; line-height: 17px; -webkit-line-clamp: 2; }
     .card > .detail { grid-column: 2 / 4; grid-row: 2; margin-top: 2px; font-size: var(--csm-text-body); line-height: var(--csm-lh-body); }
-    .card > .tags { grid-column: 2 / 4; grid-row: 3; margin-top: 7px; gap: 12px; padding: 0; white-space: nowrap; }
+    .card > .tags { grid-column: 2 / 4; grid-row: 3; margin-top: 7px; gap: 14px; padding: 0; white-space: nowrap; }
     .card > .bar { grid-column: 2 / 4; grid-row: 4; margin-top: 9px; padding: 0; }
     .card:has(.bar) .tags { display: flex; }
     /* The tags as one line of facts: icon and text, no boxes; the last one takes what's left. */
@@ -551,7 +603,7 @@
     .hrow { grid-template-columns: 16px minmax(0, 1fr); padding: 8px 10px; }
     .hrow > .tag, .hrow .hsnip, .hrow > span:empty { display: none; }
     .hrow .htime { grid-column: 2; grid-row: 2; }
-    .nav .search { display: none; } /* in a browser; the app's own search stays in its toolbar */
+    header .search { display: none; } /* no room for it in a strip; in the app its own stays in the toolbar */
   }
 </style>
 </head>
@@ -562,20 +614,18 @@
     <span class="name">Sessions</span>
     <span id="counts"></span>
     <span class="spacer"></span>
-    <span id="usage" class="usage" hidden></span>
-    <span id="link" class="link off" title="Connection to the local server"><i></i><span>Connecting…</span></span>
-    <button id="sound" class="icon-btn" type="button" aria-pressed="false"></button>
-  </header>
-  <div id="pop" class="pop" role="group" aria-label="Details"></div>
-  <nav class="nav" aria-label="Views">
     <div class="seg" role="tablist">
       <button type="button" role="tab" data-view="week" aria-selected="true"></button>
       <button type="button" role="tab" data-view="history" aria-selected="false"></button>
       <button type="button" role="tab" data-view="scheduled" aria-selected="false"></button>
     </div>
     <label class="search"><span class="sr"></span><input id="q" type="search" placeholder="Search all sessions" aria-label="Search all sessions"></label>
-  </nav>
-  <div class="content" id="content">
+    <span id="usage" class="usage" hidden></span>
+    <span id="link" class="link off" title="Connection to the local server"><i></i><span>Connecting…</span></span>
+    <button id="sound" class="icon-btn" type="button" aria-pressed="false"></button>
+  </header>
+  <div id="pop" class="pop" role="group" aria-label="Details"></div>
+  <div class="content" id="content" data-scroll-edge="whole">
     <i class="scroll-fade up" aria-hidden="true"></i>
     <div id="banner"></div>
     <section id="week" class="view" aria-label="Last 7 days"></section>
@@ -637,9 +687,34 @@
     up.classList.toggle("on", box.scrollTop > 1);
     down.classList.toggle("on", box.scrollTop + box.clientHeight < box.scrollHeight - 1);
   }
-  $content.addEventListener("scroll", () => fades($content), { passive: true });
+  // The list's top edge (data-scroll-edge="whole"): a card or row going under it is cut at the edge
+  // line and fades as it goes, a group head only fades. The design system draws it from each card's
+  // own view timeline, in the scroll's own frame. Where that isn't supported, or under Reduce Motion
+  // (which stops every animation), this does it: data-edge="up" on what crosses the edge, how much
+  // of it is past in --cut and how much it still shows in --sf. Top only.
+  const noMotion = matchMedia("(prefers-reduced-motion: reduce)");
+  function scrollEdge() {
+    const crossing = $content.querySelectorAll("[data-edge]");
+    if (CSS.supports("animation-timeline: view()") && !noMotion.matches) {
+      for (const e of crossing) { delete e.dataset.edge; e.style.removeProperty("--cut"); e.style.removeProperty("--sf"); }
+      return;
+    }
+    const els = [...$content.querySelectorAll(".card, .hrow, .group-head")];
+    const box = $content.getBoundingClientRect();
+    const rects = els.map((e) => e.getBoundingClientRect());
+    els.forEach((e, i) => {
+      const r = rects[i], top = box.top - r.top, bottom = r.bottom - box.bottom, cut = Math.max(0, top, bottom);
+      e.style.removeProperty("--cut"); e.style.removeProperty("--sf"); delete e.dataset.edge;
+      if (!r.height || cut <= 0 || cut >= r.height || bottom > top) return;
+      e.dataset.edge = "up";
+      e.style.setProperty("--cut", cut.toFixed(1) + "px");
+      e.style.setProperty("--sf", Math.max(0, 1 - cut / r.height / 0.7).toFixed(3));
+    });
+  }
+  $content.addEventListener("scroll", () => { fades($content); scrollEdge(); }, { passive: true });
+  noMotion.addEventListener?.("change", scrollEdge);
   if ("ResizeObserver" in window) {
-    const sizes = new ResizeObserver(() => fades($content));
+    const sizes = new ResizeObserver(() => { fades($content); scrollEdge(); });
     sizes.observe($content);
     for (const el of $content.children) sizes.observe(el);
   }
@@ -730,7 +805,12 @@
   const wfNamed = (wf) => Boolean(wf?.name) && wf.name !== "Workflow";
   // An answer you sent from its card, waiting its 5 s or on its way: the session is about
   // to work on it, so the card shows it working, not an old question.
-  const sentOf = (s) => s.kind !== "task" && (s.status === "asks" || s.status === "done" || s.status === "error") && (s.reply?.state === "pending" || s.reply?.state === "sent");
+  const answerSent = (s) => s.kind !== "task" && (s.status === "asks" || s.status === "done" || s.status === "error") && (s.reply?.state === "pending" || s.reply?.state === "sent");
+  // A permission the session waits on that its mod holds (the plugin): what it asks, with
+  // Allow and Deny on its card. Once you click one it's on its way, as a sent answer is.
+  const permitOf = (s) => (s.kind !== "task" && s.status === "waiting" && s.permit) || null;
+  const permitOut = (s) => permitOf(s)?.state === "sending" || permitOf(s)?.state === "sent";
+  const sentOf = (s) => answerSent(s) || permitOut(s);
   const isStale = (s) => (s.status === "asks" || s.status === "error") && !needsYou(s) && !sentOf(s);
   // Its own turn is over and something it started goes on: agents, or only a shell command.
   const onlyCommands = (s) => s.background && !s.agentCount && !s.workflows?.length && s.commandCount > 0;
@@ -798,7 +878,15 @@
       const why = blockedWhy(s.blocked);
       return wrap(`<b>${esc(`Didn't run ${when(s.blocked.since)}.`)}</b> ${esc(why[0].toUpperCase() + why.slice(1))}.`);
     }
-    if (sentOf(s)) return wrap(`<b>You answered “${esc(s.reply.text)}”</b>`);
+    if (answerSent(s)) return wrap(`<b>You answered “${esc(s.reply.text)}”</b>`);
+    if (permitOf(s)?.what) {
+      // The wait, or what you decided, then what it asks for: one line each.
+      const p = s.permit;
+      const [verb, icon] = describe(p.tool);
+      const head = permitOut(s) ? `<b>${p.allow ? "You allowed it" : "You denied it"}</b>` : esc(s.wait || "Wants permission");
+      return `<div class="line"><span class="txt">${head}</span></div><div class="line" data-what title="${esc(p.what)}"><span title="${esc(verb)}">${ICON[icon] || ICON.plug}</span><span class="txt">${esc(p.what)}</span></div>`;
+    }
+    if (permitOut(s)) return wrap(`<b>${s.permit.allow ? "You allowed it" : "You denied it"}</b>`);
     if (s.status === "waiting") return wrap(esc(s.wait || "Waiting for your answer"));
     if (s.status === "asks") return wrap(`<b>${esc(s.ask || "It asked you something")}</b>`);
     if (s.status === "error") return wrap(esc(s.error || "The turn ended with an error"));
@@ -873,7 +961,7 @@
   const SENDING_WORDS = "Sending…";
   const answerable = (s) => s.kind !== "task" && s.status === "asks" && s.answers?.length > 0;
   // The answer you gave from the card, a button's or your words: on its way, or not sent.
-  const replied = (s) => s.kind !== "task" && (s.reply?.state === "failed" || sentOf(s));
+  const replied = (s) => s.kind !== "task" && (s.reply?.state === "failed" || answerSent(s));
   function replyFoot(s) {
     const r = s.reply;
     if (r.state === "failed") {
@@ -908,6 +996,44 @@
       method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ i }),
     }).catch(() => null);
     // 409: no mod is there to take it after all. Anything else unexpected: answer there.
+    if (r?.status !== 204) openSession(sid);
+  }
+
+  // A permission's Allow and Deny, in the folder's place as a question's answers are. A click
+  // POSTs your decision; the server hands it to the mod holding the ask, and the card says
+  // Allowing… or Denying…, then Allowed or Denied. One that never reached the session says so
+  // and needs you again; a click on it opens the session. No shortcut allows: ⌘↩ opens it.
+  const toolName = (t) => (t?.startsWith("mcp__") ? t.split("__").slice(2).join("__") || t : t || "it");
+  function permitFoot(s) {
+    const p = s.permit;
+    if (p.state === "failed") {
+      return `<div class="sentline failed"><span class="say" title="${esc(`Your ${p.allow === false ? "Deny" : "Allow"} didn't reach the session`)}">Couldn't send</span><span class="a-b ctl" data-open-sid="${esc(s.sid)}" title="Opens the session: answer there"><span>Open</span>${ICON.open}</span></div>`;
+    }
+    if (p.state !== "held") {
+      const say = p.state === "sending" ? (p.allow ? "Allowing…" : "Denying…") : p.allow ? "Allowed" : "Denied";
+      return `<div class="sentline"><span class="say">${say}</span></div>`;
+    }
+    const name = esc(toolName(p.tool));
+    return `<div class="ans permit"><span class="a-b ctl pri" data-permit="allow" title="Allow ${name} (the session runs it)"><span>Allow</span></span><span class="a-b ctl sec" data-permit="deny" title="Deny ${name} (the session doesn't run it)"><span>Deny</span></span></div>`;
+  }
+  function permitWords(s) {
+    const p = s.permit;
+    if (p.state === "failed") return ["Couldn't send your answer", "Command-Return opens the session"];
+    if (p.state === "sending") return [p.allow ? "Allowing" : "Denying"];
+    if (p.state === "sent") return [p.allow ? "Allowed" : "Denied"];
+    return ["Answers: Allow, Deny", "Command-Return opens the session"];
+  }
+  const permitBusy = new Set();
+  async function permitCard(sid, allow) {
+    const p = permitOf(live.get(sid) || {});
+    if (!p || p.state !== "held") return openSession(sid);
+    if (permitBusy.has(sid)) return; // one click at a time
+    permitBusy.add(sid);
+    const r = await fetch(`/api/permission/${encodeURIComponent(sid)}/decide`, {
+      method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ id: p.id, allow }),
+    }).catch(() => null);
+    permitBusy.delete(sid);
+    // 409: settled in the meantime (answered in its dialog, or it moved on). Anything else: answer there.
     if (r?.status !== 204) openSession(sid);
   }
 
@@ -1356,7 +1482,8 @@
   // Needs you and working say for how long; anything else says how long ago.
   const lastingOf = (s) => s.kind !== "task" && (s.status === "working" || ((s.status === "waiting" || s.status === "asks") && needsYou(s)));
   const agoOf = (s, lasting) => (lasting ? span2(s.since || s.last) : ago(s.status === "working" ? s.last : s.since));
-  // The model and its effort in the Claude app's own words: "claude-opus-5-5" is Opus 5.5.
+  // The model and its effort in the Claude app's own words: "claude-opus-5-5" is Opus 5.5. The
+  // advisor's model the same way, and its chip is its initial: "claude-fable-5-2" is Fable 5.2, F.
   // An ID of another shape shows nothing rather than itself.
   const EFFORT = { low: "Low", medium: "Medium", high: "High", xhigh: "Extra", max: "Max" };
   const EFFORT_MARK = { low: "L", medium: "M", high: "H", xhigh: "X", max: "MAX" }; // its square on the card
@@ -1366,40 +1493,110 @@
   }
   function metaOf(s) {
     const model = s.kind === "task" ? "" : modelName(s.model);
-    return model ? { model, effort: EFFORT[s.effort] || "", mark: EFFORT[s.effort] ? EFFORT_MARK[s.effort] : "", ultra: Boolean(s.ultra) } : null;
+    const adv = s.kind === "task" ? "" : modelName(s.advisor?.model);
+    return model ? { model, effort: EFFORT[s.effort] || "", mark: EFFORT[s.effort] ? EFFORT_MARK[s.effort] : "", ultra: Boolean(s.ultra), adv } : null;
   }
-  const metaWords = (m) => (m ? [m.model, m.effort && `${m.effort} effort`, m.ultra && "Ultracode"].filter(Boolean) : []);
-  const metaHtml = (m) => (m ? `<span class="meta" aria-hidden="true"><span class="mdl">${esc(m.model)}</span>${m.mark ? `<span class="eff${m.mark === "MAX" ? " max" : ""}">${m.mark}</span>` : ""}${m.ultra ? `<span class="uc">UC</span>` : ""}</span><span class="msep" aria-hidden="true"></span>` : "");
+  const metaWords = (m) => (m ? [m.model, m.effort && `${m.effort} effort`, m.ultra && "Ultracode", m.adv && `Advised by ${m.adv}`].filter(Boolean) : []);
+  const metaHtml = (m) => (m ? `<span class="meta" aria-hidden="true"><span class="mdl">${esc(m.model)}</span>${m.mark ? `<span class="eff${m.mark === "MAX" ? " max" : ""}"><i>${m.mark}</i></span>` : ""}${m.ultra ? `<span class="uc"><i>UC</i></span>` : ""}${m.adv ? `<span class="advr"><i>${esc(m.adv[0])}</i></span>` : ""}</span><span class="msep" aria-hidden="true"></span>` : "");
 
-  // A card whose state tag leaves too little room drops the model, then the effort, then all
-  // of it, rather than cut them off. Again whenever the card changes size.
+  // A tag centers its letters by their advance and their line, but SF Pro's letters don't sit
+  // evenly in either. Across, side bearings and the spacing after the last letter leave them up
+  // to ½ px left, and an L or an F, heavy on the left, looks a pixel left: each moves right by
+  // half the way from its ink's center to its weight's center, in quarter pixels, as measured
+  // black on white in WebKit at 1× and 2× (what's left of center: ink box, weight).
+  const INK = {
+    "eff L": 0.5,    // −0.13, −0.93
+    "eff M": 0.25,   // −0.24, −0.24
+    "eff H": 0.25,   // −0.14, −0.14
+    "eff X": 0.25,   // −0.04, −0.20
+    "eff MAX": 0.5,  // −0.06, −0.79
+    "uc UC": 0.5,    // −0.18, −0.56
+    "advr F": 0.5,   // −0.08, −0.62
+    "advr O": 0.25,  // −0.26, −0.27
+    "advr S": 0.25,  // −0.26, −0.27
+    "advr H": 0.25,  // −0.28, −0.28
+  };
+  // Up and down, the baseline snaps to whole screen pixels, so how far a letter sits below its
+  // tag's middle depends on the scale it's drawn at: the app's zoom times the screen's
+  // (--csm-scale; a browser has devicePixelRatio). A letter more than half a pixel low goes up
+  // by the whole screen pixels it rounds to, never down. (Measured in WebKit, the app's engine;
+  // Chromium paints the same line ¾ px higher at 1×.)
+  // Screen pixels each tag's letters sit below its middle, measured in WebKit black on white
+  // with no correction, at each scale the app can draw at (its zoom times the screen's):
+  const SCALES = [1, 1.25, 1.5, 1.75, 2, 2.5, 3, 3.5, 4];
+  const LOW = {
+    "eff L":   [0.44, -0.04, 0.48, 0.35, 0.87, 0.92, 0.97, 1.36, 1.41],
+    "eff M":   [0.26, 0.31, 0.35, 0.54, 0.60, 0.70, 0.80, 1.06, 1.16],
+    "eff H":   [0.15, -0.32, 0.22, 0.01, 0.55, 0.62, 0.69, 1.03, 1.10],
+    "eff X":   [0.29, 0.37, 0.44, 0.51, 0.59, 0.74, 0.89, 1.04, 1.19],
+    "eff MAX": [0.26, -0.18, 0.35, 0.07, 0.62, 0.72, 0.82, 1.09, 1.18],
+    "uc UC":   [0.72, -0.12, 0.00, 0.29, 0.40, 0.54, 1.02, 1.43, 0.57],
+    "advr F":  [0.26, -0.02, -0.36, 0.30, -0.03, 0.29, 0.62, 0.95, 0.27],
+    "advr O":  [0.71, -0.11, -0.01, 0.27, 0.39, 0.55, 0.98, 1.39, 0.55],
+    "advr S":  [0.70, 0.38, -0.01, 0.76, 0.39, 0.54, 0.99, 1.39, 0.55],
+    "advr H":  [0.57, -0.34, -0.26, 0.07, 0.15, 0.56, 0.72, 1.14, 0.55],
+  };
+  const drawScale = () => parseFloat(getComputedStyle(document.documentElement).getPropertyValue("--csm-scale")) || devicePixelRatio || 1;
+  function centerInk(tag, k = drawScale()) {
+    const i = tag.firstElementChild;
+    if (!i) return;
+    const key = `${tag.classList[0]} ${i.textContent}`;
+    if (INK[key]) i.style.setProperty("--ink-x", `${INK[key]}px`);
+    const low = LOW[key];
+    if (!low) return;
+    let n = 0;
+    for (let j = 1; j < SCALES.length; j++) if (Math.abs(SCALES[j] - k) < Math.abs(SCALES[n] - k)) n = j;
+    const up = Math.max(0, Math.round(low[n])); // screen pixels
+    i.style.setProperty("--ink-y", up ? `${-up / k}px` : "0px");
+  }
+  // The app sets --csm-scale on a zoom change, which may not resize every card.
+  let lastScale = "";
+  if (typeof MutationObserver === "function") {
+    new MutationObserver(() => {
+      const v = getComputedStyle(document.documentElement).getPropertyValue("--csm-scale");
+      if (v === lastScale) return;
+      lastScale = v;
+      for (const el of cards.values()) if (el.isConnected) for (const t of el.querySelectorAll(":scope > .top > .time > .meta :is(.eff, .uc, .advr)")) centerInk(t);
+      snapMetas(); // whole screen pixels at the new scale
+    }).observe(document.documentElement, { attributes: true, attributeFilter: ["style"] });
+  }
+
+  // A card whose state tag leaves too little room drops the model, then the effort, then the
+  // advisor, then all of it, rather than cut them off. Again whenever the card changes size.
   function fitMeta(el) {
     const m = el.querySelector(":scope > .top > .time > .meta");
     if (!m) return;
+    for (const t of m.querySelectorAll(".eff, .uc, .advr")) { centerInk(t); t.style.translate = ""; } // measured where they fall, not where the last snap moved them
     fitMetaTags(m);
     snapMeta(m);
   }
   function fitMetaTags(m) {
-    m.classList.remove("no-eff", "no-mdl", "no-meta");
-    for (const c of ["no-mdl", "no-eff", "no-meta"]) {
+    m.classList.remove("no-mdl", "no-eff", "no-adv", "no-meta");
+    for (const c of ["no-mdl", "no-eff", "no-adv", "no-meta"]) {
       if (!m.getClientRects().length) return; // hidden: a row of the compact view
       const edge = m.getBoundingClientRect().right + 0.5;
       if (![...m.children].some((x) => x.getClientRects().length && x.getBoundingClientRect().right > edge)) return;
       m.classList.add(c);
     }
   }
-  // The model's tags have a 1 px line (UC) or a fill (the effort). On a 1× screen a tag that
-  // starts between two pixels gets its line drawn on whole pixels while its letters stay where
-  // they fall, so they look off center and blurred. The time beside them decides where they
-  // land, so the row moves by what's left over to the next whole pixel.
+  // The model's tags have a 1 px line (UC, the advisor's circle) or a fill (the effort). A tag
+  // that starts between two screen pixels spreads its line over two of them, fainter on one
+  // side, and its letters look off center. The time beside them decides where they land, so
+  // each tag moves by what's left over to the next whole screen pixel. At the app's own scale:
+  // its zoom isn't in devicePixelRatio (at 125% that is 1, and a whole page pixel is 1.25
+  // screen pixels), and a tag after UC (22 px wide) lands half a pixel off the one before it.
   function snapMeta(m) {
     m.style.translate = "";
-    const tag = m.querySelector(".eff, .uc");
-    if (!tag || !tag.getClientRects().length) return;
-    const k = devicePixelRatio || 1;
-    const x = tag.getBoundingClientRect().left * k;
-    const off = (Math.round(x) - x) / k;
-    if (Math.abs(off) > 0.01) m.style.translate = `${off.toFixed(3)}px 0`;
+    const tags = [...m.querySelectorAll(".eff, .uc, .advr")];
+    for (const t of tags) t.style.translate = "";
+    const k = drawScale();
+    for (const t of tags) {
+      if (!t.getClientRects().length) continue;
+      // Always to the left: the row clips what spills past its end, and the circle comes last.
+      const x = t.getBoundingClientRect().left * k;
+      const off = (Math.floor(x + 0.001) - x) / k;
+      if (Math.abs(off) > 0.01) t.style.translate = `${off.toFixed(3)}px 0`;
+    }
   }
   // After a draw, once the cards have glided to where they stay.
   let snapTimer = 0;
@@ -1450,7 +1647,7 @@
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
-      ${answerable(s) || replied(s) ? answersFoot(s) : `${tags(s)}${bar(s)}`}`;
+      ${permitOf(s) ? permitFoot(s) : answerable(s) || replied(s) ? answersFoot(s) : `${tags(s)}${bar(s)}`}`;
     // A row of free height (the compact view) keeps its height while its answer is out, so
     // the rows under it stay put and what it says sits where the answers were.
     const sent = sentOf(s);
@@ -1466,7 +1663,7 @@
       syncIcons(el);
       if (el.isConnected) fitMeta(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...metaWords(meta), ...schedWords(s), ...relWords(s), ...answerWords(s)].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...metaWords(meta), ...schedWords(s), ...relWords(s), ...(permitOf(s) ? permitWords(s) : answerWords(s))].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
     const tip = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
@@ -2072,7 +2269,7 @@
   // It needs to know where the things you can click are, so it leaves those alone.
   function reportChrome() {
     if (!bridge()) return;
-    const holes = [...document.querySelectorAll("#counts [data-pop], #link, #sound, .nav, #pop.open")]
+    const holes = [...document.querySelectorAll("#counts [data-pop], #link, #sound, #pop.open")]
       .map((el) => el.getBoundingClientRect())
       .filter((r) => r.width && r.height)
       .map((r) => [r.left, r.top, r.width, r.height]);
@@ -2097,7 +2294,9 @@
     if (go) return setView(go.dataset.go);
     const made = e.target.closest("[data-show-task]");
     if (made) return showTask(made.dataset.showTask);
-    // A question's answer, on its card.
+    // A permission's Allow or Deny, and a question's answer, on its card.
+    const pb = e.target.closest("[data-permit]");
+    if (pb) return permitCard(pb.closest("[data-sid]").dataset.sid, pb.dataset.permit === "allow");
     const ans = e.target.closest("[data-answer]");
     if (ans) return answerCard(ans.closest("[data-sid]").dataset.sid, Number(ans.dataset.answer));
     const rel = e.target.closest("[data-open-sid]");
@@ -2237,11 +2436,12 @@
   }, true);
 
   // On a card that asks: ⌘↩ gives its first answer (or opens the session when it can't be
-  // sent from here).
+  // sent from here). On a permission's card it opens the session: no key allows.
   $content.addEventListener("keydown", (e) => {
     const card = e.target.closest?.(".card[data-sid]");
     if (!card || !e.metaKey || e.altKey || e.ctrlKey || e.shiftKey) return;
     const s = live.get(card.dataset.sid);
+    if (s && permitOf(s) && e.key === "Enter") { e.preventDefault(); return openSession(s.sid); }
     if (!s || !answerable(s)) return;
     if (e.key === "Enter") {
       e.preventDefault();
@@ -2985,7 +3185,7 @@
   // its turn with a question or an error.
   // A blocked task's text says "today" or "yesterday", so its key is when it started instead.
   const alertKey = (s) => s.kind === "task" ? `e:task:${s.blocked.since}` :
-    s.status === "waiting" ? `w:${s.wait}` : s.status === "asks" ? `a:${s.ask}${s.reply?.state === "failed" ? ":unsent" : ""}` : s.status === "error" ? `e:${s.error}` : s.status;
+    s.status === "waiting" ? `w:${s.wait}${s.permit?.state === "failed" ? ":unsent" : ""}` : s.status === "asks" ? `a:${s.ask}${s.reply?.state === "failed" ? ":unsent" : ""}` : s.status === "error" ? `e:${s.error}` : s.status;
 
   // The app's Dock badge and menu bar show what the header does. They're told on every
   // change, hidden window or not, so the app doesn't have to ask.

@@ -1,4 +1,5 @@
 import { expect, mock, test } from 'claude-code/testing'
+import { whatOf } from './register.ts'
 
 // The answers side of the mod against a stand-in for the app's server, which holds each ask 20 s: it asks for its
 // own session with the x-csm header, submits exactly the answer it gets, asks again at once,
@@ -176,4 +177,140 @@ test('an older measurement never replaces a newer one in the file', async ($, on
   const u = usageSetup(on, { at: 2_000_000_500, pct: 86 }) // another session measured after this one
   await measure($, 85)
   expect(u.pct()).toBe(86)
+})
+
+// The permissions side: it sends the ask to the app's server, which holds each request 20 s,
+// asks again on 204, and returns your decision; on 410, an error or anything it doesn't
+// expect, the session's own dialog decides.
+const PSID = '00000000-0000-4000-8000-00000000beef'
+type PermitReply = { status: number; text?: string; after?: number } | 'down'
+function permitSetup(on: any, o: { env?: Record<string, string>; replies?: PermitReply[] } = {}) {
+  const clock = mock.clock(on, { now: 3_000_000 })
+  mock.env(on, o.env ?? {})
+  const posts: { url: string; init: any; body: any }[] = []
+  const replies = [...(o.replies ?? [])]
+  let passed = 0
+  on('session.id', () => ({ value: PSID }))
+  on('http.fetch', async (_: any, e: any) => {
+    if (!e.url.includes('/api/permission/')) {
+      await clock.sleep(20_000) // the answers loop, if it runs: nothing to submit
+      return { value: { status: 204, ok: true, headers: {}, text: '' } }
+    }
+    posts.push({ url: e.url, init: e.init, body: JSON.parse(e.init?.body ?? 'null') })
+    const r = replies.shift()
+    if (r === 'down') throw new Error('connection refused')
+    if (!r) {
+      await clock.sleep(20_000)
+      return { value: { status: 204, ok: true, headers: {}, text: '' } }
+    }
+    if (r.after) await clock.sleep(r.after)
+    return { value: { status: r.status, ok: r.status < 300, headers: {}, text: r.text ?? '' } }
+  })
+  on('classic.PermissionRequest', () => {
+    passed++ // the dialog decides
+    return {}
+  })
+  return { clock, posts, passed: () => passed }
+}
+// Raises the ask and runs the clock past the server's replies.
+const askPermit = async ($: any, s: { clock: any }, tool_name: string, tool_input: unknown, extra: Record<string, unknown> = {}) => {
+  const r = $.classic.PermissionRequest({ session_id: PSID, tool_name, tool_input, ...extra })
+  await s.clock.advance(70_000)
+  return r
+}
+const decided = (d: string) => ({ status: 200, text: JSON.stringify({ decision: d }), after: 5_000 })
+
+test('a permission allowed on the card is allowed', async ($, on) => {
+  const s = permitSetup(on, { replies: [decided('allow')] })
+  const r = await askPermit($, s, 'Bash', { command: 'make test' })
+  expect(r.decision).toEqual({ behavior: 'allow' })
+  expect(s.passed()).toBe(0)
+  expect(s.posts.length).toBe(1)
+  expect(s.posts[0].url).toBe(`http://127.0.0.1:4747/api/permission/${PSID}`)
+  expect(s.posts[0].init.method).toBe('POST')
+  expect(s.posts[0].init.headers['x-csm']).toBe('1')
+  expect(Object.keys(s.posts[0].body).sort()).toEqual(['id', 'tool', 'what'])
+  expect(s.posts[0].body.tool).toBe('Bash')
+  expect(s.posts[0].body.what).toBe('make test')
+})
+
+test('a permission denied on the card is denied, with a message', async ($, on) => {
+  const s = permitSetup(on, { replies: [decided('deny')] })
+  const r = await askPermit($, s, 'Write', { file_path: '/work/notes/todo.md', content: 'x' })
+  expect(r.decision).toEqual({ behavior: 'deny', message: "Denied from the session's card." })
+})
+
+test('it asks again on 204 with the same ask, then takes the decision', async ($, on) => {
+  const s = permitSetup(on, { replies: [{ status: 204, after: 20_000 }, { status: 204, after: 20_000 }, decided('allow')] })
+  const r = await askPermit($, s, 'WebFetch', { url: 'https://example.com/docs' }, { agent_id: 'agent-7' })
+  expect(r.decision).toEqual({ behavior: 'allow' })
+  expect(s.posts.length).toBe(3)
+  expect(s.posts[1].init.body).toBe(s.posts[0].init.body)
+  expect(s.posts[2].init.body).toBe(s.posts[0].init.body)
+  expect(s.posts[0].body.agent).toBe('agent-7')
+  expect(s.posts[0].body.what).toBe('https://example.com/docs')
+})
+
+test('settled in the dialog (410), the dialog decides', async ($, on) => {
+  const s = permitSetup(on, { replies: [{ status: 410, after: 3_000 }] })
+  const r = await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(r.decision).toBeUndefined()
+  expect(s.passed()).toBe(1)
+  expect(s.posts.length).toBe(1)
+})
+
+for (const [name, reply] of [['the app closed', 'down'], ['a 500', { status: 500 }], ['a body that is not JSON', { status: 200, text: 'not json' }],
+  ['a decision it does not know', { status: 200, text: '{"decision":"maybe"}' }]] as [string, PermitReply][]) {
+  test(`with ${name}, the dialog decides at once`, async ($, on) => {
+    const s = permitSetup(on, { replies: [reply] })
+    const r = await askPermit($, s, 'Bash', { command: 'ls' })
+    expect(r.decision).toBeUndefined()
+    expect(s.posts.length).toBe(1) // never retried
+    expect(s.passed()).toBe(1)
+  })
+}
+
+test('a question or a plan is left to its dialog, and so is everything in the usage check', async ($, on) => {
+  const s = permitSetup(on)
+  await askPermit($, s, 'AskUserQuestion', { questions: [] })
+  await askPermit($, s, 'ExitPlanMode', { plan: 'x' })
+  expect(s.posts.length).toBe(0)
+  expect(s.passed()).toBe(2)
+})
+
+test('in the app own usage check it never asks for a permission', async ($, on) => {
+  const s = permitSetup(on, { env: { CSM_PROBE: '1' } })
+  await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(s.posts.length).toBe(0)
+  expect(s.passed()).toBe(1)
+})
+
+test('the port comes from CSM_PORT for permissions too', async ($, on) => {
+  const s = permitSetup(on, { env: { CSM_PORT: '4759' }, replies: [decided('allow')] })
+  await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(s.posts[0].url).toBe(`http://127.0.0.1:4759/api/permission/${PSID}`)
+})
+
+test('after an hour of rounds the dialog decides', async ($, on) => {
+  const s = permitSetup(on) // the server holds each round 20 s and nothing is clicked
+  const r = $.classic.PermissionRequest({ session_id: PSID, tool_name: 'Bash', tool_input: { command: 'ls' } })
+  await s.clock.advance(61 * 60_000)
+  expect((await r).decision).toBeUndefined()
+  expect(s.passed()).toBe(1)
+  expect(s.posts.length).toBe(180)
+})
+
+test('what it asks, as one line', async () => {
+  expect(whatOf('Bash', { command: 'npm run build \\\n  --watch', description: 'Build' })).toBe('npm run build \\ --watch')
+  expect(whatOf('Edit', { file_path: '/work/notes/a.md', old_string: 'x' })).toBe('/work/notes/a.md')
+  expect(whatOf('NotebookEdit', { notebook_path: '/work/n.ipynb' })).toBe('/work/n.ipynb')
+  expect(whatOf('WebFetch', { url: 'https://example.com', prompt: 'Read it' })).toBe('https://example.com')
+  expect(whatOf('WebSearch', { query: 'tide tables' })).toBe('tide tables')
+  expect(whatOf('Grep', { pattern: 'TODO', path: '/work/src' })).toBe('TODO in /work/src')
+  expect(whatOf('Glob', { pattern: '**/*.ts' })).toBe('**/*.ts')
+  expect(whatOf('Skill', { skill: 'pdf' })).toBe('pdf')
+  expect(whatOf('mcp__notes__save', { body: 'x', title: 'Shopping list' })).toBe('Shopping list')
+  expect(whatOf('mcp__notes__count', { n: 3, flags: { all: true } })).toBe('{"n":3,"flags":{"all":true}}')
+  expect(whatOf('Bash', { command: 'a\n\n\tb   c ' })).toBe('a b c')
+  expect(whatOf('Bash', { command: 'x'.repeat(5000) })).toBe('x'.repeat(300))
 })

@@ -52,11 +52,13 @@ function open(file: string) {
   if (!cols.includes("sched")) db.exec("ALTER TABLE sessions ADD COLUMN sched TEXT"); // its reminders and the tasks it set up
   if (!cols.includes("wait")) db.exec("ALTER TABLE sessions ADD COLUMN wait TEXT"); // what a waiting session waits on
   if (!cols.includes("relay")) db.exec("ALTER TABLE sessions ADD COLUMN relay TEXT"); // its turn start and whose question it passes on
+  if (!cols.includes("advisor")) db.exec("ALTER TABLE sessions ADD COLUMN advisor TEXT"); // the model that advises it, while one is on
+  if (!cols.includes("advisor_read")) db.exec("ALTER TABLE sessions ADD COLUMN advisor_read INTEGER"); // how far its transcript was read for it
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
-    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait, relay)
-    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait, $relay)
+    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait, relay, advisor, advisor_read)
+    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait, $relay, $advisor, $advisor_read)
     ON CONFLICT(sid) DO UPDATE SET
       title = coalesce(excluded.title, title), prompt = coalesce(excluded.prompt, prompt),
       project = coalesce(excluded.project, project), cwd = coalesce(excluded.cwd, cwd),
@@ -65,7 +67,11 @@ function open(file: string) {
       status = excluded.status, outcome = excluded.outcome, recap = excluded.recap, ask = excluded.ask,
       error = excluded.error, note = excluded.note, model = coalesce(excluded.model, model),
       pid = excluded.pid, archived = excluded.archived, task = coalesce(excluded.task, task), sched = excluded.sched,
-      wait = excluded.wait, relay = excluded.relay`);
+      wait = excluded.wait, relay = excluded.relay,
+      -- The advisor and how far its transcript was read go together: while a scan is under way
+      -- (no offset), the row keeps the pair it has.
+      advisor = CASE WHEN excluded.advisor_read IS NULL THEN advisor ELSE excluded.advisor END,
+      advisor_read = coalesce(excluded.advisor_read, advisor_read)`);
 }
 
 export const rowOf = (s: Session) => ({
@@ -83,6 +89,9 @@ export const rowOf = (s: Session) => ({
   // turns read before a restart aren't read again. Session IDs and a time, nothing typed.
   $relay: s.lastPrompt != null || s.relaysAhead || s.relayed?.length
     ? JSON.stringify({ p: s.lastPrompt, a: s.relaysAhead || undefined, d: s.relayed?.length ? s.relayed : undefined }) : null,
+  // The model that advises it, so the card keeps its mark after a restart, and how far its
+  // transcript was read for it, so a restart reads only what was added since (src/advisor.ts).
+  $advisor: s.advisor?.model ?? null, $advisor_read: s.advisorRead ?? null,
 });
 const relayOf = (v: unknown): Partial<Session> => {
   try {
@@ -152,6 +161,8 @@ export function loadRecent() {
       archived: false, task: r.task ?? undefined,
       reminders: schedOf(r.sched).r, made: schedOf(r.sched).m,
       ...relayOf(r.relay),
+      advisor: typeof r.advisor === "string" && /^claude-[a-z0-9.-]{1,60}$/.test(r.advisor) ? { model: r.advisor } : undefined,
+      advisorRead: typeof r.advisor_read === "number" && r.advisor_read >= 0 ? r.advisor_read : undefined,
       ...(status === "waiting" ? waitOf(r.wait) : {}),
     });
   }

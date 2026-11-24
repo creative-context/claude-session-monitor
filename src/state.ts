@@ -85,6 +85,9 @@ export type Session = {
   made?: { id: string; t: number }[]; // scheduled tasks of the Claude app it set up, as asked
   commands?: Command[]; // commands it moved to the background that haven't said they finished
   commandsRead?: number; // the transcript's size when they were read
+  // The model that advises it (/advisor), while one is turned on. Only the model is saved (src/advisor.ts).
+  advisor?: { model: string };
+  advisorRead?: number; // how far its transcript was read for it; none while its first scan is under way
 };
 
 // An answer button the session offered with its question: its words, and the Claude app's
