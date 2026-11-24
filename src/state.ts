@@ -88,6 +88,7 @@ export type Session = {
   // The model that advises it (/advisor), while one is turned on. Only the model is saved (src/advisor.ts).
   advisor?: { model: string };
   advisorRead?: number; // how far its transcript was read for it; none while its first scan is under way
+  worked?: import("./worked.ts").Worked; // its time working, per day (src/worked.ts)
 };
 
 // An answer button the session offered with its question: its words, and the Claude app's
@@ -118,6 +119,9 @@ export const tasks = new Map<string, Task>();
 export const taskChanged = new Map<string, number>(); // when a task was last resumed or rescheduled
 
 export const sessions = new Map<string, Session>();
+// The sessions you pinned, by ID: this week's and older ones alike, from sessions.db
+// (src/db.ts keeps the two in step). Only the ID and when it was pinned are stored.
+export const pins = new Set<string>();
 export let version = 0; // bumps on every change, so the stream only sends when needed
 
 // What changed since the last write to the database: the sessions a bump named, or all

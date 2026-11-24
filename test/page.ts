@@ -529,6 +529,327 @@ try {
     }
   }
 
+  // Pins. The demo pins the release notes. A pin at the end of a card's top row and of a row:
+  // filled and in the card's ink when pinned, faint at rest and an outline on hover;
+  // a click or Return pins without opening anything or moving the card. The Pinned toggle
+  // before the view tabs, with its count, filters Last 7 Days and All Sessions (kept for next
+  // time), with a quiet line when nothing is pinned. In the app, the toggle is the toolbar's:
+  // the page tells it the filter and the count, and takes its pinnedOnly and togglePin.
+  {
+    const pinApi = (sid: string, pinned: boolean) => fetch(`${base}/api/pin/${sid}`, { method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ pinned }) });
+    const pinOf = (c: any) => c.evaluate((el: HTMLElement) => {
+      const p = el.querySelector("[data-pin]") as HTMLElement | null, r = el.getBoundingClientRect();
+      if (!p) return null;
+      const b = p.getBoundingClientRect(), i = p.querySelector("svg")!.getBoundingClientRect(), cs = getComputedStyle(p), title = el.querySelector(".title, .htitle") as HTMLElement;
+      return { on: p.classList.contains("on"), pressed: p.getAttribute("aria-pressed"), label: p.getAttribute("aria-label"), tip: p.title, opacity: Number(cs.opacity),
+        // Its icon ends within the content edge; its box (which may overhang that edge) within the border box.
+        inside: i.right <= r.right - parseFloat(getComputedStyle(el).paddingRight) + 0.5 && b.right <= r.right && b.left >= r.left && b.top >= r.top && b.bottom <= r.bottom && b.width > 0,
+        filled: getComputedStyle(p.querySelector("svg")!).fill, color: cs.color, ink: getComputedStyle(title).color, aria: el.getAttribute("aria-label") ?? "" };
+    });
+    const posted: any[] = [];
+    for (const size of [SIZES[0], SIZES[2], SIZES[3]]) {
+      const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: 2 });
+      await catchOpens(page);
+      page.on("request", (r: any) => { if (r.url().includes("/api/pin/")) posted.push({ body: r.postDataJSON(), csm: r.headers()["x-csm"] }); });
+      await page.goto(base + "/");
+      await page.evaluate(() => { try { localStorage.removeItem("csm-pinned-only"); } catch {} });
+      await page.reload();
+      await page.waitForSelector("#week .card .pin-b.on");
+      await settle(page);
+      const tag = `pins, ${size.name}`;
+      const shot = (what: string) => page.screenshot({ path: join(OUT, `${size.name}-pins-${what}.png`) });
+      const send = card(page, SEND), other = card(page, NOPERMIT);
+      const sendSid = await sidOf(send);
+      let p = await pinOf(send);
+      ok(!!p && p.on && p.pressed === "true" && p.label === "Unpin" && p.tip === "Unpin" && p.opacity === 1 && p.inside && p.filled !== "none" && p.color === p.ink && p.aria.includes("Pinned"),
+        `${tag}: a pinned card shows its pin filled, in its ink, inside the card, with Unpin (${JSON.stringify(p)})`);
+      await page.mouse.move(1, 1);
+      await settle(page);
+      p = await pinOf(other);
+      ok(!!p && !p.on && p.pressed === "false" && p.tip === "Pin" && !p.aria.includes("Pinned"), `${tag}: an unpinned card's pin says Pin`);
+      // At rest, faint: one neutral gray on every dark card, whatever its tint; the dark ink at 45% on an amber one.
+      const rest = await page.evaluate(() => {
+        const one = (sel: string) => {
+          const c = [...document.querySelectorAll(sel)].find((c) => c.querySelector(".pin-b:not(.on):not(.gap)") && (c as HTMLElement).getClientRects().length);
+          if (!c) return null;
+          const cs = getComputedStyle(c.querySelector(".pin-b")!);
+          return { color: cs.color, opacity: Number(cs.opacity), ink: getComputedStyle(c.querySelector(".title")!).color };
+        };
+        return { dark: one("#week .card:not(.waiting, .asks, .needs), #week .card.stale"), amber: one("#week .card:is(.waiting, .asks, .needs):not(.stale)") };
+      });
+      ok(rest.dark?.color === "rgb(102, 106, 115)" && rest.dark.opacity === 1 && !!rest.amber && rest.amber.color === rest.amber.ink && Math.abs(rest.amber.opacity - 0.45) < 0.01,
+        `${tag}: an unpinned pin shows faint until you point at its card: #666A73 on a dark card, the ink at 45% on amber (${JSON.stringify(rest)})`);
+      await other.scrollIntoViewIfNeeded();
+      const box = (await other.boundingBox())!;
+      await page.mouse.move(box.x + 40, box.y + 40, { steps: 3 });
+      await settle(page);
+      p = await pinOf(other);
+      ok(p.opacity === 1 && p.inside && p.filled === "none", `${tag}: pointing at a card shows its pin as an outline (${p.opacity})`);
+      await shot("hover");
+      // A click pins it: no session opens, the card stays where it was, the count goes up.
+      const before = (await other.boundingBox())!;
+      const sid = await sidOf(other);
+      const n = posted.length;
+      ok(!(await opensFor(page, sid, () => other.locator("[data-pin]").click())), `${tag}: a click on the pin opens nothing`);
+      await other.locator(".pin-b.on").waitFor({ timeout: 5000 });
+      await page.waitForTimeout(500);
+      const after = (await other.boundingBox())!;
+      ok(posted.length > n && posted.at(-1).body?.pinned === true && posted.at(-1).csm === "1", `${tag}: the click posts {"pinned": true} with x-csm`);
+      ok(Math.abs(after.x - before.x) < 1 && Math.abs(after.y - before.y) < 1, `${tag}: the card stays where it is`);
+      ok((await page.locator("#pinf .n").textContent()) === "2", `${tag}: the toggle counts 2`);
+      // From the keyboard: Space takes it off again, nothing opens, the pin keeps the focus.
+      await other.locator("[data-pin]").focus();
+      ok(!(await opensFor(page, sid, () => page.keyboard.press(" "))), `${tag}: Space on the pin opens nothing`);
+      await other.locator(".pin-b:not(.on)").waitFor({ timeout: 5000 });
+      ok(await page.evaluate(() => !!document.activeElement?.matches("[data-pin]")), `${tag}: the pin keeps the keyboard`);
+      await page.keyboard.press("Enter");
+      await other.locator(".pin-b.on").waitFor({ timeout: 5000 });
+      await page.mouse.move(1, 1);
+      await page.evaluate(() => (document.activeElement as HTMLElement)?.blur());
+      await settle(page);
+      await shot("cards");
+      // The filter: only pinned sessions; group heads count what shows; the week's usage stays.
+      await page.click("#pinf");
+      await page.waitForTimeout(700);
+      const week = await page.evaluate(() => {
+        const shown = (e: Element) => (e as HTMLElement).getClientRects().length > 0 && !(e as HTMLElement).closest("[data-leaving]");
+        const items = [...document.querySelectorAll("#week .card, #week .hrow")].filter(shown);
+        const heads = [...document.querySelectorAll("#week .group")].filter(shown).map((g) => ({ n: g.querySelector(".count")!.textContent, k: [...g.querySelectorAll(".card, .hrow")].filter(shown).length }));
+        return { all: items.length, pinned: items.filter((e) => e.querySelector(".pin-b.on")).length, heads, usage: shown(document.querySelector("#week .meter")!) || shown(document.querySelector("#week .wstrip")!),
+          pressed: document.getElementById("pinf")!.getAttribute("aria-pressed"), sideways: document.documentElement.scrollWidth > innerWidth + 1 };
+      });
+      ok(week.pressed === "true" && week.all === 2 && week.pinned === 2 && week.heads.every((h) => h.k === 0 ? h.n === "" : Number(h.n) === h.k) && week.usage && !week.sideways,
+        `${tag}: the filter shows the 2 pinned, each group counting what shows, the week's usage still there (${JSON.stringify(week)})`);
+      await shot("filter");
+      await page.reload();
+      await page.waitForSelector("#week .card .pin-b.on");
+      ok((await page.getAttribute("#pinf", "aria-pressed")) === "true" && (await page.locator("#week .card:visible").count()) === 2, `${tag}: the filter is kept for next time`);
+      // All Sessions: only the pinned ones, from the server.
+      await page.evaluate(() => (document.querySelector('[data-view="history"]') as HTMLElement).click());
+      await page.waitForSelector("#history .hrow");
+      await page.waitForTimeout(500);
+      const rows = await page.evaluate(() => [...document.querySelectorAll("#history .hrow")].map((r) => !!r.querySelector(".pin-b.on")));
+      ok(rows.length === 2 && rows.every(Boolean), `${tag}: All Sessions shows the 2 pinned rows (${rows})`);
+      p = await pinOf(page.locator("#history .hrow").first());
+      ok(p.inside && p.opacity === 1, `${tag}: a row's pin sits inside it`);
+      ok(!(await content(page)).sideways, `${tag}: All Sessions with the filter: nothing spills sideways`);
+      await shot("history-filter");
+      // Nothing pinned: a quiet line in Last 7 Days and in All Sessions.
+      await pinApi(sendSid, false);
+      await pinApi(sid, false);
+      await page.waitForTimeout(800);
+      ok((await page.locator("#history .empty-state h3").textContent()) === "No pinned sessions", `${tag}: All Sessions says there are no pinned sessions`);
+      await shot("history-empty");
+      await page.evaluate(() => (document.querySelector('[data-view="week"]') as HTMLElement).click());
+      await page.waitForTimeout(800);
+      ok((await page.locator("#week .quiet.pinq").textContent()) === "No pinned sessions. Pin one from its card." && (await page.locator("#pinf .n").textContent()) === "",
+        `${tag}: Last 7 Days says so, and the toggle has no count`);
+      ok(!(await content(page)).sideways, `${tag}: nothing pinned: nothing spills sideways`);
+      await shot("empty");
+      await page.click("#pinf");
+      await page.evaluate(() => { try { localStorage.removeItem("csm-pinned-only"); } catch {} });
+      await page.close();
+      await pinApi(sendSid, true); // back as the demo had it: the release notes pinned
+    }
+
+    // In the app: no toggle in the page; the toolbar's is told, and drives it.
+    {
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      await catchOpens(page);
+      await page.addInitScript(() => {
+        (window as any).__sent = [];
+        (window as any).webkit = { messageHandlers: { strip: { postMessage: (m: any) => (window as any).__sent.push(JSON.parse(JSON.stringify(m))) } } };
+      });
+      await page.goto(base + "/?embed");
+      await page.waitForSelector("#week .card .pin-b.on");
+      await settle(page);
+      const sent = () => page.evaluate(() => (window as any).__sent.filter((m: any) => m.pinned || m.menu));
+      ok(!(await page.locator("#pinf").isVisible()), "pins, in the app: no toggle in the page");
+      let got = await sent();
+      ok(got.some((m: any) => m.pinned && m.pinned.on === false && m.pinned.count === 0) && got.some((m: any) => m.pinned && m.pinned.count === 1),
+        `pins, in the app: the page tells the app the filter and the count, on load and when it changes (${JSON.stringify(got)})`);
+      await page.evaluate(() => (window as any).csm.pinnedOnly(true));
+      await page.waitForTimeout(700);
+      ok((await page.locator("#week .card:visible").count()) === 1 && (await sent()).at(-1)?.pinned?.on === true, "pins, in the app: pinnedOnly(true) filters, and the page says so");
+      await page.evaluate(() => (window as any).csm.pinnedOnly(false));
+      const other = card(page, NOPERMIT);
+      const sid = await sidOf(other);
+      await page.evaluate((sid: string) => (window as any).csm.togglePin(sid), sid);
+      await other.locator(".pin-b.on").waitFor({ timeout: 5000 });
+      ok((await sent()).at(-1)?.pinned?.count === 2, "pins, in the app: togglePin pins a session from the app's menu");
+      await other.click({ button: "right" });
+      const menu = (await sent()).filter((m: any) => m.menu).at(-1)?.menu;
+      ok(menu?.sid === sid && menu?.pinned === true, `pins, in the app: the card's menu says it's pinned (${JSON.stringify(menu)})`);
+      await page.evaluate((sid: string) => (window as any).csm.togglePin(sid), sid);
+      await other.locator(".pin-b:not(.on)").waitFor({ timeout: 5000 });
+      await page.screenshot({ path: join(OUT, "app-pins.png") });
+      await page.close();
+    }
+  }
+
+  // Most active. The toggle after Pinned, one filter at a time: on, Last 7 Days keeps its usual
+  // view (Active's cards beside the week's usage, the days' rows) with only the 10 sessions
+  // Claude worked in most, most first in each part, each with its time working beside its state
+  // (the working mark's color, the amber card's ink on amber); All Sessions the same, by day.
+  // Kept for next time. Nothing counted yet: a quiet line. An amber row's icons are in its ink.
+  // In the app the toolbar has it: the page says {active: {on}} and takes activeOnly().
+  {
+    const minutes = (t: string) => { const h = /(\d+)h/.exec(t), m = /(\d+)m/.exec(t); return t.startsWith("<") ? 0 : (h ? 60 * Number(h[1]) : 0) + (m ? Number(m[1]) : 0); };
+    // Relative luminance contrast of two computed colors.
+    const contrastJs = `(a, b) => { const L = (c) => { const v = c.match(/[\\d.]+/g).slice(0, 3).map(Number).map((x) => { x /= 255; return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4; }); return 0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2]; }; const [x, y] = [L(a), L(b)].sort((p, q) => q - p); return (x + 0.05) / (y + 0.05); }`;
+    for (const size of [SIZES[0], SIZES[2], SIZES[3]]) {
+      const page = await browser.newPage({ viewport: { width: size.width, height: size.height }, deviceScaleFactor: 2 });
+      await catchOpens(page);
+      await page.goto(base + "/");
+      await page.evaluate(() => { try { localStorage.removeItem("csm-active-only"); localStorage.removeItem("csm-pinned-only"); } catch {} });
+      await page.reload();
+      await page.waitForSelector("#week .card");
+      await settle(page);
+      const tag = `most active, ${size.name}`;
+      const shot = (what: string) => page.screenshot({ path: join(OUT, `${size.name}-most-${what}.png`) });
+      ok(await page.locator("#maf").isVisible() && (await page.getAttribute("#maf", "aria-pressed")) === "false" && (await page.locator("#week .ma-b").count()) === 0,
+        `${tag}: the toggle is there, off, and no card shows its time`);
+      await shot("off");
+      await page.click("#maf");
+      await page.waitForTimeout(800);
+      await page.mouse.move(1, 1);
+      await settle(page);
+      const week = await page.evaluate((contrast: string) => {
+        const ratio = eval(contrast);
+        const shown = (e: Element) => (e as HTMLElement).getClientRects().length > 0 && !(e as HTMLElement).closest("[data-leaving]");
+        const cards = [...document.querySelectorAll("#week .card")].filter(shown) as HTMLElement[];
+        const rows = [...document.querySelectorAll("#week .hrow")].filter(shown) as HTMLElement[];
+        const groups = [...document.querySelectorAll("#week .group")].filter(shown);
+        const ma = (c: Element) => [...c.querySelectorAll(".ma-b")].find(shown) as HTMLElement;
+        const meets = (a: DOMRect, b: DOMRect) => a.left < b.right - 0.5 && b.left < a.right - 0.5 && a.top < b.bottom - 0.5 && b.top < a.bottom - 0.5;
+        const bgOf = (el: HTMLElement) => { for (let e: HTMLElement | null = el; e; e = e.parentElement) { const c = getComputedStyle(e).backgroundColor; if (c && !/rgba\(.*, 0\)$/.test(c) && c !== "transparent") return c; } return "rgb(0, 0, 0)"; };
+        return {
+          n: cards.length + rows.length, cards: cards.length,
+          times: groups.map((g) => [...g.querySelectorAll(".card, .hrow")].filter(shown).map((c) => ma(c)?.textContent ?? "")),
+          heads: groups.map((g) => [g.querySelector(".group-head > span")!.textContent, g.querySelector(".group-head .count")!.textContent, [...g.querySelectorAll(".card, .hrow")].filter(shown).length]),
+          rowsInside: rows.every((c) => { const b = ma(c).getBoundingClientRect(), r = c.getBoundingClientRect(); return b.right <= r.right && b.left >= r.left; }),
+          usage: shown(document.querySelector("#week .meter")!) || shown(document.querySelector("#week .wstrip")!),
+          // One time per card, inside it, over neither its title, its words nor anything else on its top line.
+          inside: cards.every((c) => {
+            const b = ma(c)?.getBoundingClientRect(), r = c.getBoundingClientRect();
+            if (!b || c.querySelectorAll(".ma-b").length !== 2 || [...c.querySelectorAll(".ma-b")].filter(shown).length !== 1) return false;
+            const others = [...c.querySelectorAll(".title, .detail, .top > .tag, .time > :not(.ma-b), .pin-b")].filter(shown).map((e) => e.getBoundingClientRect());
+            return b.right <= r.right && b.left >= r.left && others.every((o) => !meets(b, o));
+          }),
+          ink: cards.filter((c) => c.matches(".waiting, .asks, .needs")).map((c) => getComputedStyle(ma(c)).color === getComputedStyle(c.querySelector(".title")!).color),
+          contrast: Math.min(...cards.map((c) => ratio(getComputedStyle(ma(c)).color, bgOf(c)))),
+          // Pointed at or selected (a card keeps .selected with the keyboard), on its hover step.
+          selContrast: Math.min(...cards.map((c) => { c.classList.add("selected"); const r = ratio(getComputedStyle(ma(c)).color, bgOf(c)); c.classList.remove("selected"); return r; })),
+          icon: cards.every((c) => !!ma(c)?.querySelector("svg")),
+          tip: (cards[0] && ma(cards[0])?.getAttribute("title")) ?? "", aria: cards[0]?.getAttribute("aria-label") ?? "",
+          pressed: [document.getElementById("maf")!.getAttribute("aria-pressed"), document.getElementById("pinf")!.getAttribute("aria-pressed")],
+          sideways: document.documentElement.scrollWidth > innerWidth + 1,
+          counts: (() => { const c = document.getElementById("counts")!; return c.scrollWidth <= c.clientWidth + 1; })(), // the header's counts aren't cut by the two toggles
+        };
+      }, contrastJs);
+      const desc = (ts: string[]) => ts.map(minutes).every((m, i, a) => m > 0 && (i === 0 || a[i - 1] >= m));
+      ok(week.pressed.join() === "true,false" && week.n === 10 && week.cards > 0 && week.heads[0]?.[0] === "Active" && week.heads.every((h: any[]) => Number(h[1]) === h[2] || (h[2] === 0 && h[1] === "")),
+        `${tag}: the usual view, Active first, with only 10 sessions, each group counting what shows (${JSON.stringify([week.n, week.heads, week.pressed])})`);
+      ok(week.times.every(desc) && week.icon, `${tag}: each with its time and the activity icon, most first in each group (${JSON.stringify(week.times)})`);
+      ok(week.usage && week.inside && week.rowsInside && !week.sideways && week.counts, `${tag}: the week's usage stays; each time fits its card's top row; nothing spills sideways (${JSON.stringify([week.usage, week.inside, week.sideways])})`);
+      ok(week.ink.length > 0 && week.ink.every(Boolean), `${tag}: on an amber card, the time is in the card's ink (${week.ink})`);
+      ok(week.contrast >= 4.5, `${tag}: the time reaches 4.5:1 on every card (${week.contrast.toFixed(2)})`);
+      ok(week.selContrast >= 4.5, `${tag}: the time reaches 4.5:1 on every card's hover step too (${week.selContrast.toFixed(2)})`);
+      ok(/working in the last 7 days$/.test(week.tip) && /working in the last 7 days/.test(week.aria), `${tag}: the tip and the card's label say it in words (${week.tip})`);
+      await shot("cards");
+      // One filter at a time.
+      await page.click("#pinf");
+      await page.waitForTimeout(700);
+      const both = [await page.getAttribute("#pinf", "aria-pressed"), await page.getAttribute("#maf", "aria-pressed"), await page.locator("#week .ma-b:visible").count()];
+      ok(both.join() === "true,false,0", `${tag}: Pinned turns Most active off (${both})`);
+      await page.click("#maf");
+      await page.waitForTimeout(700);
+      ok((await page.getAttribute("#pinf", "aria-pressed")) === "false" && (await page.getAttribute("#maf", "aria-pressed")) === "true", `${tag}: and Most active turns Pinned off`);
+      await page.reload();
+      await page.locator("#week .card .ma-b:visible").first().waitFor();
+      ok((await page.getAttribute("#maf", "aria-pressed")) === "true" && (await page.locator("#week .card:visible, #week .hrow:visible").count()) === 10, `${tag}: the filter is kept for next time`);
+      // All Sessions: the same 10 as rows, most first, from the server.
+      await page.evaluate(() => (document.querySelector('[data-view="history"]') as HTMLElement).click());
+      await page.waitForSelector("#history .hrow .ma-b");
+      await page.waitForTimeout(500);
+      const rows = await page.evaluate(() => {
+        const amber = [...document.querySelectorAll("#history .hrow.live:is(.s-waiting, .s-asks)")];
+        const ink = (e: Element) => getComputedStyle(e).color;
+        return {
+          n: document.querySelectorAll("#history .hrow").length,
+          times: [...document.querySelectorAll("#history .group")].map((g) => [...g.querySelectorAll(".hrow")].map((r) => r.querySelector(".ma-b")?.textContent ?? "")),
+          heads: [...document.querySelectorAll("#history .group-head > span:not(.count)")].map((h) => h.textContent),
+          inside: [...document.querySelectorAll("#history .hrow")].every((r) => { const b = r.querySelector(".ma-b")!.getBoundingClientRect(), x = r.getBoundingClientRect(); return b.right <= x.right && b.left >= x.left; }),
+          // An amber row: its scheduled-run icon, its time working and its other icons in its ink, never the plain rows' gray.
+          amber: amber.map((r) => [...r.querySelectorAll(".hsched, .ma-b, .hicon, .tag.name svg.i")].map((e) => [ink(e), [ink(r.querySelector(".htitle")!), ink(r.querySelector(".htime")!)].includes(ink(e))])),
+          hsched: amber.some((r) => r.querySelector(".hsched")),
+        };
+      });
+      ok(rows.n === 10 && rows.times.every(desc) && rows.inside && !rows.heads.includes("Most active"),
+        `${tag}: All Sessions shows the 10 as its usual rows by day, most first in each, each with its time (${JSON.stringify(rows.times)})`);
+      ok(rows.hsched && rows.amber.flat().every((x: any) => x[1]), `${tag}: an amber row's icons are in its ink (${JSON.stringify(rows.amber)})`);
+      ok(!(await content(page)).sideways, `${tag}: All Sessions with the filter: nothing spills sideways`);
+      await shot("history");
+      await page.evaluate(() => (document.querySelector('[data-view="week"]') as HTMLElement).click());
+      await page.click("#maf");
+      await page.waitForTimeout(500);
+      ok((await page.locator("#week .ma-b:visible").count()) === 0 && (await page.locator("#week .card:visible, #week .hrow:visible").count()) > 10,
+        `${tag}: off again, every session is back and no time shows`);
+      await page.close();
+    }
+
+    // Nothing counted yet: the stream and History serve the demo's state without any time.
+    {
+      const plain = await (await fetch(`${base}/api/state`)).json();
+      for (const x of plain.sessions) delete x.worked;
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 }, deviceScaleFactor: 2 });
+      await catchOpens(page);
+      await page.route("**/api/stream", (r: any) => r.fulfill({ status: 200, headers: { "content-type": "text/event-stream" }, body: `retry: 600000\ndata: ${JSON.stringify(plain)}\n\n` }));
+      await page.route("**/api/history**", (r: any) => r.request().url().includes("active=1") ? r.fulfill({ json: { total: 0, sessions: [] } }) : r.continue());
+      await page.addInitScript(() => { try { localStorage.setItem("csm-active-only", "1"); } catch {} });
+      await page.goto(base + "/");
+      await page.waitForSelector("#week .quiet.maq");
+      ok((await page.locator("#week .quiet.maq").textContent()) === "Nothing counted yet. Sessions show here once Claude has worked in them." && (await page.locator("#week .card:visible, #week .hrow:visible").count()) === 0,
+        "most active, nothing counted: Last 7 Days says so in a quiet line");
+      await page.screenshot({ path: join(OUT, "tall-most-empty.png") });
+      await page.evaluate(() => (document.querySelector('[data-view="history"]') as HTMLElement).click());
+      await page.waitForSelector("#history .empty-state h3");
+      ok((await page.locator("#history .empty-state h3").textContent()) === "Nothing counted yet", "most active, nothing counted: All Sessions says so");
+      await page.screenshot({ path: join(OUT, "tall-most-history-empty.png") });
+      await page.evaluate(() => { try { localStorage.removeItem("csm-active-only"); } catch {} });
+      await page.close();
+    }
+
+    // In the app: no toggle in the page; the toolbar's is told, and drives it.
+    {
+      const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+      await catchOpens(page);
+      await page.addInitScript(() => {
+        (window as any).__sent = [];
+        (window as any).webkit = { messageHandlers: { strip: { postMessage: (m: any) => (window as any).__sent.push(JSON.parse(JSON.stringify(m))) } } };
+      });
+      await page.goto(base + "/?embed");
+      await page.waitForSelector("#week .card");
+      await settle(page);
+      const sent = () => page.evaluate(() => (window as any).__sent.filter((m: any) => m.active || m.pinned));
+      ok(!(await page.locator("#maf").isVisible()), "most active, in the app: no toggle in the page");
+      ok((await sent()).some((m: any) => m.active && m.active.on === false), "most active, in the app: the page tells the app the filter on load");
+      await page.evaluate(() => (window as any).csm.pinnedOnly(true));
+      await page.waitForTimeout(300);
+      await page.evaluate(() => (window as any).csm.activeOnly(true));
+      await page.waitForTimeout(800);
+      const got = await sent();
+      const lastPinned = got.filter((m: any) => m.pinned).at(-1)?.pinned, lastActive = got.filter((m: any) => m.active).at(-1)?.active;
+      ok((await page.locator("#week .card:visible, #week .hrow:visible").count()) === 10 && lastActive?.on === true && lastPinned?.on === false,
+        `most active, in the app: activeOnly(true) filters, says so, and says Pinned is off (${JSON.stringify([lastActive, lastPinned])})`);
+      await page.screenshot({ path: join(OUT, "app-most.png") });
+      await page.evaluate(() => (window as any).csm.activeOnly(false));
+      await page.waitForTimeout(300);
+      ok((await sent()).filter((m: any) => m.active).at(-1)?.active?.on === false, "most active, in the app: activeOnly(false) turns it off");
+      await page.close();
+    }
+  }
+
   // The rest changes the demo's sessions for good, so it runs once, in the app's window and
   // in the compact view.
   for (const size of [{ name: "wide", width: 1280, height: 900 }, { name: "compact", width: 600, height: 900 }]) {

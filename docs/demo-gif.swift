@@ -161,11 +161,14 @@ config.userContentController.addUserScript(utc)
 config.userContentController.add(dictation, name: "dictate")
 let web = WKWebView(frame: window.contentLayoutRect, configuration: config)
 window.contentView = web
-// On screen, so WebKit keeps drawing, but clear, behind everything and never key: nothing
-// shows while it records, and the pointer never hovers the page.
+// On screen, so WebKit keeps drawing, but clear, in front and never key: nothing shows while it
+// records, and the pointer never hovers the page. On the built-in screen and in front, because
+// WebKit stops drawing a page whose window is covered (behind a full-screen app, say).
 window.alphaValue = 0
 window.ignoresMouseEvents = true
-window.orderBack(nil)
+if let s = NSScreen.screens.first(where: { $0.localizedName.contains("Built-in") || $0.localizedName.contains("Color LCD") }) { window.setFrameOrigin(s.frame.origin) }
+window.level = .floating
+window.orderFrontRegardless()
 
 final class Recorder: NSObject, WKNavigationDelegate {
   var start = Date()

@@ -2,13 +2,14 @@
 
 import { basename } from "node:path";
 import { DAY_MS, WEEK_MS } from "./config.ts";
-import { type Status, type Agent, type Session, tasks, sessions } from "./state.ts";
+import { type Status, type Agent, type Session, tasks, sessions, pins } from "./state.ts";
 import { relativesOf } from "./desktop.ts";
 import { runName, activeAgents, activeCommands } from "./agents.ts";
 import { type Blocked, blockedWords, madeTasks, reminderView, taskList } from "./tasks.ts";
 import { usageView } from "./usage.ts";
 import { canAnswer, sayable } from "./answers.ts";
 import { permitOf } from "./permissions.ts";
+import { TOP, workedMs } from "./worked.ts";
 
 // What the card shows. A finished turn splits into done, asks (it ended with a question
 // for you) and error. Most urgent first.
@@ -50,14 +51,23 @@ export function shownStatus(s: Session, agents: Agent[]): Shown {
   return (s.status === "done" || s.status === "idle") && (agents.length || activeCommands(s).length) ? "working" : s.status;
 }
 
+// The sessions of the main view: the last 7 days; anything still running stays regardless.
+const weekOf = (now: number) => [...sessions.values()]
+  .filter((s) => !s.archived)
+  .map((s) => ({ s, agents: activeAgents(s) }))
+  .map((x) => ({ ...x, shown: shownStatus(x.s, x.agents) }))
+  .filter(({ s, shown }) => shown === "working" || shown === "waiting" || now - s.last < WEEK_MS);
+
+// The Most active filter: the TOP sessions of the main view with the most time working in the
+// last 7 days, most first (the page ranks Last 7 Days the same way; History asks for these).
+export function mostActive(now: number) {
+  return weekOf(now).map(({ s }) => ({ sid: s.sid, ms: workedMs(s, now) })).filter((x) => x.ms > 0)
+    .sort((a, b) => b.ms - a.ms || (a.sid < b.sid ? -1 : 1)).slice(0, TOP).map((x) => x.sid);
+}
+
 export function snapshot() {
   const now = Date.now();
-  const list = [...sessions.values()]
-    .filter((s) => !s.archived)
-    .map((s) => ({ s, agents: activeAgents(s) }))
-    .map((x) => ({ ...x, shown: shownStatus(x.s, x.agents) }))
-    // The main view is the last 7 days; anything still running stays regardless.
-    .filter(({ s, shown }) => shown === "working" || shown === "waiting" || now - s.last < WEEK_MS)
+  const list = weekOf(now)
     // Most urgent first. Working sessions keep a fixed order (newest started first):
     // sorting them by last activity would swap two busy cards every few seconds.
     .sort((a, b) => ORDER[a.shown] - ORDER[b.shown] || (a.shown === "working" ? b.s.first - a.s.first : b.s.last - a.s.last))
@@ -118,6 +128,8 @@ export function snapshot() {
         ultra: s.ultra || undefined,
         // The model that advises it (src/advisor.ts).
         advisor: s.advisor?.model ? { model: s.advisor.model } : undefined,
+        pinned: pins.has(s.sid) || undefined, // you pinned it (src/db.ts)
+        worked: workedMs(s, now) || undefined, // ms its turns spent working in the last 7 days (src/worked.ts)
         agents: agents.slice(0, 6).map((a) => ({
           id: a.id,
           label: a.label,
@@ -143,7 +155,8 @@ export function snapshot() {
   // A scheduled task the app can't start needs you too, like a session that stopped on an error.
   const taskViews = taskList(now);
   const attention = attentionOf(list, taskViews, now);
-  return { now, server: SERVER, needs: attention.length, attention, sessions: list, tasks: taskViews, usage: usageView(now) };
+  // pins: every pinned session's ID, older ones too, for the Pinned filter's count and History's rows.
+  return { now, server: SERVER, needs: attention.length, attention, sessions: list, tasks: taskViews, usage: usageView(now), pins: [...pins] };
 }
 
 // Which server answers: the app starts its own with its version, and replaces one that

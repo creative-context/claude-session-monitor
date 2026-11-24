@@ -478,6 +478,34 @@ if (GIF) {
   });
 }
 
+// Made-up time working for the Most active filter: a spread from minutes to hours, on each
+// session's last day, a few with none. Written before the server starts into sessions.db (its
+// own schema, through src/db.ts) as rows the main view doesn't load (last_at 0): the server
+// takes each one's count when it meets the session in the log, and counts only time after it.
+{
+  process.env.CSM_DIR = dir;
+  process.env.CSM_APP_SESSIONS = join(dir, "app");
+  process.env.CSM_PROJECTS = join(dir, "none");
+  const m = await import("../src/db.ts");
+  const { dayKey } = await import("../src/worked.ts");
+  m.openDatabase();
+  const lastAt = new Map<string, number>();
+  for (const l of readFileSync(log, "utf8").split("\n")) if (l) { const e = JSON.parse(l); lastAt.set(e.sid, Math.max(lastAt.get(e.sid) ?? 0, e.t)); }
+  const put = m.db.prepare("INSERT INTO sessions (sid, first_at, last_at, status, archived, worked) VALUES (?, 9e15, 0, 'idle', 0, ?)");
+  const to = Date.now();
+  for (const [sid, at] of lastAt) {
+    let h = 2166136261;
+    for (const c of sid) h = Math.imul(h ^ c.charCodeAt(0), 16777619);
+    h = Math.imul(h ^ (h >>> 15), 2246822507) >>> 0;
+    h = (h ^ (h >>> 13)) >>> 0;
+    if (h % 6 === 0) continue;
+    const x = (h % 1000) / 1000;
+    const ms = (8 + Math.round(400 * x * x)) * MIN;
+    put.run(sid, JSON.stringify({ to, d: { [dayKey(Math.min(at, to))]: ms } }));
+  }
+  m.db.close();
+}
+
 const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
     ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir,
@@ -486,6 +514,17 @@ const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   stdout: "inherit",
   stderr: "inherit",
 });
+// The release notes are pinned (POST /api/pin, once the server knows them), so the
+// screenshots and the animation show a pin.
+void (async () => {
+  for (let i = 0; i < 150; i++) {
+    try {
+      const r = await fetch(`http://127.0.0.1:${PORT}/api/pin/${releaseRun}`, { method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ pinned: true }) });
+      if (r.ok) return;
+    } catch {}
+    await Bun.sleep(100);
+  }
+})();
 // The answers mod in the sessions that have it. An answer starts a turn a moment later; a few
 // seconds after (CSM_DEMO_TURN_MS, 8 s by default) the session ends it and asks the same question again.
 const TURN_MS = Number(process.env.CSM_DEMO_TURN_MS) || 8000;

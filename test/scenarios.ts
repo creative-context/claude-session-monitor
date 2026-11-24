@@ -13,6 +13,7 @@ import { playMod } from "./answer-mod.ts";
 
 const PORT = 4749; // not the demo's 4748, so both can run at once
 const dir = mkdtempSync(join(tmpdir(), "csm-test-"));
+const fill = mkdtempSync(join(tmpdir(), "csm-fill-")); // for filling in working times from the log
 const log = join(dir, "events.jsonl");
 writeFileSync(log, "");
 
@@ -1283,6 +1284,109 @@ try {
     check("advisor: what the session asks and the answer reach neither the page nor the log", !shown.includes(SECRET_ADVICE) && !serverOutput.includes(SECRET_ADVICE));
   }
 
+  // Pins: set and taken off from a card (POST /api/pin/:sid), kept in sessions.db, shown on the
+  // session and its History row, and the Pinned filter on History. 991 is a session History
+  // alone knows, a month old.
+  {
+    const pinApi = (n: number | string, body: unknown, header = true) => fetch(`http://127.0.0.1:${PORT}/api/pin/${typeof n === "number" ? id(n) : n}`,
+      { method: "POST", headers: { ...(header ? { "x-csm": "1" } : {}), "content-type": "application/json" }, body: JSON.stringify(body) });
+    {
+      const db = new Database(join(dir, "sessions.db"));
+      db.exec("PRAGMA busy_timeout = 5000");
+      db.query("INSERT INTO sessions (sid, title, first_at, last_at, status, archived) VALUES (?, 'An old notebook', ?, ?, 'done', 0)")
+        .run(id(991), Date.now() - 31 * 86_400_000, Date.now() - 30 * 86_400_000);
+      db.close();
+    }
+    const r5 = await pinApi(5, { pinned: true });
+    check("pin: a session of the week is pinned (200, {ok: true})", r5.status === 200 && (await r5.json()).ok === true);
+    check("pin: an old session only History knows is pinned too", (await pinApi(991, { pinned: true })).status === 200);
+    check("pin: pinning twice is fine", (await pinApi(5, { pinned: true })).status === 200);
+    check("pin: an unknown session is 404, a bad ID too", (await pinApi(999, { pinned: true })).status === 404 && (await pinApi("task:x", { pinned: true })).status === 404);
+    check("pin: without the header, refused", (await pinApi(13, { pinned: true }, false)).status === 403);
+    check("pin: a body that isn't {pinned: true|false} is refused", (await pinApi(13, { pinned: "yes" })).status === 400 && (await pinApi(13, null)).status === 400);
+    check("pin: only a POST", (await fetch(`http://127.0.0.1:${PORT}/api/pin/${id(13)}`, { headers: { "x-csm": "1" } })).status === 405);
+    await pinApi(13, { pinned: true });
+    await pinApi(13, { pinned: false });
+    s = await state();
+    check("pin: the session carries pinned, the others don't", find(s, 5)?.pinned === true && !("pinned" in (find(s, 13) ?? {})) && find(s, 1) && !("pinned" in find(s, 1)), [find(s, 5)?.pinned, find(s, 13)?.pinned]);
+    check("pin: the state lists every pinned ID, old ones too", JSON.stringify([...(snap.pins ?? [])].sort()) === JSON.stringify([id(5), id(991)]), snap.pins);
+    // Later activity doesn't take the pin off.
+    ev(id(5), { ev: "UserPromptSubmit", prompt: "One more thing", t: Date.now() });
+    ev(id(5), { ev: "Stop", t: Date.now() + 1 });
+    await Bun.sleep(2600); // past the 2 s write
+    s = await state();
+    check("pin: new activity keeps the pin", find(s, 5)?.pinned === true, find(s, 5));
+    const h = await history();
+    check("pin: History's rows carry it", h.sessions.find((x: any) => x.sid === id(5))?.pinned === true && h.sessions.find((x: any) => x.sid === id(991))?.pinned === true
+      && !("pinned" in (h.sessions.find((x: any) => x.sid === id(13)) ?? {})), h.sessions.filter((x: any) => x.pinned).map((x: any) => x.sid));
+    const only = await (await fetch(`http://127.0.0.1:${PORT}/api/history?limit=200&pinned=1`)).json();
+    check("pin: History's Pinned filter has only the pinned ones, newest first", only.total === 2 && only.sessions.map((x: any) => x.sid).join() === [id(5), id(991)].join(), only);
+    const found = await (await fetch(`http://127.0.0.1:${PORT}/api/history?limit=200&pinned=1&q=notebook`)).json();
+    check("pin: the filter and a search together", found.total === 1 && found.sessions[0]?.sid === id(991), found);
+    const pdb = new Database(join(dir, "sessions.db"), { readonly: true });
+    const kept = pdb.query("SELECT sid, pinned_at FROM sessions WHERE pinned_at IS NOT NULL ORDER BY sid").all() as { sid: string; pinned_at: number }[];
+    pdb.close();
+    check("pin: sessions.db keeps when, for the pinned ones only", kept.map((k) => k.sid).join() === [id(5), id(991)].join() && kept.every((k) => k.pinned_at > Date.now() - 600_000), kept);
+  }
+
+  // Time working (the Most active filter): a session's own turn counts while it works, not
+  // while it waits on a permission or a question, nor for subagents after its turn ended; per
+  // day in sessions.db; a turn working now grows. 301-305 are new; their times are fixed.
+  const H = 3_600_000, M = 60_000, T = Date.now();
+  {
+    // 301: 4 h working, with an hour waiting on a permission in between.
+    ev(id(301), { ev: "UserPromptSubmit", prompt: "Count the long turn", t: T - 6 * H });
+    ev(id(301), { ev: "PreToolUse", tool: "Bash", d: "Build it", t: T - 6 * H + 1000 });
+    ev(id(301), { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", t: T - 4 * H });
+    ev(id(301), { ev: "PreToolUse", tool: "Bash", d: "Build it", t: T - 3 * H });
+    ev(id(301), { ev: "Stop", t: T - H });
+    // 305: 2 h working, with an hour on a question in between.
+    ev(id(305), { ev: "UserPromptSubmit", prompt: "Count the asking turn", t: T - 5 * H });
+    ev(id(305), { ev: "PreToolUse", tool: "AskUserQuestion", t: T - 4 * H });
+    ev(id(305), { ev: "PostToolUse", tool: "AskUserQuestion", t: T - 3 * H });
+    ev(id(305), { ev: "Stop", t: T - 2 * H });
+    // 303: 30 min working, then a subagent goes on for 20 min after its turn ended.
+    ev(id(303), { ev: "UserPromptSubmit", prompt: "Count the turn with a helper", t: T - 60 * M });
+    ev(id(303), { ev: "Stop", t: T - 30 * M });
+    ev(id(303), { ev: "PreToolUse", tool: "Read", agent: "helper-1", t: T - 25 * M });
+    ev(id(303), { ev: "PostToolUse", tool: "Read", agent: "helper-1", t: T - 5 * M });
+    // 302: a turn nine days ago is past the last 7 days.
+    ev(id(302), { ev: "UserPromptSubmit", prompt: "Count the old turn", t: T - 9 * 24 * H });
+    ev(id(302), { ev: "Stop", t: T - 9 * 24 * H + 30 * M });
+    // 304: working for 5 min, still now.
+    ev(id(304), { ev: "UserPromptSubmit", prompt: "Count the turn still going", t: T - 5 * M });
+  }
+  await Bun.sleep(2600); // past the 2 s write
+  s = await state();
+  const exact = { 301: 4 * H, 305: 2 * H, 303: 30 * M };
+  check("worked: a turn counts only while it works, not while it waits on a permission", find(s, 301)?.worked === exact[301], find(s, 301)?.worked);
+  check("worked: nor while it waits on a question", find(s, 305)?.worked === exact[305], find(s, 305)?.worked);
+  check("worked: subagents after the turn ended don't count", find(s, 303)?.worked === exact[303], find(s, 303)?.worked);
+  const live1 = find(s, 304)?.worked ?? 0;
+  check("worked: a turn working now counts up to now", live1 >= 5 * M && live1 < 7 * M, live1);
+  await Bun.sleep(1100);
+  ev(id(150), { ev: "SessionStart", t: Date.now() }); // anything, so the state is sent again
+  await Bun.sleep(400);
+  s = await state();
+  check("worked: and grows while it works", (find(s, 304)?.worked ?? 0) > live1, [live1, find(s, 304)?.worked]);
+  {
+    const h = await history("Count the old turn");
+    check("worked: a turn nine days ago is past the last 7 days", h.sessions[0]?.sid === id(302) && !("worked" in h.sessions[0]), h.sessions[0]);
+    const top = await (await fetch(`http://127.0.0.1:${PORT}/api/history?limit=200&active=1`)).json();
+    const ms = top.sessions.map((x: any) => x.worked);
+    const at = (n: number) => top.sessions.findIndex((x: any) => x.sid === id(n));
+    check("worked: History's Most active has at most 10, most first, each with its time", top.total === top.sessions.length && top.total <= 10 && top.total >= 4 &&
+      ms.every((x: number, i: number) => x > 0 && (i === 0 || ms[i - 1] >= x)) && at(301) >= 0 && at(301) < at(305) && at(305) < at(303) && at(302) < 0, top.sessions.map((x: any) => [x.sid.slice(-3), x.worked]));
+    const both = await (await fetch(`http://127.0.0.1:${PORT}/api/history?limit=200&active=1&q=asking`)).json();
+    check("worked: Most active and a search together", both.total === 1 && both.sessions[0]?.sid === id(305), both);
+    const db = new Database(join(dir, "sessions.db"), { readonly: true });
+    const kept = (db.query("SELECT worked FROM sessions WHERE sid = ?").get(id(301)) as { worked: string } | null)?.worked;
+    db.close();
+    const w = kept ? JSON.parse(kept) : null;
+    check("worked: sessions.db keeps times only, per day", !!w && Object.keys(w).every((k) => k === "to" || k === "d") &&
+      Object.entries(w.d).every(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && typeof v === "number") && Object.values(w.d as Record<string, number>).reduce((a, b) => a + b, 0) === exact[301], w);
+  }
+
   // A restart loses nothing: the week comes back from the database.
   server.kill();
   await server.exited;
@@ -1327,6 +1431,7 @@ try {
     await Bun.sleep(4000);
     s = await state();
   }
+  check("pin: after a restart, the pins are still there", find(s, 5)?.pinned === true && !find(s, 13)?.pinned && JSON.stringify([...(snap.pins ?? [])].sort()) === JSON.stringify([id(5), id(991)]), snap.pins);
   check("after a restart, the question is still there", find(s, 15)?.status === "asks" && /me falta saber/.test(find(s, 15)?.ask ?? ""), find(s, 15));
   check("19 after a restart, the run still knows its task", (await history("Weekday digest")).sessions.find((x: any) => x.sid === id(19))?.task === "t-digest");
   check("28 after a restart, the wakeup is still there", find(s, 28)?.reminder?.at === later, find(s, 28)?.reminder);
@@ -1348,6 +1453,35 @@ try {
     check("198 and 202 after a restart, turned off stays off", find(again, 198) && !find(again, 198)?.advisor && find(again, 202) && !find(again, 202)?.advisor, [find(again, 198), find(again, 202)]);
   }
   check("after a restart, the recap is still there", find(s, 5)?.title !== undefined && find(s, 13)?.status === "error", [find(s, 5), find(s, 13)]);
+  check("worked: after a restart, the same time, not counted twice", find(s, 301)?.worked === exact[301] && find(s, 305)?.worked === exact[305] && find(s, 303)?.worked === exact[303],
+    [find(s, 301)?.worked, find(s, 305)?.worked, find(s, 303)?.worked]);
+  // 304 has no process to check, so a restart takes it as no longer working (as for its status):
+  // its time stops at its last event, the prompt, and nothing more is added while it sits.
+  check("worked: after a restart, a turn no process carries on stops at its last event", find(s, 304)?.status !== "working" && !find(s, 304)?.worked, find(s, 304));
+  {
+    await Bun.sleep(2600); // past the 2 s write
+    const db = new Database(join(dir, "sessions.db"), { readonly: true });
+    const kept = (db.query("SELECT worked FROM sessions WHERE sid = ?").get(id(304)) as { worked: string } | null)?.worked;
+    db.close();
+    check("worked: and its row no longer holds the turn's start, so a later restart adds nothing", !!kept && !("from" in JSON.parse(kept)), kept);
+  }
+  // Where reading stopped is lost: the log's tail is read again over sessions.db, and nothing counts twice.
+  server.kill();
+  await server.exited;
+  rmSync(join(dir, "events.pos.json"), { force: true });
+  server = start();
+  s = await state();
+  check("worked: the whole log read again over sessions.db counts nothing twice", find(s, 301)?.worked === exact[301] && find(s, 305)?.worked === exact[305] && find(s, 303)?.worked === exact[303] &&
+    (find(s, 304)?.worked ?? 0) >= 5 * M && (find(s, 304)?.worked ?? 0) < 9 * M, [find(s, 301)?.worked, find(s, 305)?.worked, find(s, 303)?.worked, find(s, 304)?.worked]);
+  ev(id(304), { ev: "Stop", t: Date.now() });
+  await Bun.sleep(2600);
+  s = await state();
+  const ended = find(s, 304)?.worked ?? 0;
+  await Bun.sleep(1000);
+  ev(id(150), { ev: "SessionStart", t: Date.now() });
+  await Bun.sleep(400);
+  s = await state();
+  check("worked: once its turn ends, it stops growing", ended >= 5 * M && find(s, 304)?.worked === ended, [ended, find(s, 304)?.worked]);
 
   // A sessions.db that isn't a database is moved aside as sessions.db.bad, and the server starts fresh.
   server.kill();
@@ -1358,10 +1492,81 @@ try {
   const up = await state().catch(() => null);
   check("a garbage sessions.db: the server starts fresh and keeps it aside", find(up ?? [], 147)?.status === "working" &&
     existsSync(join(bad, "sessions.db.bad")) && (await history()).sessions?.some((x: any) => x.sid === id(147)), up && find(up, 147));
+
+  // Working times filled in once from the log, for the turns read before counting began. 401 had
+  // a turn counted live (30 min) and an older one only the log has (1 h, in events.1.jsonl); 402
+  // has a row and a turn only in events.1.jsonl (1 h); 403 is only in the log, with no row.
+  server.kill();
+  await server.exited;
+  {
+    const H = 3_600_000, M = 60_000, T = Date.now();
+    const line = (sid: string, e: object) => JSON.stringify({ sid, cwd: "/tmp/demo", ...e }) + "\n";
+    // First run: counting is on from the start; only 401's recent turn and 402's start are in the log.
+    writeFileSync(join(fill, "events.jsonl"), line(id(402), { ev: "SessionStart", t: T - 6 * H }) + line(id(404), { ev: "SessionStart", t: T - 4 * H }) +
+      line(id(401), { ev: "UserPromptSubmit", prompt: "Fill the counts", t: T - 3 * H }) + line(id(401), { ev: "Stop", t: T - 3 * H + 30 * M }));
+    server = start(fill);
+    await state();
+    await Bun.sleep(3000); // the fill runs a second after the start, then the 2 s write
+    let f = await state();
+    check("fill: counted live, 401 has its 30 min", find(f, 401)?.worked === 30 * M && !find(f, 402)?.worked, [find(f, 401)?.worked, find(f, 402)?.worked]);
+    server.kill();
+    await server.exited;
+    // As on a Mac where counting came later: the fill hasn't run, and older lines are in events.1.jsonl,
+    // with a broken one. Where reading stopped stays put, so the start reads nothing new.
+    {
+      const db = new Database(join(fill, "sessions.db"));
+      db.exec("PRAGMA busy_timeout = 5000");
+      check("fill: the first run marked it done", !!db.query("SELECT 1 FROM meta WHERE key = 'worked_backfill'").get());
+      db.exec("DELETE FROM meta");
+      db.close();
+    }
+    writeFileSync(join(fill, "events.1.jsonl"),
+      line(id(401), { ev: "UserPromptSubmit", prompt: "Fill the counts", t: T - 30 * H }) + "{not json\n" +
+      line(id(401), { ev: "PreToolUse", tool: "Bash", d: "Build", t: T - 30 * H + 1000 }) +
+      line(id(401), { ev: "Notification", nt: "permission_prompt", msg: "Claude needs your permission to use Bash", t: T - 29.5 * H }) +
+      line(id(401), { ev: "PreToolUse", tool: "Bash", d: "Build", t: T - 29 * H }) + // 30 min, a wait of 30 min, then 30 min
+      line(id(401), { ev: "Stop", t: T - 28.5 * H }) +
+      line(id(402), { ev: "UserPromptSubmit", prompt: "Fill the other", t: T - 20 * H }) +
+      line(id(402), { ev: "PreToolUse", tool: "Read", agent: "helper-9", t: T - 19.8 * H }) +
+      line(id(402), { ev: "Stop", t: T - 19 * H }) +
+      line(id(402), { ev: "PostToolUse", tool: "Read", agent: "helper-9", t: T - 18 * H }) + // a subagent after the turn: nothing
+      line(id(403), { ev: "UserPromptSubmit", prompt: "No row for me", t: T - 10 * H }) + line(id(403), { ev: "Stop", t: T - 9 * H }) +
+      // 404: stopped with Esc while a tool ran (no PostToolUse), the session closed 10 h later.
+      line(id(404), { ev: "UserPromptSubmit", prompt: "Stopped mid-tool", t: T - 15 * H }) + line(id(404), { ev: "PreToolUse", tool: "Bash", d: "Build", t: T - 15 * H + 1000 }) +
+      line(id(404), { ev: "SessionEnd", t: T - 5 * H }));
+    server = start(fill);
+    await state();
+    await Bun.sleep(3000);
+    f = await state();
+    check("fill: the log's older turns fill the counts once, events.1.jsonl included", find(f, 402)?.worked === H, find(f, 402)?.worked);
+    check("fill: a session counted live keeps its live part, and the total is the fill plus it, no overlap", find(f, 401)?.worked === H + 30 * M, find(f, 401)?.worked);
+    check("fill: a turn stopped mid-tool ends at its last event when the session closes, not hours later", (find(f, 404)?.worked ?? 0) <= 1000, find(f, 404)?.worked);
+    {
+      const db = new Database(join(fill, "sessions.db"), { readonly: true });
+      const none = db.query("SELECT sid FROM sessions WHERE sid = ?").get(id(403));
+      const row = (db.query("SELECT worked FROM sessions WHERE sid = ?").get(id(402)) as { worked: string } | null)?.worked;
+      db.close();
+      check("fill: a session with no row gets nothing, and the totals are in sessions.db", !none && !!row && Object.values(JSON.parse(row).d as Record<string, number>).reduce((a, b) => a + b, 0) === H, [none, row]);
+    }
+    // Live counting goes on after it: 401 works 10 min more.
+    appendFileSync(join(fill, "events.jsonl"), line(id(401), { ev: "UserPromptSubmit", prompt: "One more", t: Date.now() - 10 * M }) + line(id(401), { ev: "Stop", t: Date.now() }));
+    await Bun.sleep(2600);
+    f = await state();
+    check("fill: live counting adds on top of it", find(f, 401)?.worked === H + 40 * M, find(f, 401)?.worked);
+    server.kill();
+    await server.exited;
+    rmSync(join(fill, "events.pos.json"), { force: true }); // and the whole log is read again too
+    server = start(fill);
+    await state();
+    await Bun.sleep(3000);
+    f = await state();
+    check("fill: a restart doesn't add it again", find(f, 401)?.worked === H + 40 * M && find(f, 402)?.worked === H, [find(f, 401)?.worked, find(f, 402)?.worked]);
+  }
 } finally {
   server.kill();
   rmSync(dir, { recursive: true, force: true });
   rmSync(bad, { recursive: true, force: true });
+  rmSync(fill, { recursive: true, force: true });
 }
 
 // The schedule reader on its own, from a fixed Thursday noon.

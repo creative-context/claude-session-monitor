@@ -7,11 +7,15 @@ import { readRange } from "./log.ts";
 import { hasAppFile, readAppFileSoon, readDesktopSoon } from "./desktop.ts";
 import { timeOf } from "./tasks.ts";
 import { answersOf, clearReply, forgetAnswer } from "./answers.ts";
+import { noteStatus } from "./worked.ts";
 
 // A repeating reminder stops after 7 days, as Claude Code does.
 const REMINDER_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
 
-export function setStatus(s: Session, status: Status, t: number) {
+// end: where its time working stops counting, when it left "working" (src/worked.ts): the
+// change's own time, or the last sign of life for a turn found over later.
+export function setStatus(s: Session, status: Status, t: number, end = t) {
+  noteStatus(s, s.status, status, t, end);
   // A finished turn that starts working again, by any path (a prompt, or a background task
   // waking it with none), no longer asks: its answer buttons and a reply on its way go.
   if (s.status === "done" && status === "working") forgetAnswer(s);

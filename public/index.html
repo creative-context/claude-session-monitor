@@ -37,7 +37,7 @@
      view tabs, search, status and sound in place of the page's own. */
   body.embed .strip { padding-top: var(--csm-chrome-top, 12px); }
   body.embed header { padding-right: var(--csm-chrome-right, 0px); }
-  body.embed :is(#link, #sound, header .seg, header .search) { display: none; }
+  body.embed :is(#link, #sound, header .seg, header .search, header .pinf) { display: none; }
   .lights { display: none; flex: none; width: var(--csm-lights-w, 56px); height: 1px; margin-right: -8px; }
   body.embed .lights { display: block; }
 
@@ -110,7 +110,7 @@
      hot, red near the limit. */
   .abody { display: flex; gap: 8px; align-items: stretch; }
   .abody > .grid { flex: 1; min-width: 0; }
-  .abody > .grid:empty { display: none; }
+  .abody > .grid:empty, .abody:has(> .quiet) > .grid { display: none; } /* cards still fading out don't hold a column beside the quiet line */
   .abody > .quiet { flex: 1; align-self: flex-start; }
   .meter { --fill: #C4C8CF; --over: var(--fill); --say: var(--color-text-secondary);
     /* Always two cards tall, whether Active has one row or more, so the day blocks keep their size. */
@@ -304,6 +304,7 @@
   .card:is(.waiting, .asks, .needs):not(.stale) .dots i.r-done { background: #2E6B24; }
   .card:is(.waiting, .asks, .needs):not(.stale) .dots i.r-error { background: #A3261F; }
   .hrow .hsched { display: inline-flex; color: var(--color-text-secondary); flex: none; }
+  .hrow.live:is(.s-waiting, .s-asks) .hsched { color: var(--color-on-needs-text); } /* an amber row's icons in its ink, as its time and folder */
   /* A scheduled task a session set up: its tag on the card opens it in Scheduled. */
   .card .tags { gap: 14px; }
   .card .tags .tag.name, .card .tags .tag.rel { background: none; padding: 0; color: var(--meta); }
@@ -327,14 +328,75 @@
   .card:is(.waiting, .asks, .needs):not(.stale):is(.rel-lit, .rel-self) .tags .tag.rel { color: var(--color-on-needs); }
   .top .time { margin-left: auto; }
 
+  /* ---------- pins ----------
+     A pin at the end of a card's top row, after the time, and at the end of a row: an outline
+     on hover and keyboard focus, filled and always there once pinned (white on a dark card, in
+     the amber card's dark ink). Its place is kept either way, so nothing moves when it shows. */
+  .pin-b { flex: none; box-sizing: border-box; width: 18px; height: 18px; margin: -2px 0 -2px 2px; display: inline-flex; align-items: center; justify-content: center;
+    border-radius: 4px; color: #666A73; opacity: 1; cursor: pointer; /* always there, one faint neutral gray on every dark tint; the card's own gray when you point at it */
+    transition: opacity var(--duration-fast) var(--ease-standard), background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+  .pin-b svg.i { width: 13px; height: 13px; fill: none; }
+  .pin-b.gap { visibility: hidden; } /* a task's card keeps the place, so its time lines up with the cards beside it */
+  :is(.card, .hrow):is(:hover, :focus-visible) .pin-b, .pin-b:focus-visible { color: inherit; }
+  :is(.card, .hrow) .pin-b:hover { color: var(--color-text-primary); background: var(--color-fill); }
+  :is(.card, .hrow) .pin-b.on { opacity: 1; color: var(--color-text-primary); }
+  .pin-b.on svg.i { fill: currentColor; }
+  .pin-b:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 1px; }
+  /* On amber: the dark ink, faint at rest, full when you point at its card or row, filled when pinned. */
+  .card:is(.waiting, .asks, .needs):not(.stale) .pin-b, .hrow.live:is(.s-waiting, .s-asks) .pin-b { color: var(--color-on-needs); opacity: 0.45; }
+  .card:is(.waiting, .asks, .needs):not(.stale):is(:hover, :focus-visible) .pin-b, .hrow.live:is(.s-waiting, .s-asks):is(:hover, :focus-visible) .pin-b,
+  .card:is(.waiting, .asks, .needs):not(.stale) .pin-b:is(.on, :focus-visible), .hrow.live:is(.s-waiting, .s-asks) .pin-b:is(.on, :focus-visible) { opacity: 1; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .pin-b:hover, .hrow.live:is(.s-waiting, .s-asks) .pin-b:hover { background: #0000001F; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .pin-b:focus-visible, .hrow.live:is(.s-waiting, .s-asks) .pin-b:focus-visible { outline-color: var(--color-on-needs); }
+  .hrow .htime { display: inline-flex; align-items: center; justify-content: flex-end; gap: 4px; }
+  /* The filter, in a browser: a toggle with its count before the view tabs (the app has it in its toolbar). */
+  header .pinf { all: unset; flex: none; box-sizing: border-box; height: 26px; margin-left: 8px; padding: 0 9px; display: inline-flex; align-items: center; gap: 6px; cursor: pointer;
+    border-radius: var(--radius-element); background: var(--color-background-region); color: var(--color-text-secondary); font-size: var(--csm-text-body);
+    transition: background-color var(--duration-fast) var(--ease-standard), color var(--duration-fast) var(--ease-standard); }
+  header .pinf svg.i { width: 13px; height: 13px; }
+  header .pinf:hover { color: var(--obsidian-text-hover); }
+  header .pinf[aria-pressed="true"] { background: var(--color-fill-hover); color: var(--color-text-primary); }
+  header .pinf[aria-pressed="true"] svg.i { fill: currentColor; }
+  header .pinf .n { font-variant-numeric: tabular-nums; color: var(--color-text-secondary); }
+  header .pinf .n:empty { display: none; }
+  header .pinf:focus-visible { outline: 2px solid var(--color-text-accent); outline-offset: 2px; }
+  header .pinf + .seg { margin-left: 4px; }
+  header .pinf + .pinf { margin-left: 4px; }
+  /* Most active: the toggle's activity mark stays a line when it's on, and each session's time
+     working sits beside its state, in the working mark's color (the amber card's ink on amber). */
+  header .maf[aria-pressed="true"] svg.i { fill: none; }
+  .ma-b { flex: none; display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; white-space: nowrap;
+    font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); font-variant-numeric: tabular-nums; font-weight: 600;
+    color: var(--color-text-accent); } /* the indigo for words: 5.8:1 or more on every tint and its hover (the mark's #8B8BFF fell to 4.3 on a hovered working card) */
+  .ma-b svg.i { width: 12px; height: 12px; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .ma-b { color: var(--color-on-needs); }
+  .hrow.live:is(.s-waiting, .s-asks) .ma-b { color: var(--color-on-needs-text); }
+  .hrow .htime .ma-b { margin: 0 4px 0 0; }
+  /* A card's time sits beside its state; a compact card has no state tag, so it leads the time instead. */
+  .card .time > .ma-b.in-time { display: none; }
+  @media (max-width: 639px) {
+    .card > .top > .ma-b { display: none; }
+    .card .time > .ma-b.in-time { display: inline-flex; margin: 0 8px 0 0; }
+    .hrow:has(.htime .ma-b) > .tag.name { display: none; } /* a compact row has room for its time working or its folder: the time */
+  }
+  .quiet.maq svg.i { width: 14px; height: 14px; }
+  @container (max-width: 940px) { header .pinf .w { display: none; } }
+  .quiet.pinq svg.i { width: 14px; height: 14px; }
+  header.p-short .pinf .n { display: none; }
+  header.p-short .pinf { padding: 0 6px; }
+  header.u-short .usage :is(.u-lbl, .u-reset) { display: none; }
+  header.u-none .usage { display: none; }
+  header.s-short .search { min-width: 72px; flex-basis: 120px; }
+
   /* The model, its effort, ultracode and the advisor, beside the time and in its color. The
      effort is its initial knocked out of a solid square (L, M, H, X), and Max is written whole,
      so it never reads as Medium. The advisor (/advisor) is the initial of the model that advises
      the session, in a circle: a second model, where the squares are settings. Each card measures
      itself: as it narrows, the model goes first (under about 283 px), then the effort (under
-     about 223); the time always stays, and the tooltip says it all in words. A wide state tag
-     can still crowd them: then the script drops the model, the effort, the advisor, then all
-     of it (fitMeta). */
+     about 223); the time always stays, and the tooltip says it all in words. A wide state tag,
+     or the pin's place at the row's end, can still crowd them: then the script drops the model,
+     the effort, the advisor, then all of it (fitMeta). With "Needs you" and the pin, the model
+     goes under about 296 px and the effort under about 241. */
   .grid > .card { container-type: inline-size; }
   .card .top .time { min-width: 0; }
   /* With no meta left to give way, the time keeps its own width again, so the state tag gives way instead. */
@@ -368,7 +430,12 @@
   }
   /* The letters sit on their ink's center, not their advance's: centerInk moves each by the measured INK table. */
   .card .time .meta :is(.eff, .uc, .advr) > i { font-style: normal; text-indent: 0; transform: translate(var(--ink-x, 0), var(--ink-y, 0)); }
-  .card .time .meta .mdl + :is(.eff, .advr) { margin-left: 3px; } /* a little more air after the model's name */
+  /* The top line is three groups: the session's setup (model, effort, advisor), its time, and the pin.
+     The model sits 5 px from its first chip, a little more than chip to chip (4 px), since a solid
+     chip reads closer than its box; about 12 px between the setup and the time, and between the time
+     and the pin, whose icon ends on the card's content edge. */
+  .card .time .meta .mdl + :is(.eff, .advr) { margin-left: 1.8px; }
+  .card .top .time .pin-b { margin-left: 5.5px; margin-right: -2.5px; }
   .card .time .msep { width: 3px; } /* a little air between the model and the time, no dot */
   @container (max-width: 259px) { .card .time .meta .mdl { display: none; } }
   @container (max-width: 199px) {
@@ -608,8 +675,16 @@
     .dict .d-lang, .dict .d-hint { display: none; }
     .hrow { grid-template-columns: 16px minmax(0, 1fr); padding: 8px 10px; }
     .hrow > .tag, .hrow .hsnip, .hrow > span:empty { display: none; }
-    .hrow .htime { grid-column: 2; grid-row: 2; }
+    .hrow .htime { grid-column: 2; grid-row: 2; justify-content: flex-start; }
     header .search { display: none; } /* no room for it in a strip; in the app its own stays in the toolbar */
+    header .pinf { padding: 0 5px; margin-left: 0; } /* the pin alone: its count stays in its tip */
+    header .pinf + .seg { margin-left: 0; }
+    /* Two filters and the view tabs: each a little narrower, so the counts keep their room. */
+    header .pinf { padding: 0 3px; }
+    header .pinf + .pinf { margin-left: 0; }
+    header .seg button { padding: 0 6px; }
+    header .spacer { display: none; } /* no room to spare in a strip, and its gap is the counts' */
+    header .pinf .n { display: none; }
   }
 </style>
 </head>
@@ -620,6 +695,8 @@
     <span class="name">Sessions</span>
     <span id="counts"></span>
     <span class="spacer"></span>
+    <button id="pinf" class="pinf" type="button" aria-pressed="false" title="Show only pinned sessions in Last 7 Days and All Sessions"></button>
+    <button id="maf" class="pinf maf" type="button" aria-pressed="false" title="Show only the sessions Claude worked in most over the last 7 days"></button>
     <div class="seg" role="tablist">
       <button type="button" role="tab" data-view="week" aria-selected="true"></button>
       <button type="button" role="tab" data-view="history" aria-selected="false"></button>
@@ -1437,6 +1514,130 @@
     return `<div class="bar" title="${tip}" aria-hidden="true"><span class="segs">${segs}</span></div>`;
   }
 
+  // ---------------------------------------------------------------- pins
+
+  // The sessions you pinned live in the server's sessions.db; the state lists their IDs
+  // (state.pins), this week's and older ones. A click shows the pin at once and posts it;
+  // the stream then brings it back. The Pinned filter is this viewer's own (localStorage).
+  let pinSet = new Set();
+  const pinWant = new Map(); // sid → pinned, sent and not yet back from the server
+  const isPinned = (sid) => (pinWant.has(sid) ? pinWant.get(sid) : pinSet.has(sid));
+  function pinCount() {
+    const all = new Set(pinSet);
+    for (const [sid, on] of pinWant) on ? all.add(sid) : all.delete(sid);
+    return all.size;
+  }
+  let pinnedOnly = false;
+  try { pinnedOnly = localStorage.getItem("csm-pinned-only") === "1"; } catch {}
+  const pinHtml = (sid) => {
+    const on = isPinned(sid), w = on ? "Unpin" : "Pin";
+    return `<span class="pin-b ctl${on ? " on" : ""}" role="button" tabindex="0" data-pin aria-pressed="${on}" aria-label="${w}" title="${w}">${ICON.pin}</span>`;
+  };
+  async function togglePin(sid) {
+    sid = String(sid ?? "");
+    if (!sid || sid.startsWith("task:")) return;
+    const on = !isPinned(sid);
+    pinWant.set(sid, on);
+    pinsChanged();
+    let ok = false;
+    try {
+      ok = (await fetch(`/api/pin/${encodeURIComponent(sid)}`, { method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ pinned: on }) })).ok;
+    } catch {}
+    const settle = () => { if (pinWant.get(sid) === on) { pinWant.delete(sid); pinsChanged(); } };
+    if (!ok) return settle(); // back as it was
+    for (const h of hist.items) if (h.sid === sid) h.pinned = on || undefined;
+    setTimeout(settle, 5000); // the stream says so sooner; if it never does, the server's word stands
+  }
+  function pinsChanged() {
+    render();
+    pinsShown();
+    if (view === "history" && pinnedOnly) loadHistory(true);
+  }
+  function setPinnedOnly(on) {
+    on = Boolean(on);
+    if (on !== pinnedOnly) {
+      pinnedOnly = on;
+      try { localStorage.setItem("csm-pinned-only", on ? "1" : "0"); } catch {}
+      if (on && activeOnly) { activeOnly = false; try { localStorage.setItem("csm-active-only", "0"); } catch {} } // one filter at a time
+      // A hold keeps what was on screen: a new filter shows its own at once.
+      clearTimeout(holdTimer); holdPointer = false; held = null;
+      $content.scrollTop = 0;
+      render();
+      if (view === "history") { renderHistory(); loadHistory(true); }
+    }
+    pinsShown();
+    activeShown();
+  }
+  // The header's toggle (a browser's), and the app's toolbar told what it shows.
+  const $pinf = document.getElementById("pinf");
+  let sentPins = "";
+  function pinsShown() {
+    const n = pinCount();
+    const html = `${ICON.pin}<span class="w">Pinned</span><span class="n">${n || ""}</span>`;
+    if ($pinf._html !== html) { $pinf.innerHTML = html; $pinf._html = html; requestAnimationFrame(fitCounts); }
+    $pinf.setAttribute("aria-pressed", String(pinnedOnly));
+    $pinf.setAttribute("aria-label", n ? `Pinned, ${n}` : "Pinned");
+    $pinf.title = `${pinnedOnly ? "Showing only pinned sessions" : "Show only pinned sessions"} in Last 7 Days and All Sessions${n ? ` (${n} pinned)` : ""}`;
+    const msg = JSON.stringify({ on: pinnedOnly, count: n });
+    if (msg !== sentPins) { sentPins = msg; bridge()?.postMessage({ pinned: { on: pinnedOnly, count: n } }); }
+  }
+  $pinf.addEventListener("click", () => setPinnedOnly(!pinnedOnly));
+
+  // ---------------------------------------------------------------- Most active
+
+  // The Most active filter: the sessions Claude spent the most time working in over the last
+  // 7 days (each session's `worked`, which the server counts: src/worked.ts), most first, each
+  // with its time. One filter at a time with Pinned; this viewer's own (localStorage).
+  const TOP_ACTIVE = 10;
+  let activeOnly = false;
+  try { activeOnly = localStorage.getItem("csm-active-only") === "1"; } catch {}
+  if (activeOnly) pinnedOnly = false;
+  // Its time working now: what the server counted, plus, for a turn working right now, the time
+  // since the server said so.
+  const workedNow = (s) => (s?.worked || 0) + (s?.worked && s.status === "working" && !s.background && s.kind !== "task" && live.has(s.sid) ? Math.max(0, now() - state.now) : 0);
+  const workedText = (ms) => {
+    const m = Math.floor(ms / 60000), h = Math.floor(m / 60);
+    return m < 1 ? "<1m" : !h ? `${m}m` : m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
+  };
+  const workedWords = (ms) => {
+    const m = Math.floor(ms / 60000), h = Math.floor(m / 60), n = (x, w) => `${x} ${w}${x === 1 ? "" : "s"}`;
+    return `${m < 1 ? "Less than a minute" : [h ? n(h, "hour") : "", m % 60 ? n(m % 60, "minute") : ""].filter(Boolean).join(" ")} working in the last 7 days`;
+  };
+  // The time beside its state, while the filter is on.
+  const workedHtml = (s, where = "") => {
+    const ms = activeOnly ? workedNow(s) : 0;
+    return ms ? `<span class="ma-b${where}" title="${esc(workedWords(ms))}">${ICON.activity}<span>${workedText(ms)}</span></span>` : "";
+  };
+  const byWorked = (a, b) => workedNow(b) - workedNow(a) || (a.sid < b.sid ? -1 : 1);
+  const topActive = (list) => list.filter((s) => s.kind !== "task" && workedNow(s) > 0).sort(byWorked).slice(0, TOP_ACTIVE);
+  function setActiveOnly(on) {
+    on = Boolean(on);
+    if (on !== activeOnly) {
+      activeOnly = on;
+      try { localStorage.setItem("csm-active-only", on ? "1" : "0"); } catch {}
+      if (on && pinnedOnly) { pinnedOnly = false; try { localStorage.setItem("csm-pinned-only", "0"); } catch {} } // one filter at a time
+      clearTimeout(holdTimer); holdPointer = false; held = null;
+      $content.scrollTop = 0;
+      render();
+      if (view === "history") { renderHistory(); loadHistory(true); }
+    }
+    pinsShown();
+    activeShown();
+  }
+  // The header's toggle (a browser's), and the app's toolbar told what it shows.
+  const $maf = document.getElementById("maf");
+  let sentActive = "";
+  function activeShown() {
+    const html = `${ICON.activity}<span class="w">Most active</span>`;
+    if ($maf._html !== html) { $maf.innerHTML = html; $maf._html = html; requestAnimationFrame(fitCounts); }
+    $maf.setAttribute("aria-pressed", String(activeOnly));
+    $maf.setAttribute("aria-label", "Most active");
+    $maf.title = `${activeOnly ? "Showing" : "Show"} only the ${TOP_ACTIVE} sessions Claude worked in most over the last 7 days, in Last 7 Days and All Sessions`;
+    const msg = JSON.stringify({ on: activeOnly });
+    if (msg !== sentActive) { sentActive = msg; bridge()?.postMessage({ active: { on: activeOnly } }); }
+  }
+  $maf.addEventListener("click", () => setActiveOnly(!activeOnly));
+
   // ---------------------------------------------------------------- Last 7 Days
 
   // Active comes first: what needs you, what is working, anything touched in the last few
@@ -1614,7 +1815,7 @@
 
   function cardKey(s) {
     const lasting = lastingOf(s);
-    return JSON.stringify(s) + "\n" + [agoOf(s, lasting), lasting, needsYou(s), isStale(s), dayStart(0), Math.floor(now() / 36e5),
+    return JSON.stringify(s) + "\n" + [agoOf(s, lasting), lasting, needsYou(s), isStale(s), s.kind !== "task" && isPinned(s.sid), workedHtml(s), dayStart(0), Math.floor(now() / 36e5),
       s.agentCount || s.workflows?.length ? span(agentsSince(s)) : "",
       onlyCommands(s) ? s.commands.map((c) => (c.startedAt ? span2(c.startedAt) : "")).join() : ""].join("|");
   }
@@ -1648,8 +1849,8 @@
     const timeTip = tipText ? ` title="${esc(tipText)}"` : "";
     const inner = `
       <div class="top">
-        ${tag(`${cardIcon(s)}<span>${label(s)}</span>`, `s-${sentOf(s) ? "working" : s.status}`)}
-        <span class="time"${timeTip}>${metaHtml(meta)}${s.task ? ICON.calendarClock : lasting ? "" : ICON.clock}${agoText}</span>
+        ${tag(`${cardIcon(s)}<span>${label(s)}</span>`, `s-${sentOf(s) ? "working" : s.status}`)}${workedHtml(s)}
+        <span class="time"${timeTip}>${workedHtml(s, " in-time")}${metaHtml(meta)}${s.task ? ICON.calendarClock : lasting ? "" : ICON.clock}${agoText}${s.kind === "task" ? `<span class="pin-b gap" aria-hidden="true"></span>` : pinHtml(s.sid)}</span>
       </div>
       <div class="title">${esc(s.title)}</div>
       <div class="detail">${detail(s)}</div>
@@ -1661,15 +1862,15 @@
     else if (!sent && el._sent) el.style.minHeight = "";
     el._sent = sent;
     if (el._inner !== inner) {
-      // The mic had the keyboard: the new one gets it back.
-      const hadMic = document.activeElement?.matches?.("[data-mic]") && el.contains(document.activeElement);
+      // The mic or the pin had the keyboard: the new one gets it back.
+      const had = el.contains(document.activeElement) && ["[data-mic]", "[data-pin]"].find((x) => document.activeElement.matches?.(x));
       el.innerHTML = inner;
       el._inner = inner;
-      if (hadMic) el.querySelector("[data-mic]")?.focus({ preventScroll: true });
+      if (had) el.querySelector(had)?.focus({ preventScroll: true });
       syncIcons(el);
       if (el.isConnected) fitMeta(el);
       // VoiceOver reads the whole card as one sentence: title, state, what it's doing.
-      el.setAttribute("aria-label", [s.title, label(s), s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...metaWords(meta), ...schedWords(s), ...relWords(s), ...(permitOf(s) ? permitWords(s) : answerWords(s))].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
+      el.setAttribute("aria-label", [s.title, label(s), s.kind !== "task" && isPinned(s.sid) ? "Pinned" : "", activeOnly && workedNow(s) ? workedWords(workedNow(s)) : "", s.kind === "task" ? "Scheduled task" : s.task ? "Scheduled run" : "", plain(detail(s)), s.kind === "task" ? blockedHint(s.blocked) : "", s.project ? `in ${s.project}` : "", lasting ? spanWords(s) : agoText, ...metaWords(meta), ...schedWords(s), ...relWords(s), ...(permitOf(s) ? permitWords(s) : answerWords(s))].filter(Boolean).map((x) => x.replace(/\.$/, "")).join(". "));
     }
     const tip = s.kind === "task" ? `${blockedHint(s.blocked)}\n\n${s.open ? "Open the run that's still open in the Claude app" : "Show it in Scheduled"}`
       : (s.agents || []).length
@@ -1710,12 +1911,12 @@
     const snip = st === "asks" ? s.ask : st === "error" ? s.error : s.note || s.recap || "";
     const time = earlier ? `${new Date(s.last).toLocaleDateString("en-US", { weekday: "short" })} ${clock(s.last)}` : clock(s.last);
     const sched = s.task ? `<span class="hsched" title="${esc(s.taskName ? `A run of ${s.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : "";
-    const aria = [s.title, label(s), s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time, ...schedWords(s), ...relWords(s)].filter(Boolean).join(". ");
+    const aria = [s.title, label(s), isPinned(s.sid) ? "Pinned" : "", activeOnly && workedNow(s) ? workedWords(workedNow(s)) : "", s.task ? "Scheduled run" : "", snip, s.project ? `in ${s.project}` : "", time, ...schedWords(s), ...relWords(s)].filter(Boolean).join(". ");
     return `<button type="button" class="hrow s-${st}${isStale(s) ? " stale" : ""}" data-sid="${esc(s.sid)}" data-layout-id="s-${esc(s.sid)}" title="Open in the Claude app" aria-label="${esc(aria)}">
       <span class="hicon" title="${esc(label(s))}">${still(statusIcon(s))}</span>
       <span class="htitle"><span class="t">${esc(s.title)}</span>${sched}${schedIcons(s)}${relIcon(s)}</span>
       ${s.project ? tag(`${ICON.folder}<span>${esc(s.project)}</span>`, "name", s.project) : "<span></span>"}
-      <span class="htime">${time}</span>
+      <span class="htime">${workedHtml(s)}${time}${pinHtml(s.sid)}</span>
       ${snip ? `<span class="hsnip">${esc(snip)}</span>` : ""}
     </button>`;
   }
@@ -1730,6 +1931,7 @@
     // and the layout animation sees it move rather than leave and come back.
     const old = new Map([...listEl.children].map((el) => [el.dataset.sid, el]));
     const focused = listEl.contains(document.activeElement) ? document.activeElement.dataset.sid : null;
+    const pinAt = listEl.contains(document.activeElement) && document.activeElement.matches("[data-pin]") ? document.activeElement.closest("[data-sid]")?.dataset.sid : null;
     const els = [...next.content.children].map((n) => {
       const o = old.get(n.dataset.sid);
       if (!o) { n._html = n.innerHTML; return n; }
@@ -1743,6 +1945,8 @@
       listEl.replaceChildren(...els);
       if (focused && document.activeElement?.dataset?.sid !== focused) listEl.querySelector(`[data-sid="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
     }
+    // The pin had the keyboard: the row's new one gets it back.
+    if (pinAt && !document.activeElement?.matches?.("[data-pin]")) listEl.querySelector(`[data-sid="${CSS.escape(pinAt)}"] [data-pin]`)?.focus({ preventScroll: true });
   }
 
   const LONG_DAY = 6; // more rows than this, and a wide window splits the day in two columns
@@ -1796,13 +2000,17 @@
       syncIcons($week);
       return;
     }
-    const list = withBlocked(state.sessions);
-    if (!list.length) {
+    const all = withBlocked(state.sessions);
+    if (!all.length) {
       cards.clear();
       groups.clear();
       $week.innerHTML = emptyWeek();
       return;
     }
+    // The Pinned filter: only pinned sessions (no task cards). One you unpin under the pointer
+    // stays where it is until the pointer leaves, like anything else while the list holds still.
+    // Most active: only the sessions with the most time working, in the usual sections.
+    const list = activeOnly ? topActive(all) : pinnedOnly ? all.filter((s) => s.kind !== "task" && (isPinned(s.sid) || held?.has(s.sid))) : all;
     const hadShell = Boolean($week.querySelector(":scope > .wsplit"));
     weekShell();
     const $main = $week.querySelector(".wmain");
@@ -1818,9 +2026,14 @@
     // Only a change in what is where (which cards and rows, in what order) is animated by
     // the layout. While it measures it mutes CSS transitions, and a card's color fade on a
     // status change must keep running, so updates that only change content skip it.
+    // Pinned sessions come first in each part, after what needs you, which always leads; each
+    // part keeps its own order (the sort is stable). Before the shape, so a pin's move glides.
+    const pinRank = (s) => (s.needsYou ? 0 : isPinned(s.sid) ? 1 : 2);
+    // Most active: most time working first in each part instead.
+    if (!held) for (const arr of buckets.values()) arr.sort((a, b) => activeOnly ? byWorked(a, b) : pinRank(a) - pinRank(b));
     const shape = JSON.stringify(SECTIONS.map((g) => [g.id, buckets.get(g.id).map((s) => s.sid)]));
     // Newest first in the day sections; the server's order (urgency) in Active.
-    if (!held) for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => b.last - a.last);
+    if (!held && !activeOnly) for (const id of ["today", "yesterday", "earlier"]) buckets.get(id).sort((a, b) => pinRank(a) - pinRank(b) || b.last - a.last);
     weekOrder = new Map();
     for (const [id, arr] of buckets) arr.forEach((s, i) => weekOrder.set(s.sid, [id, i]));
     // Held, what counts is what's on screen: as long as nothing new comes or goes, nothing moved.
@@ -1871,10 +2084,16 @@
     // Active stays even when it's empty, and then says so: a calm line instead of a gap.
     let sec = groups.get("active");
     if (!sec) $main.appendChild(sec = section(SECTIONS[0], `<div class="wstrip" hidden role="meter" aria-valuemin="0" aria-valuemax="100"></div><div class="abody"><div class="grid"></div><aside class="meter" hidden role="meter" aria-valuemin="0" aria-valuemax="100"></aside></div>`));
-    const quiet = sec.querySelector(".quiet");
+    // With the Pinned filter on, an empty Active says why in a quiet line of its own; so does Most active.
+    const pinWords = activeOnly ? (!list.length ? "Nothing counted yet. Sessions show here once Claude has worked in them." : "None of the most active sessions are active.") : !pinnedOnly ? "" : !pinCount() ? "No pinned sessions. Pin one from its card."
+      : !list.length ? "No pinned sessions in the last 7 days." : "No pinned sessions are active.";
+    let quiet = sec.querySelector(".quiet");
     if (!active.length) {
       sec.querySelector(".count").textContent = "";
-      if (!quiet) {
+      if (quiet && (quiet.dataset.words ?? "") !== pinWords) { quiet.remove(); quiet = null; }
+      if (!quiet && pinWords) {
+        sec.querySelector(".meter").insertAdjacentHTML("beforebegin", `<div class="quiet ${activeOnly ? "maq" : "pinq"}" role="status" data-words="${esc(pinWords)}">${activeOnly ? ICON.activity : ICON.pin}<span>${esc(pinWords)}</span></div>`);
+      } else if (!quiet) {
         const mini = (id) => `<span class="qcard" id="${id}"><span class="qrow"><span class="qpill"></span>${CALM}${PDOT}<span class="qok">${ICON.check}</span></span><b></b></span>`;
         sec.querySelector(".meter").insertAdjacentHTML("beforebegin", `<div class="quiet" role="status"><span class="qart" aria-hidden="true">${mini("qa")}${mini("qb")}</span><span>You're all caught up.</span></div>`);
         quietStory(sec.querySelector(".quiet"));
@@ -1941,13 +2160,15 @@
 
   async function loadHistory(reset) {
     const q = query;
+    const pins = pinnedOnly; // the Pinned filter asks the server for the pinned ones only
+    const most = activeOnly; // and Most active for its sessions, most first
     const req = ++hist.req; // a refresh and a "Show more" can cross; only the newest counts
     // A refresh keeps as many rows as were already shown.
     const limit = reset ? Math.max(60, hist.items.length) : 60;
     const offset = reset ? 0 : hist.items.length;
     try {
-      const r = await fetch(`/api/history?limit=${limit}&offset=${offset}&q=${encodeURIComponent(q)}`).then((x) => x.json());
-      if (q !== query || req !== hist.req) return; // a newer request is on its way
+      const r = await fetch(`/api/history?limit=${limit}&offset=${offset}&q=${encodeURIComponent(q)}${pins ? "&pinned=1" : ""}${most ? "&active=1" : ""}`).then((x) => x.json());
+      if (q !== query || pins !== pinnedOnly || most !== activeOnly || req !== hist.req) return; // a newer request is on its way
       hist.items = reset ? r.sessions : hist.items.concat(r.sessions);
       hist.total = r.total;
       hist.ready = true;
@@ -1989,11 +2210,12 @@
     let icon = h.background ? ICON.bot : STATUS_ICON[st] || ICON.check;
     if (!isLive) icon = icon.replace(/ (spin|pulse|bot)"/, '"');
     const what = isLive ? `<span class="hstate">${esc(label(h))}</span>` : `<span class="sr">${esc(label(h))}.</span>`;
+    const pinned = isPinned(h.sid) ? `<span class="sr">Pinned.</span>` : "";
     return `<button type="button" class="hrow s-${st}${isLive ? " live" : ""}${isLive && isFresh(h) ? " fresh" : ""}" data-sid="${esc(h.sid)}" title="Open in the Claude app">
       <span class="hicon" title="${esc(label(h))}">${icon}</span>
-      <span class="htitle"><span class="t">${hl(h.title)}</span>${h.task ? `<span class="hsched" title="${esc(h.taskName ? `A run of ${h.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : ""}${schedIcons(h)}${what}</span>
+      <span class="htitle"><span class="t">${hl(h.title)}</span>${h.task ? `<span class="hsched" title="${esc(h.taskName ? `A run of ${h.taskName}` : "A scheduled run")}">${ICON.calendarClock}</span>` : ""}${schedIcons(h)}${what}${pinned}</span>
       ${h.project ? tag(`${ICON.folder}<span>${hl(h.project)}</span>`, "name", h.project) : "<span></span>"}
-      <span class="htime">${clock(h.last)}</span>
+      <span class="htime">${workedHtml(h)}${clock(h.last)}${pinHtml(h.sid)}</span>
       ${snip ? `<span class="hsnip">${hl(snip)}</span>` : ""}
     </button>`;
   }
@@ -2002,6 +2224,22 @@
     let html;
     if (!hist.ready) {
       html = link === "offline" ? offlineState() : loadingState();
+    } else if (activeOnly && !hist.items.length) {
+      html = query
+        ? `<div class="empty-state"><div class="badge">${ICON.activity}</div>
+            <h3>No active sessions match “${esc(query)}”</h3>
+            <p>Turn off Most active to search all sessions.</p></div>`
+        : `<div class="empty-state"><div class="badge">${ICON.activity}</div>
+            <h3>Nothing counted yet</h3>
+            <p>Sessions show here once Claude has worked in them in the last 7 days.</p></div>`;
+    } else if (pinnedOnly && !hist.items.some((h) => isPinned(h.sid))) {
+      html = query
+        ? `<div class="empty-state"><div class="badge">${ICON.pin}</div>
+            <h3>No pinned sessions match “${esc(query)}”</h3>
+            <p>Turn off Pinned to search all sessions.</p></div>`
+        : `<div class="empty-state"><div class="badge">${ICON.pin}</div>
+            <h3>No pinned sessions</h3>
+            <p>Pin one from its card.</p></div>`;
     } else if (!hist.items.length) {
       html = query
         ? `<div class="empty-state"><div class="badge">${ICON.search}</div>
@@ -2011,13 +2249,15 @@
             <h3>No sessions yet</h3>
             <p>Every session is kept here for good, and you can search them all. The last 7 days are here too.</p></div>`;
     } else {
-      const items = hist.items.map(merged).sort((a, b) => b.last - a.last);
+      // With the Pinned filter, a row you unpin goes at once; the server's list follows.
+      const items = hist.items.filter((h) => !pinnedOnly || isPinned(h.sid)).map(merged).sort((a, b) => b.last - a.last);
       const days = [];
       for (const h of items) {
         const d = dayLabel(h.last);
         if (days.at(-1)?.label !== d) days.push({ label: d, items: [] });
         days.at(-1).items.push(h);
       }
+      if (activeOnly) for (const d of days) d.items.sort(byWorked); // Most active: most time working first in each day
       html = days.map((d) => `<section class="group" aria-label="${esc(d.label)}">
           <h2 class="group-head">${d.label === "Today" ? ICON.sun : ICON.calendar}<span>${esc(d.label)}</span><span class="count">${d.items.length}</span></h2>
           <div class="hlist${d.items.length > LONG_DAY ? " long" : ""}">${d.items.map(historyRow).join("")}</div>
@@ -2034,6 +2274,7 @@
     const shape = (root) => [...root.querySelectorAll(".group-head > span:not(.count), [data-sid], [data-more]")]
       .map((e) => e.dataset.sid ?? e.textContent).join("|");
     const was = shape($history);
+    const pinAt = $history.contains(document.activeElement) && document.activeElement.matches("[data-pin]") ? document.activeElement.closest("[data-sid]")?.dataset.sid : null;
     if (was && shape(next.content) === was) {
       // Same rows in the same order: change each one in place, so a new state fades its
       // color like a card does, and hover and focus stay where they are.
@@ -2049,6 +2290,8 @@
       $history.querySelectorAll(PARTS).forEach((o) => { o._html = o.innerHTML; });
       if (focused) $history.querySelector(`[data-sid="${CSS.escape(focused)}"]`)?.focus({ preventScroll: true });
     }
+    // The pin had the keyboard: the row's new one gets it back.
+    if (pinAt && !document.activeElement?.matches?.("[data-pin]")) $history.querySelector(`[data-sid="${CSS.escape(pinAt)}"] [data-pin]`)?.focus({ preventScroll: true });
     syncIcons($history);
   }
 
@@ -2058,7 +2301,10 @@
     if (view !== "history" || !hist.ready) return renderHistory();
     const loaded = new Set(hist.items.map((h) => h.sid));
     const oldest = hist.items.at(-1)?.last ?? 0;
-    const missing = !query && state.sessions.some((s) => !loaded.has(s.sid) && s.last >= oldest);
+    // Most active: a session joins or leaves the ten (their order is the page's own).
+    const ids = (l) => l.map((x) => x.sid).sort().join();
+    const missing = activeOnly ? !query && ids(topActive(state.sessions)) !== ids(hist.items)
+      : !query && state.sessions.some((s) => !loaded.has(s.sid) && s.last >= oldest && (!pinnedOnly || isPinned(s.sid)));
     if (missing) { clearTimeout(historyTimer); historyTimer = setTimeout(() => loadHistory(true), 400); }
     renderHistory();
   }
@@ -2269,7 +2515,9 @@
   window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); snapWeek(); },
     endFamily: () => endFamily(), // the app calls these when the pointer enters or leaves the window, active or not
     pointer: (inside) => { appInside = Boolean(inside); pointerIn = false; if (!inside) { endFamily(); hideUsageCard(); holdEnd(); } },
-    dictation: (m) => onDictation(m) }; // the app's dictation, for the card that asked
+    dictation: (m) => onDictation(m), // the app's dictation, for the card that asked
+    pinnedOnly: (on) => setPinnedOnly(on), togglePin: (sid) => togglePin(sid), // the app's toolbar filter, and its card menu's Pin and Unpin
+    activeOnly: (on) => setActiveOnly(on) }; // the app's toolbar Most active filter
 
   // In the app the header row sits in the title bar, and the app drags the window by it.
   // It needs to know where the things you can click are, so it leaves those alone.
@@ -2290,6 +2538,9 @@
   $q.addEventListener("input", () => search($q.value));
 
   $content.addEventListener("click", (e) => {
+    // A card's or a row's pin pins it, and opens nothing.
+    const pin = e.target.closest("[data-pin]");
+    if (pin) return togglePin(pin.closest("[data-sid]")?.dataset.sid);
     // The mic and the composer: nothing in them opens the session.
     const mic = e.target.closest("[data-mic]");
     if (mic) { const sid = mic.closest("[data-sid]").dataset.sid; return dict?.sid === sid ? endDict() : startDict(sid); } // a second press closes it
@@ -2400,7 +2651,7 @@
     const b = item.dataset.sid.startsWith("task:") ? blockedCards().find((x) => x.sid === item.dataset.sid) : null;
     if (b) return bridge()?.postMessage({ menu: { sid: b.open ?? "", title: b.title, cwd: b.cwd, file: b.file } });
     const s = sessionFor(item.dataset.sid);
-    bridge()?.postMessage({ menu: { sid: item.dataset.sid, title: s?.title ?? "", cwd: s?.cwd ?? "" } });
+    bridge()?.postMessage({ menu: { sid: item.dataset.sid, title: s?.title ?? "", cwd: s?.cwd ?? "", pinned: isPinned(item.dataset.sid) } });
   });
 
   // Dictation from the keyboard: Return or Space presses the mic and the composer's buttons;
@@ -2419,6 +2670,12 @@
       && (e.key === "Enter" || t.matches?.("[data-dict]"))) { e.preventDefault(); e.stopPropagation(); return; }
     const inPanel = t.closest?.(".dict, [data-mic]");
     const press = e.key === "Enter" || e.key === " ";
+    // Return or Space on a pin pins it, and doesn't open the session.
+    if (press && !e.metaKey && !e.altKey && !e.ctrlKey && t.matches?.("[data-pin]")) {
+      e.preventDefault(); e.stopPropagation();
+      if (!e.repeat) togglePin(t.closest("[data-sid]")?.dataset.sid);
+      return;
+    }
     if (press && !e.metaKey && !e.altKey && !e.ctrlKey && t.matches?.("[data-mic], [data-dict]")) {
       e.preventDefault(); e.stopPropagation();
       if (t.dataset.mic !== undefined) return startDict(t.closest("[data-sid]").dataset.sid);
@@ -2491,6 +2748,21 @@
 
   // Full counts if they fit; numbers only if not; then without the less important ones.
   function fitCounts() {
+    // The header row: the counts give way first, as they always have; if the row still runs
+    // past its end, the Pinned toggle keeps only its pin, then the week's usage drops its
+    // words, then itself, then the search narrows.
+    const head = $counts.parentElement;
+    head.classList.remove("p-short", "u-short", "u-none", "s-short");
+    fitCountsOnly();
+    // The counts give way inside their own box, so a cut count also asks for the next step.
+    const cut = () => $counts.scrollWidth > $counts.clientWidth + 1;
+    for (const step of ["p-short", "u-short", "u-none", "s-short"]) {
+      if (head.scrollWidth <= head.clientWidth + 1 && !cut()) return;
+      head.classList.add(step);
+      fitCountsOnly();
+    }
+  }
+  function fitCountsOnly() {
     $counts.classList.remove("tight", "tighter", "tightest");
     const over = () => $counts.scrollWidth > $counts.clientWidth + 1;
     for (const step of ["tight", "tighter", "tightest"]) {
@@ -3184,6 +3456,8 @@
     });
   }
   paintSound();
+  pinsShown(); // once on load, for the app's toolbar; again whenever the filter or the count changes
+  activeShown(); // the same for Most active
 
   // ---------------------------------------------------------------- live updates
 
@@ -3212,6 +3486,8 @@
     }
     state = next;
     live = new Map(next.sessions.map((s) => [s.sid, s]));
+    pinSet = new Set(next.pins ?? next.sessions.filter((s) => s.pinned).map((s) => s.sid));
+    for (const [sid, on] of pinWant) if (pinSet.has(sid) === on) pinWant.delete(sid); // back from the server
     ready = true;
     skew = next.now - Date.now();
     render();
@@ -3219,6 +3495,7 @@
     for (const s of [...next.sessions, ...blockedCards(next)]) seen.set(s.sid, alertKey(s));
     if (!seen.size) seen.set("", "");
     const { needs } = postStatus(next);
+    pinsShown();
     document.title = needs ? `(${needs}) Claude Session Monitor` : "Claude Session Monitor";
     if (changed.length) {
       const text = changed.map((s) => `${s.title}: ${s.status === "error" ? "error" : "needs you"}`).join(". ");

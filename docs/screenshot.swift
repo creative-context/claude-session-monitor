@@ -19,7 +19,12 @@ let scale: CGFloat = 2 // drawn at this many pixels each, whatever the screen
 
 let app = NSApplication.shared
 app.setActivationPolicy(.prohibited)
-let window = NSWindow(contentRect: NSRect(origin: .zero, size: NSSize(width: size.width * scale, height: size.height * scale)),
+// Drawn on the Mac's built-in screen, in front and fully clear: WebKit stops drawing a page whose
+// window is covered (behind a full-screen app, say), so behind everything it could draw nothing.
+// The window is sized for that screen's own pixels, so the picture comes out the same.
+let screen = NSScreen.screens.first(where: { $0.localizedName.contains("Built-in") || $0.localizedName.contains("Color LCD") }) ?? NSScreen.main!
+let k = scale / screen.backingScaleFactor // points per page pixel on that screen
+let window = NSWindow(contentRect: NSRect(origin: screen.frame.origin, size: NSSize(width: size.width * k, height: size.height * k)),
                       styleMask: [.borderless], backing: .buffered, defer: false)
 // The page's clock in UTC, whatever the Mac's time zone, so the times on the picture say
 // nothing about where it was drawn.
@@ -44,20 +49,22 @@ let config = WKWebViewConfiguration()
 config.userContentController.addUserScript(utc)
 config.userContentController.add(NoDictation(), name: "dictate")
 let web = WKWebView(frame: window.contentLayoutRect, configuration: config)
-web.pageZoom = scale
+web.pageZoom = k
 window.contentView = web
-// Fully transparent and click-through, behind every other window: nothing shows on your
-// screen. (Off-screen would count as hidden, and the page draws nothing while hidden.)
+// Fully transparent and click-through, in front: nothing shows on your screen. (Off screen or
+// covered would count as hidden, and the page draws nothing while hidden.)
 window.alphaValue = 0
 window.ignoresMouseEvents = true
-window.orderBack(nil)
+window.setFrameOrigin(screen.frame.origin)
+window.level = .floating
+window.orderFrontRegardless()
 
 final class Shot: NSObject, WKNavigationDelegate {
   func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
     // The demo's cards come in over a second or two; then the pointer rests on the column.
     DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
       let js = """
-      document.documentElement.style.setProperty('--csm-scale', '\(scale * window.backingScaleFactor)');
+      document.documentElement.style.setProperty('--csm-scale', '\(k * window.backingScaleFactor)');
       document.querySelector('#week .meter')?.dispatchEvent(new PointerEvent('pointerenter'));
       """
       webView.evaluateJavaScript(js) { _, _ in

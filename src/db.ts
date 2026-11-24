@@ -1,14 +1,15 @@
 // History, in SQLite.
 
 import { Database } from "bun:sqlite";
-import { existsSync, renameSync } from "node:fs";
+import { existsSync, readFileSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
-import { DIR, WEEK_MS, FORGET_MS, MAX_SESSIONS } from "./config.ts";
-import { type Status, type Session, type Reminder, tasks, sessions, dirty, allDirty, clean } from "./state.ts";
+import { DIR, LOG, WEEK_MS, FORGET_MS, MAX_SESSIONS } from "./config.ts";
+import { type Status, type Session, type Reminder, tasks, sessions, pins, dirty, allDirty, clean, bump } from "./state.ts";
 import { relativesOf } from "./desktop.ts";
 import { madeTasks } from "./tasks.ts";
 import { activeAgents } from "./agents.ts";
-import { type Shown, needsYou, sessionNeedsYou, shownStatus } from "./snapshot.ts";
+import { type Shown, needsYou, sessionNeedsYou, shownStatus, mostActive } from "./snapshot.ts";
+import { addWorked, mergeWorked, parseWorked, setWorkedLoader, storedWorked, totalOf, workedMs, workedOf, workedFromLog } from "./worked.ts";
 
 // Every session is kept in ~/.claude-session-monitor/sessions.db: the main view shows
 // the last 7 days, History shows all of it. Only what the cards show is stored (titles,
@@ -54,11 +55,18 @@ function open(file: string) {
   if (!cols.includes("relay")) db.exec("ALTER TABLE sessions ADD COLUMN relay TEXT"); // its turn start and whose question it passes on
   if (!cols.includes("advisor")) db.exec("ALTER TABLE sessions ADD COLUMN advisor TEXT"); // the model that advises it, while one is on
   if (!cols.includes("advisor_read")) db.exec("ALTER TABLE sessions ADD COLUMN advisor_read INTEGER"); // how far its transcript was read for it
+  // When you pinned it, or null. Only the pin route writes it: the upsert below never touches it.
+  if (!cols.includes("pinned_at")) db.exec("ALTER TABLE sessions ADD COLUMN pinned_at INTEGER");
+  // Its time working per day, the last 8 days, how far it was counted and when a turn still
+  // working started (src/worked.ts). Times only.
+  if (!cols.includes("worked")) db.exec("ALTER TABLE sessions ADD COLUMN worked TEXT");
+  // Things done once, such as filling in the working times from the log (backfillWorked).
+  db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
-    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait, relay, advisor, advisor_read)
-    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait, $relay, $advisor, $advisor_read)
+    (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait, relay, advisor, advisor_read, worked)
+    VALUES ($sid, $title, $prompt, $project, $cwd, $app_cwd, $tp, $first_at, $last_at, $status, $outcome, $recap, $ask, $error, $note, $model, $pid, $archived, $task, $sched, $wait, $relay, $advisor, $advisor_read, $worked)
     ON CONFLICT(sid) DO UPDATE SET
       title = coalesce(excluded.title, title), prompt = coalesce(excluded.prompt, prompt),
       project = coalesce(excluded.project, project), cwd = coalesce(excluded.cwd, cwd),
@@ -71,7 +79,53 @@ function open(file: string) {
       -- The advisor and how far its transcript was read go together: while a scan is under way
       -- (no offset), the row keeps the pair it has.
       advisor = CASE WHEN excluded.advisor_read IS NULL THEN advisor ELSE excluded.advisor END,
-      advisor_read = coalesce(excluded.advisor_read, advisor_read)`);
+      advisor_read = coalesce(excluded.advisor_read, advisor_read),
+      -- A session met again in memory reads its row's count first (src/worked.ts); one not read yet keeps it.
+      worked = coalesce(excluded.worked, worked)`);
+  const one = db.prepare("SELECT worked FROM sessions WHERE sid = ?");
+  setWorkedLoader((sid) => parseWorked((one.get(sid) as { worked?: string } | null)?.worked));
+  pins.clear();
+  for (const r of db.query("SELECT sid FROM sessions WHERE pinned_at IS NOT NULL").all() as { sid: string }[]) pins.add(r.sid);
+}
+
+// Pins a session or takes its pin off, from its card or its row: this week's (written first
+// if it isn't in the database yet) or one only History has. False for a session it doesn't know.
+export function setPin(sid: string, on: boolean, now = Date.now()) {
+  if (sessions.has(sid) && !written.has(sid)) {
+    dirty.add(sid);
+    persist();
+  }
+  const r = db.query("UPDATE sessions SET pinned_at = CASE WHEN $on THEN coalesce(pinned_at, $now) ELSE NULL END WHERE sid = $sid")
+    .run({ $on: on ? 1 : 0, $now: now, $sid: sid });
+  if (!r.changes) return false;
+  if (on) pins.add(sid); else pins.delete(sid);
+  bump(sid); // the stream sends it; nothing else of the session changed, so no row is written again
+  return true;
+}
+
+// Once: the working times of the turns read before counting began, from the event log
+// (src/worked.ts says how, and why it never counts twice). Only sessions sessions.db knows get
+// any; then it's marked done in meta, so a restart doesn't do it again.
+export function backfillWorked() {
+  if (db.query("SELECT 1 FROM meta WHERE key = 'worked_backfill'").get()) return;
+  const texts = [join(DIR, "events.1.jsonl"), LOG].filter((f) => existsSync(f)).map((f) => readFileSync(f, "utf8"));
+  const found = workedFromLog(texts);
+  const get = db.prepare("SELECT worked FROM sessions WHERE sid = ?");
+  const put = db.prepare("UPDATE sessions SET worked = ? WHERE sid = ?");
+  const changed: Session[] = [];
+  db.transaction(() => {
+    for (const [sid, w] of found) {
+      const row = get.get(sid) as { worked: string | null } | null;
+      if (!row) continue; // a session without a row gets nothing
+      const s = sessions.get(sid);
+      const merged = mergeWorked(s ? workedOf(s) : parseWorked(row.worked), w);
+      put.run(storedWorked(merged), sid);
+      if (s) { s.worked = merged; changed.push(s); }
+    }
+    db.query("INSERT OR REPLACE INTO meta (key, value) VALUES ('worked_backfill', ?)").run(String(Date.now()));
+  })();
+  for (const s of changed) bump(s);
+  if (!changed.length) bump();
 }
 
 export const rowOf = (s: Session) => ({
@@ -92,6 +146,8 @@ export const rowOf = (s: Session) => ({
   // The model that advises it, so the card keeps its mark after a restart, and how far its
   // transcript was read for it, so a restart reads only what was added since (src/advisor.ts).
   $advisor: s.advisor?.model ?? null, $advisor_read: s.advisorRead ?? null,
+  // Its time working per day, without the part of a turn still working (src/worked.ts).
+  $worked: storedWorked(s.worked),
 });
 const relayOf = (v: unknown): Partial<Session> => {
   try {
@@ -151,6 +207,15 @@ export function loadRecent() {
   for (const r of rows) {
     // A session saved as busy with no process to check is not busy anymore.
     const status: Status = (r.status === "working" || r.status === "waiting") && !r.pid ? "idle" : r.status ?? "idle";
+    // Its time working: a turn saved as working that no process can carry on ends at its last event.
+    const worked = parseWorked(r.worked) ?? { to: 0, d: {} };
+    if (status === "working" && worked.from == null) worked.from = r.last_at;
+    // Only a row saved as working had a turn still open; any other start left behind counts nothing.
+    if (status !== "working" && worked.from != null) {
+      if (r.status === "working") addWorked(worked, worked.from, r.last_at);
+      worked.from = undefined;
+      worked.to = Math.max(worked.to, r.last_at);
+    }
     sessions.set(r.sid, {
       sid: r.sid, status, since: r.last_at, first: r.first_at ?? r.last_at, last: r.last_at, lastMain: r.last_at,
       inFlight: 0, agents: new Map(), runs: new Map(),
@@ -164,6 +229,7 @@ export function loadRecent() {
       advisor: typeof r.advisor === "string" && /^claude-[a-z0-9.-]{1,60}$/.test(r.advisor) ? { model: r.advisor } : undefined,
       advisorRead: typeof r.advisor_read === "number" && r.advisor_read >= 0 ? r.advisor_read : undefined,
       ...(status === "waiting" ? waitOf(r.wait) : {}),
+      worked,
     });
   }
 }
@@ -179,17 +245,28 @@ export function rowNeedsYou(r: { sid: string; status: string | null; outcome: st
 }
 
 // History: every session, newest first, optionally filtered by words in its title,
-// first prompt, project or last recap.
-export function history(q: string, limit: number, offset: number) {
+// first prompt, project or last recap, and to the pinned ones. activeOnly: the Most active
+// filter's sessions instead, the same ones as Last 7 Days, most time working first.
+export function history(q: string, limit: number, offset: number, pinnedOnly = false, activeOnly = false) {
   const like = q ? `%${q.toLowerCase().replace(/[%_\\]/g, "\\$&")}%` : null;
-  const where = like
-    ? "WHERE lower(coalesce(title,'') || ' ' || coalesce(prompt,'') || ' ' || coalesce(project,'') || ' ' || coalesce(recap,'')) LIKE $like ESCAPE '\\'"
-    : "";
-  const params: any = like ? { $like: like } : {};
-  const total = (db.query(`SELECT count(*) AS n FROM sessions ${where}`).get(params) as any).n;
-  const rows = db.query(`SELECT * FROM sessions ${where} ORDER BY last_at DESC LIMIT $limit OFFSET $offset`)
-    .all({ ...params, $limit: limit, $offset: offset }) as any[];
+  const conds = [
+    like ? "lower(coalesce(title,'') || ' ' || coalesce(prompt,'') || ' ' || coalesce(project,'') || ' ' || coalesce(recap,'')) LIKE $like ESCAPE '\\'" : "",
+    pinnedOnly ? "pinned_at IS NOT NULL" : "", // the Pinned filter
+  ].filter(Boolean);
   const now = Date.now();
+  const top = activeOnly ? mostActive(now) : [];
+  if (activeOnly) conds.push(`sid IN (${top.map((_, i) => `$s${i}`).join(", ") || "NULL"})`);
+  const where = conds.length ? `WHERE ${conds.join(" AND ")}` : "";
+  const params: any = like ? { $like: like } : {};
+  top.forEach((sid, i) => { params[`$s${i}`] = sid; });
+  const total = (db.query(`SELECT count(*) AS n FROM sessions ${where}`).get(params) as any).n;
+  let rows = db.query(`SELECT * FROM sessions ${where} ORDER BY last_at DESC LIMIT $limit OFFSET $offset`)
+    .all({ ...params, $limit: activeOnly ? -1 : limit, $offset: activeOnly ? 0 : offset }) as any[];
+  if (activeOnly) rows = offset ? [] : rows.sort((a, b) => top.indexOf(a.sid) - top.indexOf(b.sid));
+  const workedOfRow = (r: any) => {
+    const s = sessions.get(r.sid);
+    return s ? workedMs(s, now) : totalOf(parseWorked(r.worked), now);
+  };
   return {
     total,
     sessions: rows.map((r) => ({
@@ -209,6 +286,8 @@ export function history(q: string, limit: number, offset: number) {
       archived: Boolean(r.archived),
       task: r.task ?? undefined,
       taskName: r.task ? tasks.get(r.task)?.name : undefined,
+      pinned: r.pinned_at != null || undefined,
+      worked: workedOfRow(r) || undefined, // ms working in the last 7 days (src/worked.ts)
       made: madeTasks(schedOf(r.sched).m, Date.now()),
       ...relativesOf(r.sid),
     })),

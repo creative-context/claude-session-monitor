@@ -4,7 +4,7 @@
 // The window is a standard macOS window with a transparent title bar: the system's own
 // close, minimize and zoom buttons, resize edges, dragging, Dock icon and Cmd-Tab. The
 // page (http://127.0.0.1:4747/?embed) fills it and reflows to any size, like a web page.
-// The toolbar holds the view switch, search and the sound switch, plus the connection
+// The toolbar holds the Pinned and Most active filters, the view switch, search and the sound switch, plus the connection
 // status while the server doesn't answer. A menu bar item and the Dock icon show how
 // many sessions need you, as the page reports it. A card waiting on you can take a
 // spoken answer: the app listens and turns it into words on this Mac (Dictation).
@@ -25,6 +25,8 @@ let appName = "Claude Session Monitor"
 let pageBody = NSColor(srgbRed: 0x03 / 255, green: 0x03 / 255, blue: 0x04 / 255, alpha: 1) // the page's --color-background-body
 
 extension NSToolbarItem.Identifier {
+    static let pinned = NSToolbarItem.Identifier("pinned")
+    static let active = NSToolbarItem.Identifier("active")
     static let view = NSToolbarItem.Identifier("view")
     static let search = NSToolbarItem.Identifier("search")
     static let live = NSToolbarItem.Identifier("live")
@@ -60,6 +62,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     var soundItem: NSToolbarItem?
     var soundButton: NSButton?
     var viewSwitch: NSSegmentedControl?
+    var pinnedButton: NSButton?
+    // The page owns the Pinned filter; these mirror what it last reported, so the button can
+    // be rebuilt (after the strip) in the same state.
+    var pinnedOn = false
+    var pinnedCount = 0
+    var pinnedBeforeStrip = false // the filter was on when the strip came: it comes back with the toolbar
+    var activeButton: NSButton?
+    // The same for Most active: the page owns the filter, the app mirrors it.
+    var activeOn = false
+    var activeBeforeStrip = false
     var toolbarStripped = false // the strip: the toolbar's buttons step aside
     var searchItem: NSSearchToolbarItem?
     var statusSoundItem: NSMenuItem!
@@ -248,13 +260,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         } else if !strip, toolbar.items.isEmpty {
             for (i, id) in toolbarDefaultItemIdentifiers(toolbar).enumerated() { toolbar.insertItem(withItemIdentifier: id, at: i) }
         }
+        // The Pinned filter leaves with the toolbar: in the strip nothing would show it's on, and
+        // it would hide a session that needs you there. It comes back on with the toolbar.
+        if strip != toolbarStripped {
+            if strip, pinnedOn { pinnedBeforeStrip = true; callPage("csm.pinnedOnly", false) }
+            else if !strip, pinnedBeforeStrip { pinnedBeforeStrip = false; callPage("csm.pinnedOnly", true) }
+            if strip, activeOn { activeBeforeStrip = true; callPage("csm.activeOnly", false) }
+            else if !strip, activeBeforeStrip { activeBeforeStrip = false; callPage("csm.activeOnly", true) }
+        }
         toolbarStripped = strip
         // In full screen or Split View, an empty toolbar would stay on as a bare bar above the
         // header: the strip goes without it.
         let wantBar = !(strip && window.styleMask.contains(.fullScreen))
         if toolbar.isVisible != wantBar { toolbar.isVisible = wantBar }
-        guard let seg = viewSwitch, seg.window != nil else { return }
         let narrow = width < 640 // the page turns compact at the same width
+        if narrow != pinnedCompact { pinnedCompact = narrow; paintPinned(); paintActive() }
+        guard let seg = viewSwitch, seg.window != nil else { return }
         for (i, name) in Self.viewNames.enumerated() {
             let want = narrow ? "" : name
             if seg.label(forSegment: i) != want { seg.setLabel(want, forSegment: i) }
@@ -322,16 +343,49 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     // MARK: toolbar
 
     func toolbarDefaultItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, .view, .search, .live, .sound]
+        [.flexibleSpace, .pinned, .active, .view, .search, .live, .sound]
     }
 
     func toolbarAllowedItemIdentifiers(_ toolbar: NSToolbar) -> [NSToolbarItem.Identifier] {
-        [.flexibleSpace, .view, .search, .live, .sound]
+        [.flexibleSpace, .pinned, .active, .view, .search, .live, .sound]
     }
 
     func toolbar(_ toolbar: NSToolbar, itemForItemIdentifier id: NSToolbarItem.Identifier,
                  willBeInsertedIntoToolbar flag: Bool) -> NSToolbarItem? {
         switch id {
+        case .pinned:
+            // Show only the pinned sessions. The page keeps the filter; this button shows
+            // it and flips it. Icon and count in a wide window, the icon alone in a narrow one.
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .toolbar
+            button.setButtonType(.pushOnPushOff)
+            button.target = self
+            button.action = #selector(pinnedChanged(_:))
+            button.toolTip = "Show only pinned sessions"
+            pinnedButton = button
+            paintPinned()
+            let item = NSToolbarItem(itemIdentifier: id)
+            item.view = button
+            item.label = "Pinned"
+            item.toolTip = "Show only pinned sessions"
+            item.visibilityPriority = .low // in a narrow window it goes to the » menu before the views do
+            return item
+        case .active:
+            // Show the sessions Claude worked in most. Like Pinned: the page keeps the filter.
+            let button = NSButton(frame: .zero)
+            button.bezelStyle = .toolbar
+            button.setButtonType(.pushOnPushOff)
+            button.target = self
+            button.action = #selector(activeChanged(_:))
+            button.toolTip = Self.activeTip
+            activeButton = button
+            paintActive()
+            let item = NSToolbarItem(itemIdentifier: id)
+            item.view = button
+            item.label = "Most active"
+            item.toolTip = Self.activeTip
+            item.visibilityPriority = .low // goes to the » menu with Pinned, before the views do
+            return item
         case .view:
             // Last 7 Days, All Sessions and Scheduled, like the view switch in Mail or Finder.
             let seg = NSSegmentedControl(labels: Self.viewNames, trackingMode: .selectOne,
@@ -411,6 +465,76 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         liveLabel.toolTip = offline ? "The local server isn't answering. The app restarts it on its own." : nil
     }
 
+    // MARK: pinned
+
+    var pinnedCompact = false // narrow window: the icon alone
+
+    // "Pinned" with the count, the pin filled while the filter is on. Setting the state here
+    // never fires the action, so the page and the button can't loop.
+    func paintPinned() {
+        guard let button = pinnedButton else { return }
+        let symbol = pinnedOn ? "pin.fill" : "pin"
+        let title = pinnedCount > 0 ? "Pinned \(pinnedCount)" : "Pinned"
+        button.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
+        button.title = pinnedCompact ? "" : title
+        button.imagePosition = pinnedCompact ? .imageOnly : .imageLeading
+        button.state = pinnedOn ? .on : .off
+        button.setAccessibilityLabel(title)
+        button.setAccessibilityValue(pinnedOn ? "On" : "Off")
+        button.invalidateIntrinsicContentSize()
+    }
+
+    // The page reported the filter or the count.
+    func setPinned(on: Bool, count: Int) {
+        // In the strip nothing shows the filter, so it isn't on there (see fitViewSwitch).
+        if toolbarStripped, on { pinnedBeforeStrip = true; callPage("csm.pinnedOnly", false) }
+        guard on != pinnedOn || count != pinnedCount else { return }
+        pinnedOn = on
+        pinnedCount = count
+        paintPinned()
+        DispatchQueue.main.async { self.syncPageChrome() } // the button's width changed
+    }
+
+    @objc func pinnedChanged(_ sender: NSButton) {
+        pinnedOn = sender.state == .on
+        paintPinned()
+        callPage("csm.pinnedOnly", pinnedOn)
+        DispatchQueue.main.async { self.syncPageChrome() }
+    }
+
+    // MARK: most active
+
+    static let activeTip = "Show the sessions Claude worked in most over the last 7 days"
+
+    // "Most active", the same pulse line on and off: the button's state shows it's on.
+    func paintActive() {
+        guard let button = activeButton else { return }
+        button.image = NSImage(systemSymbolName: "waveform.path.ecg", accessibilityDescription: nil)
+        button.title = pinnedCompact ? "" : "Most active"
+        button.imagePosition = pinnedCompact ? .imageOnly : .imageLeading
+        button.state = activeOn ? .on : .off
+        button.setAccessibilityLabel("Most active")
+        button.setAccessibilityValue(activeOn ? "On" : "Off")
+        button.invalidateIntrinsicContentSize()
+    }
+
+    // The page reported the filter.
+    func setActive(on: Bool) {
+        // In the strip nothing shows the filter, so it isn't on there (see fitViewSwitch).
+        if toolbarStripped, on { activeBeforeStrip = true; callPage("csm.activeOnly", false) }
+        guard on != activeOn else { return }
+        activeOn = on
+        paintActive()
+        DispatchQueue.main.async { self.syncPageChrome() }
+    }
+
+    @objc func activeChanged(_ sender: NSButton) {
+        activeOn = sender.state == .on
+        paintActive()
+        callPage("csm.activeOnly", activeOn)
+        DispatchQueue.main.async { self.syncPageChrome() }
+    }
+
     // MARK: sound
 
     var soundOn: Bool { defaults.bool(forKey: "soundOn") }
@@ -465,6 +589,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     //            spoken note for VoiceOver with what changed
     //   view     it switched views itself (its empty state links to All Sessions)
     //   menu     a right click on a session: the app's own menu for it
+    //   pinned   the Pinned filter ({on, count}), on load and whenever either changes
+    //   active   the Most active filter ({on}), on load and whenever it changes
     //   status   what needs you and how many work, for the Dock badge and the menu bar,
     //            whenever it changes, even while the window is hidden
     func userContentController(_ controller: WKUserContentController, didReceive message: WKScriptMessage) {
@@ -477,6 +603,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
                 .announcement: text, .priority: NSAccessibilityPriorityLevel.high.rawValue])
         }
         if let v = body["view"] as? String, let i = views.firstIndex(of: v) { viewSwitch?.selectedSegment = i }
+        if let p = body["pinned"] as? [String: Any] { setPinned(on: p["on"] as? Bool ?? false, count: p["count"] as? Int ?? 0) }
+        if let a = body["active"] as? [String: Any] { setActive(on: a["on"] as? Bool ?? false) }
         if let info = body["menu"] as? [String: Any] { showSessionMenu(info) }
         if body["update"] != nil { downloadUpdate() }
         if let holes = body["holes"] as? [[Double]] {
@@ -504,6 +632,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         reveal.representedObject = cwd
         if !exists(cwd) { reveal.action = nil }
         var items: [NSMenuItem] = [open, .separator(), copy, reveal]
+        if !isTask, !sid.isEmpty {
+            let pin = item(info["pinned"] as? Bool == true ? "Unpin" : "Pin", #selector(togglePin(_:)), "")
+            pin.representedObject = sid
+            items.insert(pin, at: 1)
+        }
         if isTask {
             let task = item("Reveal Task in Finder", #selector(revealProject(_:)), "")
             task.representedObject = file
@@ -523,6 +656,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         req.httpMethod = "POST"
         req.setValue("1", forHTTPHeaderField: "x-csm")
         URLSession.shared.dataTask(with: req).resume()
+    }
+
+    @objc func togglePin(_ sender: NSMenuItem) {
+        guard let sid = sender.representedObject as? String, !sid.isEmpty else { return }
+        callPage("csm.togglePin", sid)
     }
 
     @objc func copyTitle(_ sender: NSMenuItem) {
@@ -564,6 +702,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
               let data = try? JSONSerialization.data(withJSONObject: value, options: .fragmentsAllowed),
               let arg = String(data: data, encoding: .utf8) else { return }
         web.evaluateJavaScript("\(function)(\(arg))", completionHandler: nil)
+    }
+
+    // The same, with a true or false.
+    func callPage(_ function: String, _ value: Bool) {
+        guard pageLoaded else { return }
+        web.evaluateJavaScript("\(function)(\(value ? "true" : "false"))", completionHandler: nil)
     }
 
     @objc func showWeek() {

@@ -14,7 +14,7 @@ import { bumpView, onBump, sessions, version } from "./src/state.ts";
 import { hydrate } from "./src/session.ts";
 import { pump, replay, savePosition } from "./src/log.ts";
 import { checkProcesses, checkQuietTurns, checkRelayed, checkTurns, relinkRelays } from "./src/turns.ts";
-import { db, forgetOld, history, loadRecent, openDatabase, persist } from "./src/db.ts";
+import { backfillWorked, db, forgetOld, history, loadRecent, openDatabase, persist, setPin } from "./src/db.ts";
 import { readDesktopSessions } from "./src/desktop.ts";
 import { scanAllAgents } from "./src/agents.ts";
 import { scanAdvisors } from "./src/advisor.ts";
@@ -46,8 +46,13 @@ function routes(req: Request, url: URL): Response | Promise<Response> | undefine
     const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
     const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 60));
     const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
-    return Response.json(history(q, limit, offset));
+    return Response.json(history(q, limit, offset, url.searchParams.get("pinned") === "1", url.searchParams.get("active") === "1"));
   }
+
+  // Pins a session or takes its pin off: {"pinned": true} or false. Like /api/open, a POST
+  // with the custom header, so a page on another site can't do it.
+  const pin = url.pathname.match(/^\/api\/pin\/([^/]+)$/);
+  if (pin) return pinRoute(req, pin[1]);
 
   // Opens the session in the desktop app. POST plus a custom header means a
   // web page on another site cannot trigger it (the browser would need a
@@ -66,6 +71,17 @@ function routes(req: Request, url: URL): Response | Promise<Response> | undefine
     return new Response(null, { status: 204 });
   }
   return undefined;
+}
+
+async function pinRoute(req: Request, sid: string) {
+  if (req.headers.get("x-csm") !== "1") return new Response(null, { status: 403 });
+  if (req.method !== "POST") return new Response(null, { status: 405 });
+  if (!UUID.test(sid)) return new Response("Not found", { status: 404 });
+  let pinned: unknown;
+  try { pinned = ((await req.json()) as { pinned?: unknown })?.pinned; } catch {}
+  if (typeof pinned !== "boolean") return new Response("Expected {\"pinned\": true|false}", { status: 400 });
+  if (!setPin(sid, pinned)) return new Response("Not found", { status: 404 });
+  return Response.json({ ok: true });
 }
 
 export { report, safe } from "./src/server-kit.ts";
@@ -229,6 +245,8 @@ export function start() {
       } catch {}
       loadHistory();
       safe("readUsage", readUsage)();
+      // Once, a moment after the start: the working times from before counting began (src/db.ts).
+      setTimeout(safe("backfillWorked", backfillWorked), 1000);
     },
     // One tick every 3 s for everything that changes with the clock or that a file event
     // could miss, so the server wakes about once in 3 s when nothing happens.

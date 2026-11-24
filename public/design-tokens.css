@@ -31,7 +31,7 @@
   --color-text-secondary: #8A8F98;
   --color-text-disabled: #62666D;       /* only for things that are off, never for text to read */
   --csm-text-on-tint: #B4BAC4;          /* secondary text a step brighter: on a raised card, a paused or closed card's title, a live row's time */
-  --color-text-tinted: #A4AAB4;         /* the words on tinted cards: 6.7:1 on done, 6.2:1 on error and on working, 5.5:1 or more on their hover */
+  --color-text-tinted: #A4AAB4;         /* the words on tinted cards: 6.0:1 or more at rest, 5.3:1 or more on their hover */
 
   /* Actions in indigo: the primary button, the switch that's on. */
   --color-accent: #5E6AD2;
@@ -61,15 +61,16 @@
   --color-on-needs: #000000;
   --color-on-needs-text: #1F1808;
   --color-on-needs-hover: #262013;      /* a black answer on amber, on hover */
-  /* Tinted cards: a quiet step of their state's color, at one lightness, so they never turn
-     muddy. Done (only the zone that matters now) is the quietest, errors crimson, working
-     a calm indigo. Their gray words take --color-text-tinted. */
-  --color-tint-done: #0D291B;
-  --color-tint-done-hover: #153122;
-  --color-tint-error: #411E25;
-  --color-tint-error-hover: #49252C;
-  --color-tint-working: #26283E;
-  --color-tint-working-hover: #2E3046;
+  /* Tinted cards: a step of their state's color, never muddy (green kept off olive, red off
+     brown). Their color follows urgency: done (only the zone that matters now) is the darkest and
+     calmest, at the most green this lightness allows; working a deep indigo; errors crimson, the
+     strongest. Their gray words take --color-text-tinted. */
+  --color-tint-done: #002C14;
+  --color-tint-done-hover: #00341D;
+  --color-tint-error: #55101E;
+  --color-tint-error-hover: #5E1925;
+  --color-tint-working: #25255C;
+  --color-tint-working-hover: #2C2D65;
 
   /* Type: the system fonts, no font files. Three sizes, each with a fixed line height. */
   --font-family-body: -apple-system, BlinkMacSystemFont, system-ui, "Helvetica Neue", sans-serif;

@@ -43,6 +43,7 @@
     "wake": "<circle cx=\"12\" cy=\"13\" r=\"7.5\"/><path d=\"M12 9.5V13l2.5 1.5\"/><path d=\"M4.5 3.5 2.5 5.5\"/><path d=\"m19.5 3.5 2 2\"/>",
     "calendarPlus": "<rect x=\"3.5\" y=\"5\" width=\"17\" height=\"15.5\" rx=\"2\"/><path d=\"M3.5 10h17\"/><path d=\"M8 3v4\"/><path d=\"M16 3v4\"/><path d=\"M12 12.5v5\"/><path d=\"M9.5 15h5\"/>",
     "book": "<path d=\"M12 7.5v12.5\"/><path d=\"M3 5h5.5A3.5 3.5 0 0 1 12 8.5V20a2.5 2.5 0 0 0-2.5-2.5H3z\"/><path d=\"M21 5h-5.5A3.5 3.5 0 0 0 12 8.5V20a2.5 2.5 0 0 1 2.5-2.5H21z\"/>",
+    "pin": "<path d=\"M9 3.5h6l-1.2 5.5 3.2 3.5H7l3.2-3.5z\"/><path d=\"M12 12.5V21\"/>", // a pushpin; a pinned item fills it (fill: currentColor)
     "mappin": "<path d=\"M12 21s-6.5-5.5-6.5-11a6.5 6.5 0 0 1 13 0c0 5.5-6.5 11-6.5 11z\"/><circle cx=\"12\" cy=\"10\" r=\"2.5\"/>",
     "branch": "<circle cx=\"6\" cy=\"6\" r=\"2.5\"/><circle cx=\"6\" cy=\"18\" r=\"2.5\"/><circle cx=\"18\" cy=\"8\" r=\"2.5\"/><path d=\"M6 8.5v7\"/><path d=\"M18 10.5c0 4-3 5.5-9.5 6.5\"/>",
     "chev": "<path d=\"m6 9 6 6 6-6\"/>",

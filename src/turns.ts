@@ -38,7 +38,7 @@ export function checkProcesses() {
     }
     if (!alive) {
       if (s.status === "working" || s.status === "waiting") s.note = "Closed in the middle of a turn";
-      setStatus(s, "ended", now);
+      setStatus(s, "ended", now, s.last); // its time working ends at its last sign of life
       s.reminders = undefined; // they lived in its process
       bump(s);
     }
@@ -226,7 +226,7 @@ export function checkQuietTurns() {
       continue;
     }
     if (last.kind !== "interrupted" && last.kind !== "error") continue;
-    setStatus(s, "done", now);
+    setStatus(s, "done", now, s.last);
     s.tool = s.detail = undefined;
     s.classified = true;
     if (last.kind === "interrupted") {
