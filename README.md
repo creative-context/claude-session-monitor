@@ -1,7 +1,3 @@
-<p align="center">
-  <img src="docs/banner.png" alt="Claude Session Monitor: a Mac app that shows your Claude Code sessions as they run, and which ones need you. Beside the title, its Active zone: two sessions that need you, the first with its two answer buttons, one with an error, one working and one with agents working, and at the right the week's usage, half used and on pace, with its card open: the week as a curve along the even-week diagonal, 4% extra left" width="100%">
-</p>
-
 <h1 align="center">Claude Session Monitor</h1>
 
 <p align="center">
@@ -10,10 +6,10 @@
 </p>
 
 <p align="center">
-  <img src="https://img.shields.io/github/v/release/creative-context/claude-session-monitor?label=version&color=2D72D2&labelColor=1A1D21" alt="Latest version">
-  <img src="https://img.shields.io/badge/license-MIT-238551?labelColor=1A1D21" alt="MIT license">
-  <img src="https://img.shields.io/badge/macOS-14%2B-8A8F98?labelColor=1A1D21" alt="macOS 14 or later">
-  <img src="https://img.shields.io/badge/data-stays_on_your_Mac-6FA6E8?labelColor=1A1D21" alt="Data stays on your Mac">
+  <img src="https://img.shields.io/github/v/release/creative-context/claude-session-monitor?label=version&color=5E6AD2&labelColor=18191B" alt="Latest version">
+  <img src="https://img.shields.io/badge/license-MIT-153122?labelColor=18191B" alt="MIT license">
+  <img src="https://img.shields.io/badge/macOS-14%2B-26272B?labelColor=18191B" alt="macOS 14 or later">
+  <img src="https://img.shields.io/badge/data-stays_on_your_Mac-26283E?labelColor=18191B" alt="Data stays on your Mac">
 </p>
 
 <p align="center">
