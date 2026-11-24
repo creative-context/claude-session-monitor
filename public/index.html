@@ -252,6 +252,12 @@
   .bar .segs span.now { background: color-mix(in srgb, var(--color-mark-working) 45%, transparent); }
   /* The step in progress breathes while the session works, in step with its spinner. */
   .card.working .bar .segs span.now { background: var(--color-mark-working); animation: step 2.4s ease-in-out infinite; }
+  /* On an amber card, in its own ink, as its task runs are: done steps black, the one it's on
+     a lighter black, the rest a faint black track (the white track vanished on amber and the
+     indigo read as gray). */
+  .card:is(.waiting, .asks, .needs):not(.stale) .bar .segs span { background: #00000033; }
+  .card:is(.waiting, .asks, .needs):not(.stale) .bar .segs span.on { background: var(--color-on-needs); }
+  .card:is(.waiting, .asks, .needs):not(.stale) .bar .segs span.now { background: color-mix(in srgb, var(--color-on-needs) 55%, transparent); }
 
 
   /* ---------- history ---------- */
