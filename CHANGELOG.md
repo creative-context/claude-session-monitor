@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.10.1
 
 - Done cards are a calmer green, and working cards are blue instead of indigo, with their words, dots, plan steps and icons in the same blue (design system 0.15.1).
 
