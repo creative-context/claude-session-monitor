@@ -1,5 +1,9 @@
 # Changelog
 
+## Unreleased
+
+- Done cards are a calmer green, and working cards are blue instead of indigo, with their words, dots, plan steps and icons in the same blue (design system 0.15.1).
+
 ## 0.10.0
 
 - Most active, right after Pinned (in the app, in its toolbar), shows only the 10 sessions Claude spent the most time working in over the last 7 days, most first in each group, each with its time beside its state; the usual view stays, and one filter is on at a time. The time counts only while a session's own turn works, not while it waits on you or after its turn ended, per day in sessions.db, so it outlasts a restart and is never counted twice. docs/privacy.md lists the new stored field.

@@ -102,9 +102,9 @@ Beside its time, a card shows the session's model and effort, with UC in an outl
 |---|---|---|
 | Needs you | Amber card, black words | Blocked mid-turn: it asks for permission, asks a question, waits for a plan approval or needs input. Or its turn ended asking you something: the app's next-step question, a question in the last two sentences of its closing message or at the end of a point in the list it ends on, a request without a question mark, or the Claude app's own summary of the turn saying you need to do something, unless the session closed with its next-step box and asked nothing in it. Questions count for a day; after that the card turns dark and its state word orange |
 | Error | Crimson tint, plain once old | An API error ended the turn, such as a server error or a usage limit. Caught with or without a `Stop` event. Errors count for a day |
-| Working | Indigo tint | Thinking or using a tool |
-| Agents working | Indigo tint | Its own turn ended, but subagents or a workflow are still running |
-| In the background | Indigo tint | Its own turn ended, but a shell command it started is still running; Claude Code wakes the session when it ends. The card shows the command's description. It counts until Claude Code says the command ended or it's stopped, for two hours at most |
+| Working | Blue tint | Thinking or using a tool |
+| Agents working | Blue tint | Its own turn ended, but subagents or a workflow are still running |
+| In the background | Blue tint | Its own turn ended, but a shell command it started is still running; Claude Code wakes the session when it ends. The card shows the command's description. It counts until Claude Code says the command ended or it's stopped, for two hours at most |
 | Done | Dark green tint in Active, plain after that | Finished its turn, or you stopped it |
 | Idle | None | Open, with no turn yet |
 | Closed | None | Its process is gone |
@@ -115,7 +115,7 @@ A card that starts needing you breathes for its first minute, then holds still. 
 
 ## Answering from the card
 
-When a session ends its turn with the Claude app's next-step question and answer buttons, its Needs you card shows the first two buttons in its footer, in place of the folder. Click one to answer without opening the session: the answer goes at once to the session as your next message, exactly the button's words, and the card turns indigo and says Sent while the session starts working on it. There's no taking it back, so click the one you mean. From the click on, it no longer counts as needing you.
+When a session ends its turn with the Claude app's next-step question and answer buttons, its Needs you card shows the first two buttons in its footer, in place of the folder. Click one to answer without opening the session: the answer goes at once to the session as your next message, exactly the button's words, and the card turns blue and says Sent while the session starts working on it. There's no taking it back, so click the one you mean. From the click on, it no longer counts as needing you.
 
 This needs the [plugin](#the-plugin) in that session. Without it, and for a button only the Claude app can do (Commit, Create PR, Merge and the like), the button carries ↗ and opens the session, as a click on the card does. If no session takes the answer within 20 seconds of your click, or one takes it but its message doesn't reach the session within 30 seconds after that, the card says it couldn't send it and needs you again. On a focused card, ⌘↩ answers with the first button.
 

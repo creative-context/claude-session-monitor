@@ -1,4 +1,4 @@
-/* mac-app-design 0.15.0 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.15.1 (components.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Components: the pieces both apps draw, with their states. Class names are the first
    app's, so nothing renames; a few aliases name a state by its meaning (needs, soft). */
 
@@ -13,7 +13,7 @@
 }
 button.tag { border: 0; font: inherit; font-size: var(--csm-text-meta); cursor: pointer; }
 .tag > span { overflow: hidden; text-overflow: ellipsis; }
-.tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); font-weight: var(--font-weight-medium); }
+.tag.s-working { background: var(--color-working-muted); color: var(--color-text-working); font-weight: var(--font-weight-medium); }
 .tag.s-waiting, .tag.s-asks, .tag.s-needs { background: var(--color-warning-muted); color: var(--color-text-orange); font-weight: var(--font-weight-medium); }
 .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); font-weight: var(--font-weight-medium); }
 .tag.s-error { background: var(--color-error-muted); color: var(--color-text-red); font-weight: var(--font-weight-medium); }
@@ -51,7 +51,7 @@ header .spacer { flex: 1; }
 #counts .tag .word { color: var(--color-text-secondary); font-weight: 400; }
 #counts .tag .pdot { color: var(--color-needs); }
 #counts .tag svg.i:not(.chev) { color: var(--color-text-secondary); }
-#counts .tag.working .sdot { color: var(--color-accent); }
+#counts .tag.working .sdot { color: var(--color-mark-working); }
 #counts.tight .tag .word { display: none; }
 #counts.tighter .tag.low { display: none; }
 #counts.tightest .tag:not(.s-waiting):not(.s-needs) { display: none; }
@@ -155,7 +155,7 @@ header .spacer { flex: 1; }
 .banner svg.i { width: 14px; height: 14px; }
 .banner > svg.i { color: var(--color-error); }
 .banner b { color: var(--color-text-primary); font-weight: var(--font-weight-medium); }
-.banner.update > svg.i { color: var(--color-mark-working); }
+.banner.update > svg.i { color: var(--color-text-accent); } /* new stays indigo, apart from the working blue */
 .banner .btn { margin-left: auto; height: 24px; }
 .banner .x { all: unset; cursor: pointer; display: inline-flex; padding: 4px; border-radius: 4px; color: var(--color-text-secondary); }
 .banner .x:hover { background: var(--obsidian-veil-selected); color: var(--color-text-primary); }
@@ -178,17 +178,17 @@ header .spacer { flex: 1; }
 /* Raised: a card that rises above a tinted region (a column on its own surface), so the page,
    the region and the card read as three depths. One lighter step and a soft shadow, no line.
    Its meta takes the on-tint gray to keep 4.5:1 on the lighter step. The states below keep
-   their own tint and meta; work steps up in its own indigo. */
+   their own tint and meta; work steps up in its own blue. */
 .card.raised { --tint: color-mix(in srgb, #FFFFFF 7%, var(--color-background-card)); --meta: var(--csm-text-on-tint); box-shadow: 0 1px 2px #00000080; }
 /* Needs you: the amber card, with black words (--meta is the question's near-black). An old
    question (.stale) stays a plain card. --dot is the state's dot, for a page that draws one. */
 .card:is(.waiting, .asks, .needs):not(.stale) { --tint: var(--color-needs); --meta: var(--color-on-needs-text); --dot: var(--color-on-needs); }
-/* Errors crimson and work indigo, a quiet step of their color; their gray words take --color-text-tinted. */
+/* Errors crimson and work blue, a quiet step of their color; their gray words take --color-text-tinted. */
 .card.error:not(.stale) { --tint: var(--color-tint-error); --meta: var(--color-text-tinted); }
 .card.working:not(.stale) { --tint: var(--color-tint-working); --meta: var(--color-text-tinted); --dot: var(--color-mark-working); }
-/* Raised work takes its step in its own color, a little more indigo, so it still rises from an indigo region. */
-.card.raised.working { --tint: color-mix(in srgb, var(--color-accent) 20%, var(--color-background-card)); }
-.card.raised.working.background, .card.raised.working.soft { --tint: color-mix(in srgb, var(--color-accent) 14%, var(--color-background-card)); }
+/* Raised work takes its step in its own color, a little more blue, so it still rises from a blue region. */
+.card.raised.working { --tint: color-mix(in srgb, var(--color-mark-working) 20%, var(--color-background-card)); }
+.card.raised.working.background, .card.raised.working.soft { --tint: color-mix(in srgb, var(--color-mark-working) 14%, var(--color-background-card)); }
 /* Old news keeps its tag's color but drops the loud card. */
 .card.stale { --tint: var(--color-background-card); --meta: var(--color-text-secondary); }
 /* Done: tinted only in the zone that matters now (.group.active); elsewhere a plain card. */
@@ -211,7 +211,7 @@ header .spacer { flex: 1; }
 .top { display: flex; align-items: center; justify-content: space-between; gap: 8px; height: var(--csm-tag-h); }
 .card .top .tag { font-weight: 600; }
 /* Small tags in a card: work and done soft; what needs you solid, as on an old question. */
-.card .tag.s-working { background: var(--color-accent-muted); color: var(--color-text-accent); }
+.card .tag.s-working { background: var(--color-working-muted); color: var(--color-text-working); }
 .card .tag.s-waiting, .card .tag.s-asks, .card.needs .top .tag { background: var(--color-warning); color: var(--color-on-light); }
 .card .tag.s-done { background: var(--color-success-muted); color: var(--color-text-green); }
 .card .tag.s-error { background: #B5383C; color: var(--color-on-accent); }
@@ -374,7 +374,7 @@ header .spacer { flex: 1; }
 .prow.s-waiting .ps, .prow.s-asks .ps { color: var(--color-text-orange); }
 .prow.s-needs .pm { color: var(--color-text-orange); }
 .prow.s-error .pi, .prow.s-error .ps { color: var(--color-text-red); }
-.prow.s-working .pi { color: var(--color-text-accent); }
+.prow.s-working .pi { color: var(--color-text-working); }
 .prow.s-done .pi { color: var(--color-text-green); }
 .prow.count { grid-template-columns: 14px minmax(0, 1fr) auto; }
 .prow.count .pt { font-family: var(--font-family-body); font-weight: 400; }

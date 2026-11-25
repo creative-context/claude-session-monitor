@@ -13,7 +13,7 @@
 </p>
 
 <p align="center">
-  <img src="docs/demo.gif" alt="The app's Active zone with demo data, the week's usage at its right, on pace: a working session stops on a permission, turns amber with a beating dot and moves to the first place; then the pointer clicks the mic on another session that asks a question: a composer opens out from under its card and listens, the words come in, and ending with “send message” sends them; the card turns indigo, says Sent, and the session goes back to working; the pointer rests on the week's usage and its card opens with the week's curve; then the first session gets its permission and the second asks again, as at the start" width="100%">
+  <img src="docs/demo.gif" alt="The app's Active zone with demo data, the week's usage at its right, on pace: a working session stops on a permission, turns amber with a beating dot and moves to the first place; then the pointer clicks the mic on another session that asks a question: a composer opens out from under its card and listens, the words come in, and ending with “send message” sends them; the card turns blue, says Sent, and the session goes back to working; the pointer rests on the week's usage and its card opens with the week's curve; then the first session gets its permission and the second asks again, as at the start" width="100%">
 </p>
 
 With a few Claude Code sessions going at once, the one that needs you is easy to miss. It sits in another window, waiting on a permission or a question, while you watch the one that's working. This app puts every session on one screen, colored by what it needs from you. It works with the Claude desktop app and with `claude` in a terminal, and your sessions never leave your Mac.

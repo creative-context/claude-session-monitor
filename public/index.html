@@ -254,7 +254,7 @@
   .card.working .bar .segs span.now { background: var(--color-mark-working); animation: step 2.4s ease-in-out infinite; }
   /* On an amber card, in its own ink, as its task runs are: done steps black, the one it's on
      a lighter black, the rest a faint black track (the white track vanished on amber and the
-     indigo read as gray). */
+     mark read as gray). */
   .card:is(.waiting, .asks, .needs):not(.stale) .bar .segs span { background: #00000033; }
   .card:is(.waiting, .asks, .needs):not(.stale) .bar .segs span.on { background: var(--color-on-needs); }
   .card:is(.waiting, .asks, .needs):not(.stale) .bar .segs span.now { background: color-mix(in srgb, var(--color-on-needs) 55%, transparent); }
@@ -275,7 +275,7 @@
   .hrow.found { box-shadow: 0 0 0 2px var(--color-text-accent); }
   .hrow.fresh .hicon svg.pulse { animation: breathe 2.4s ease-in-out infinite; }
   .hrow .hstate { font-size: var(--csm-text-meta); font-weight: var(--font-weight-medium); white-space: nowrap; }
-  .hrow.s-working .hstate { color: var(--color-text-accent); }
+  .hrow.s-working .hstate { color: var(--color-text-working); }
   .hrow.s-waiting .hstate, .hrow.s-asks .hstate { color: var(--color-text-orange); }
   .hrow.s-error .hstate { color: var(--color-text-red); }
 
@@ -367,7 +367,7 @@
   header .maf[aria-pressed="true"] svg.i { fill: none; }
   .ma-b { flex: none; display: inline-flex; align-items: center; gap: 4px; margin-left: 10px; white-space: nowrap;
     font-size: var(--csm-text-meta); line-height: var(--csm-lh-meta); font-variant-numeric: tabular-nums; font-weight: 600;
-    color: var(--color-text-accent); } /* the indigo for words: 5.8:1 or more on every tint and its hover (the mark's #8B8BFF fell to 4.3 on a hovered working card) */
+    color: var(--color-text-working); } /* the working words' blue: 5.8:1 or more on every tint and its hover (the mark itself falls to 4.4 on a hovered working card) */
   .ma-b svg.i { width: 12px; height: 12px; }
   .card:is(.waiting, .asks, .needs):not(.stale) .ma-b { color: var(--color-on-needs); }
   .hrow.live:is(.s-waiting, .s-asks) .ma-b { color: var(--color-on-needs-text); }
@@ -3186,7 +3186,7 @@
     // In the last 7 days: how many in each state, most urgent first.
     const order = ["Needs you", "Error", "Asked you", "Working", "Agents working", "In the background", "Done", "Idle", "Closed"];
     const color = { "Needs you": "var(--color-warning)", Error: "var(--color-error)", "Asked you": "var(--color-warning-muted)",
-      Working: "var(--color-accent)", "Agents working": "var(--color-text-accent)", "In the background": "var(--color-text-accent)", Done: "var(--color-success)" };
+      Working: "var(--color-mark-working)", "Agents working": "var(--color-text-working)", "In the background": "var(--color-text-working)", Done: "var(--color-success)" };
     const by = new Map();
     for (const s of list) by.set(label(s), (by.get(label(s)) || 0) + 1);
     const rows = order.filter((l) => by.get(l)).map((l) => `<button type="button" class="prow count" data-state="${l}" title="Show these cards">
