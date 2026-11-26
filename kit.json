@@ -1,10 +1,11 @@
 {
   "name": "mac-app-kit",
-  "version": "0.2.3",
+  "version": "0.3.1",
   "repo": "creative-context/mac-app-kit",
-  "commit": "d2ebcd8474ff",
+  "commit": "bc6d1e6657ab",
   "files": {
-    "src/server-kit.ts": "cf98e7d708d801c5583dad5741e4b435a14fc12d33be2e99d8fd083f93cf4784",
-    "app/ShellKit.swift": "6652d6a1aacf9d3cf1a283a0c7dd0a06c9f8ca79a60c03577927bb2bc1ae0022"
+    "src/server-kit.ts": "b3f787e1b55c9003a7e13623127d51554d1bc95fc0a644de9a6e4df4b41d4127",
+    "app/ShellKit.swift": "901cd331b259b757ca9eb5b75923ef27694e7f1ab893ca3d0658ff1817aafb0a",
+    "app/DictationKit.swift": "88f90b5ad0b7917dec92d823fa011159a7708342e5478b41c1203f41e7c7d552"
   }
 }

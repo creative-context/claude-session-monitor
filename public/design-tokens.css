@@ -1,4 +1,4 @@
-/* mac-app-design 0.15.1 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
+/* mac-app-design 0.16.0 (tokens.css). Vendored: don't edit here. Change it in the design repo and vendor again. */
 /* Tokens: colors, type, space, shape and motion for the family's Mac apps.
    Dark only. Names stay as they came, so nothing renames; the --csm-* names are the
    family's own, kept from the first app. */
@@ -112,9 +112,13 @@
   --card-detail-gap: 4px;
   --card-tags-gap: 0px;
 
-  /* Motion: calm and in step, one easing curve, no bounce. */
+  /* Motion: calm and in step, no bounce. One curve for what answers you; a gentler one for what
+     moves on its own across a long way. */
   --duration-fast: 100ms;
   --ease-standard: cubic-bezier(0.2, 0, 0, 1);
+  /* A level that travels on its own, not under the pointer (the week's usage at its reset):
+     it gathers speed and slows down to land, so it reads as having weight. */
+  --ease-inertial: cubic-bezier(0.65, 0, 0.35, 1);
   /* How long things take: out quickly, in gently. An exit, an entry, a move across the window,
      and a color that changes in place. Panels enter on --ease-enter. */
   --duration-exit: 160ms;
@@ -122,6 +126,9 @@
   --duration-travel: 400ms;
   --duration-color: 450ms;
   --ease-enter: cubic-bezier(0.16, 1, 0.3, 1);
+  /* A menu under its trigger is quicker than a panel: in at 200 ms, out at 120 ms. */
+  --duration-menu-enter: 200ms;
+  --duration-menu-exit: 120ms;
 
   /* Data viz: one quiet fill, tracks a step above the card, "now" in the accent, and the
      state colors for how it's going. Whose turn: white you, indigo Claude, gray others. */

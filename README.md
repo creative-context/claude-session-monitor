@@ -31,6 +31,10 @@ With a few Claude Code sessions going at once, the one that needs you is easy to
 
 Everything it shows is in the [guide](docs/guide.md).
 
+<p align="center">
+  <img src="docs/card-anatomy.png" alt="The parts of a card, named on three demo cards: one that needs you, with its mic's drawer open, one working and one done" width="760">
+</p>
+
 ## Install
 
 Requires macOS 14 or later, Claude Code signed in with a Claude plan that includes it (Pro, Max, Team or Enterprise), [Bun](https://bun.sh) and `jq` (macOS 15 ships it; on 14, `brew install jq`).

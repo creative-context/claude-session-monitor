@@ -45,7 +45,14 @@ let utc = WKUserScript(source: """
 final class NoDictation: NSObject, WKScriptMessageHandler {
   func userContentController(_ c: WKUserContentController, didReceive message: WKScriptMessage) {}
 }
+// The app's page key, as the app puts it in its page (a read-only window.__csmKey, there from the
+// start): without it the page only looks, and its answers and permissions would be drawn as plain
+// ones. Made up, and the same as DEMO_PAGE_KEY in test/keys.ts, whose hash the demo takes by default.
+let pageKey = "d3a0c4e81f5b2976a4d8e0c3b71f5a29c6e84d0b3f7a15e92c8b6d4f0a3e7c15"
+let keyScript = WKUserScript(source: "Object.defineProperty(window, \"__csmKey\", { value: \"\(pageKey)\", writable: false });",
+                             injectionTime: .atDocumentStart, forMainFrameOnly: true)
 let config = WKWebViewConfiguration()
+config.userContentController.addUserScript(keyScript)
 config.userContentController.addUserScript(utc)
 config.userContentController.add(NoDictation(), name: "dictate")
 let web = WKWebView(frame: window.contentLayoutRect, configuration: config)

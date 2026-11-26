@@ -14,6 +14,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
   - `db.ts` `sessions.db` and History; `desktop.ts` the Claude app's session files; `agents.ts` subagents, workflows and background commands.
   - `answers.ts` answering a session from its card: the buttons, the reply handed over at once, and `/api/answer/:sid` (the page) and `/api/answer/:sid/next` (the mod's long poll), in memory only.
   - `advisor.ts` the advisor a session has turned on (Claude Code's `/advisor`) and its model, searched for once in the whole transcript, from the end back, then read as it grows; kept in `sessions.db` with how far it read.
+  - `keys.ts` who may act on a session: the window's key (made by the app at each launch, in its page only; the server gets its SHA-256 as `CSM_PAGE_KEY_SHA256`) for sending an answer and deciding a permission, and the plugin's key (`plugin.key`, written at each start, 0600) for its ask and its hold, with every reply to the plugin carrying `x-csm-proof`, an HMAC-SHA256 of its nonce. Pin and open keep the `x-csm` header alone.
   - `permissions.ts` allowing or denying a permission from the card: what the session asks (one line, in memory only), `/api/permission/:sid` (the mod's long poll) and `/api/permission/:sid/decide` (the page).
   - `tasks.ts` scheduled tasks and reminders; `usage.ts` plan usage and its probe; `snapshot.ts` what the page gets, with the "needs you" rule and the `attention` list built from it.
   - `worked.ts` each session's time working per day, for the Most active filter: counted on each status change in `setStatus`, only past how far it was counted, so reading the log again never counts twice; kept in `sessions.db`.
@@ -27,7 +28,8 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 - `.github/workflows/ci.yml`: the tests on Linux on every push to main and on pull requests. `release.yml`: builds the app on macOS when a release is published and attaches the zip.
 - `README.md` and `docs/`: the README is short (what it is, features in a line each, install, use, a privacy summary, uninstall, develop, license). `docs/guide.md` holds everything the app shows and its optional pieces, `docs/privacy.md` every file it reads, keeps, changes, sends and starts, and `docs/architecture.md` how it's built, the tools and the lessons from other projects.
 - `docs/screenshot.png`: shown in the guide; the page on the demo data running hot (`bun test/demo.ts --hot`), drawn in WebKit at 2× with the weekly usage card open, by `docs/screenshot.swift` (the command is at the top of the file).
-- `docs/demo.gif`: the README's animation, its only picture, 880 px wide, recorded in WebKit by `docs/demo-gif.swift` (the command is at the top of the file), which runs `bun test/demo.ts --gif` in UTC and cues its story: a session turns Needs you and moves first, then a drawn pointer answers another one by voice from its card and opens the week's usage card, and both sessions end as they began, so it loops without a seam (drawn with `--dictate`, 14.4 s; without it, the answer is a button, no pointer and no usage card). Needs ffmpeg.
+- `docs/card-anatomy.png`: a card's parts, named on three cards (one needs you, with its mic's drawer open, one works, one is done); in the README above Install, at 760 px, and in the guide. The page on `bun test/demo.ts --anatomy`, drawn in WebKit at 2.5× by `docs/card-anatomy.swift` (the command is at the top of the file), which runs `docs/card-anatomy.js` inside the page: it moves the cards with a style sheet, opens the first card's mic drawer with made-up words and names each part from where the page drew it. Redraw it when a card's parts change.
+- `docs/demo.gif`: the README's animation, 880 px wide, recorded in WebKit by `docs/demo-gif.swift` (the command is at the top of the file), which runs `bun test/demo.ts --gif` in UTC and cues its story: a session turns Needs you and moves first, then a drawn pointer answers another one by voice from its card and opens the week's usage card, and both sessions end as they began, so it loops without a seam (drawn with `--dictate`, 14.4 s; without it, the answer is a button, no pointer and no usage card). Needs ffmpeg.
 
 ## Commands
 
@@ -35,7 +37,7 @@ This is **Claude Session Monitor**: a Mac app that shows the user's Claude Code 
 bun test/scenarios.ts      # port 4749
 bun test/page.ts           # port 4751, the page in WebKit
 claude plugin test plugin          # the plugin; claude plugin validate plugin
-bun test/demo.ts           # port 4748, or 4747 to show it in the app. --edge adds edge cases, --hot a week running hot
+bun test/demo.ts           # port 4748, or 4747 to show it in the app. --edge adds edge cases, --hot a week running hot, --anatomy the card anatomy's three cards
 sh app/build.sh --install  # build, copy to ~/Applications, reopen
 sh app/build.sh --release  # build and zip for a release
 ```
@@ -48,6 +50,7 @@ sh app/build.sh --release  # build and zip for a release
 - **Tests and the demo never touch the user's data.** They point `CSM_DIR`, `CSM_APP_SESSIONS` and `CSM_PROJECTS` at temp folders.
 - **The app runs its own copy of the server.** After changing `server.ts`, `src/`, `closing.ts`, `cron.ts` or `public/`, rebuild the app to see it there.
 - **One rule for "needs you",** computed in `src/snapshot.ts` and shared by the window, the Dock badge and the menu bar: sessions, History rows and tasks carry `needsYou`, and the state carries `attention`, the list with its words. The page and the app show them and never work them out.
+- **Only the app's window and the plugin act on a session.** A route that sends an answer or decides a permission checks the window's key, and the plugin's routes check the plugin's key and sign their replies (`src/keys.ts`). Tests and the demo give their server a test key's hash and their pages the key. Never let a page, a file or a session's shell reach what the window's key guards.
 - **The server ends with its app and survives its own errors.** It exits when `CSM_PARENT_PID` is gone and with code 3 when the port is taken; `/api/state` carries `server: { version, pid }`. Wrap new timers in `safe()`.
 - **The look of shared pieces lives in the design system.** A token, a component or an icon changes in `mac-app-design` first, then it's vendored here with `bun ../mac-app-design/tools/vendor.ts public`, and `bun ../mac-app-design/tools/compare.ts` (Playwright, WebKit) shows what changed on screen against the page before. Session Monitor's look is the design system's reference: a change that isn't meant to change this page must compare with no differences. `bun test/scenarios.ts` checks the vendored files weren't edited.
 - **The README stays short,** about 600 words. What a feature does goes in `docs/guide.md`, not the README; the README's features list changes only when what the app is changes. Keep each fact in one place and link to it.

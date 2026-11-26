@@ -7,6 +7,15 @@
 //                               session, one closed mid-turn, many agents, an idle one
 //   bun test/demo.ts --hot    → a week running hot: the forecast and its card; --limit, a week used up
 //   bun test/demo.ts --gif    → only four sessions, for docs/demo.gif: a line on stdin plays its story
+//   bun test/demo.ts --anatomy → only three cards, for docs/card-anatomy.png: one needs you,
+//                               one works, one is done with a folder, a relative and a task
+//
+// Answering and allowing from a card need the app's page key (src/keys.ts). The server here takes
+// the hash of a made-up key, DEMO_PAGE_KEY in test/keys.ts, or CSM_PAGE_KEY_SHA256 if it's set. A
+// page in a plain browser has no key and only looks; to answer from one, set it in the page's
+// console (window.__csmKey = "<the key>", printed below) and reload the page's state. The scripts
+// that draw the page (docs/*.swift, test/page.ts) put the key in the page the way the app does.
+// The plugin side played here reads plugin.key from the demo's folder, as the plugin does.
 //
 // Sessions waiting on a permission have the plugin's permission side, played here: their card
 // shows what they ask with Allow and Deny. A click runs or refuses the tool a moment later
@@ -17,11 +26,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { parseCron, prevRun } from "../cron.ts";
 import { playMod } from "./answer-mod.ts";
+import { DEMO_PAGE_KEY, demoKeyHash, pluginFetch } from "./keys.ts";
 
 const args = process.argv.slice(2);
 const PORT = Number(args.find((a) => /^\d+$/.test(a)) ?? 4748);
 const EDGE = args.includes("--edge");
 const GIF = args.includes("--gif");
+const ANATOMY = args.includes("--anatomy");
 const dir = mkdtempSync(join(tmpdir(), "csm-demo-"));
 const log = join(dir, "events.jsonl");
 writeFileSync(log, "");
@@ -478,6 +489,37 @@ if (GIF) {
   });
 }
 
+// --anatomy: keep three cards, each showing parts the others can't (answers take the foot's
+// place, and so does a plan's bar): the release notes need you, with every chip and a pin; the
+// checkout fix works through its plan; and a session of its own, done, that started a side
+// session and set up a task, so its foot has a folder, the side session and the task.
+if (ANATOMY) {
+  const cwd = project("web-app");
+  const plan = finished("Plan the checkout cleanup", cwd, now - 6 * MIN, "Split the cleanup into three steps. The first one runs tonight.");
+  ev(plan, now - 7 * MIN, { ev: "PostToolUse", tool: "mcp__scheduled-tasks__create_scheduled_task", x: { task: "nightly-run" }, cwd });
+  task("nightly-run", "Nightly run", "0 2 * * *", cwd, { created: now - 7 * MIN });
+  const keep = new Set([releaseRun, checkout, plan]);
+  const lines = readFileSync(log, "utf8").split("\n").filter((l) => l && keep.has(JSON.parse(l).sid));
+  writeFileSync(log, lines.join("\n") + "\n");
+  for (const f of readdirSync(appDir)) {
+    if (f === "scheduled-tasks.json") continue;
+    const j = JSON.parse(readFileSync(join(appDir, f), "utf8"));
+    if (!keep.has(j.cliSessionId)) rmSync(join(appDir, f));
+    // The release notes as a session of their own, not a task's run: their time stands alone.
+    else if (j.cliSessionId === releaseRun) writeFileSync(join(appDir, f), JSON.stringify({ ...j, scheduledTaskId: undefined }));
+  }
+  writeFileSync(join(appDir, "local_plan.json"), JSON.stringify({
+    sessionId: "local_plan", cliSessionId: plan, title: "Plan the checkout cleanup", originCwd: cwd,
+    createdAt: now - 12 * MIN, lastActivityAt: now - 6 * MIN, model: "claude-haiku-4-5", effort: "low",
+  }));
+  // Its side session, archived: only the app's file says it came from this one.
+  writeFileSync(join(appDir, "local_plan_side.json"), JSON.stringify({
+    sessionId: "local_plan_side", cliSessionId: id(), title: "Draft the cleanup tickets", originCwd: cwd,
+    createdAt: now - 10 * MIN, lastActivityAt: now - 8 * MIN, spawnedFrom: { sessionId: "local_plan" }, isArchived: true,
+  }));
+  writeFileSync(join(appDir, "scheduled-tasks.json"), JSON.stringify({ scheduledTasks: taskFile.filter((t) => t.id === "nightly-run") }));
+}
+
 // Made-up time working for the Most active filter: a spread from minutes to hours, on each
 // session's last day, a few with none. Written before the server starts into sessions.db (its
 // own schema, through src/db.ts) as rows the main view doesn't load (last_at 0): the server
@@ -510,6 +552,7 @@ const server = Bun.spawn(["bun", join(import.meta.dir, "..", "server.ts")], {
   env: {
     ...process.env, CSM_PORT: String(PORT), CSM_DIR: dir,
     CSM_APP_SESSIONS: join(dir, "app"), CSM_PROJECTS: join(dir, "none"),
+    CSM_PAGE_KEY_SHA256: process.env.CSM_PAGE_KEY_SHA256 || demoKeyHash(DEMO_PAGE_KEY),
   },
   stdout: "inherit",
   stderr: "inherit",
@@ -528,10 +571,10 @@ void (async () => {
 // The answers mod in the sessions that have it. An answer starts a turn a moment later; a few
 // seconds after (CSM_DEMO_TURN_MS, 8 s by default) the session ends it and asks the same question again.
 const TURN_MS = Number(process.env.CSM_DEMO_TURN_MS) || 8000;
-const mods = (GIF ? listening.filter((sid) => sid === releaseRun) : listening).map((sid) => {
+const mods = (GIF || ANATOMY ? listening.filter((sid) => sid === releaseRun) : listening).map((sid) => {
   const a = answering.get(sid)!;
   return playMod({
-    port: PORT, log, sids: [sid], cwd: a.cwd, delay: 1500,
+    port: PORT, log, dir, sids: [sid], cwd: a.cwd, delay: 1500,
     onAnswer: () => setTimeout(() => closeTurn(sid, a.cwd, Date.now(), a.recap, a.ask || undefined, a.acts.length ? a.acts : undefined), TURN_MS),
   });
 });
@@ -545,14 +588,15 @@ const playPermit = async (p: Permit) => {
   while (!permitStop.signal.aborted) {
     const ask = JSON.stringify({ id: `demo-${++k}`, tool: p.tool, what: p.what });
     let r: Response | null = null;
+    let proven = false;
     try {
-      do r = await fetch(`http://127.0.0.1:${PORT}/api/permission/${p.sid}`, { method: "POST", headers: { "x-csm": "1" }, body: ask, signal: permitStop.signal });
-      while (r.status === 204);
+      do ({ res: r, proven } = await pluginFetch(`http://127.0.0.1:${PORT}/api/permission/${p.sid}`, dir, { method: "POST", body: ask, signal: permitStop.signal }));
+      while (r.status === 204 && proven);
     } catch {
       if (!permitStop.signal.aborted) await Bun.sleep(500); // the server isn't up yet
       continue;
     }
-    if (r.status !== 200) { await Bun.sleep(1000); continue; } // settled some other way: ask again
+    if (r.status !== 200 || !proven) { await Bun.sleep(1000); continue; } // settled some other way: ask again
     const { decision } = (await r.json()) as { decision: string };
     await Bun.sleep(PERMIT_MS);
     ev(p.sid, Date.now(), { ev: decision === "allow" ? "PostToolUse" : "PostToolUseFailure", tool: p.tool, cwd: p.cwd });
@@ -560,7 +604,7 @@ const playPermit = async (p: Permit) => {
     if (!permitStop.signal.aborted) ev(p.sid, Date.now(), { ev: "Notification", nt: "permission_prompt", msg: p.msg, cwd: p.cwd });
   }
 };
-if (!GIF) for (const p of permits) void playPermit(p);
+if (!GIF && !ANATOMY) for (const p of permits) void playPermit(p);
 const stop = () => {
   permitStop.abort();
   for (const m of mods) m.stop();
@@ -571,5 +615,6 @@ const stop = () => {
 process.on("SIGINT", stop);
 process.on("SIGTERM", stop);
 console.log(`Demo data in ${dir}. Open http://127.0.0.1:${PORT}  (Ctrl-C to stop)`);
+if (!process.env.CSM_PAGE_KEY_SHA256) console.log(`The page key (made up) is ${DEMO_PAGE_KEY}: the page answers only with window.__csmKey set to it.`);
 await server.exited;
 rmSync(dir, { recursive: true, force: true });

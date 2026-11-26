@@ -11,6 +11,8 @@
 
 import AppKit
 import AVFoundation
+import CryptoKit
+import Security
 import ServiceManagement
 import Speech
 import UserNotifications
@@ -106,7 +108,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     func applicationDidFinishLaunching(_ notification: Notification) {
         ShellLog.appName = appName
         ShellLog.path = Self.logPath
-        keeper = ServerKeeper(.init(port: port, version: currentVersion, versionEnv: "CSM_VERSION", parentEnv: "CSM_PARENT_PID"))
+        // Each start of the server gets the hash of a new window key, so a server left from
+        // before is replaced rather than used (it would know another key).
+        keeper = ServerKeeper(.init(port: port, version: currentVersion, versionEnv: "CSM_VERSION", parentEnv: "CSM_PARENT_PID",
+                                    envAtStart: { ["CSM_PAGE_KEY_SHA256": PageKey.store.renew()] },
+                                    replaceSameVersion: true))
         keeper.onExit = { [weak self] in self?.setLive(false) }
         keeper.launch()
         buildMainMenu()
@@ -115,7 +121,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         // Open at Login is off until you turn it on in the menu bar item's menu.
         // The page tells the app its counts as they change; this is the fallback.
         let tick = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-            Task { @MainActor in self.statusTick() }
+            Task { @MainActor in self.statusTick(); self.keyTick() }
         }
         tick.tolerance = 0.5
         NSWorkspace.shared.notificationCenter.addObserver(forName: NSWorkspace.didWakeNotification, object: nil, queue: .main) { _ in
@@ -796,12 +802,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
     func loadWhenReady() {
         var req = URLRequest(url: stateURL)
         req.timeoutInterval = 1
-        URLSession.shared.dataTask(with: req) { _, response, _ in
+        URLSession.shared.dataTask(with: req) { data, response, _ in
             let ok = (response as? HTTPURLResponse)?.statusCode == 200
+            let said = Self.serverPid(data)
             Task { @MainActor in
                 if ok {
                     self.pageSendsStatus = false // the new page says so again
                     self.dictation.cancel() // the card that was listening goes with the old page
+                    // The page may get this start's key only if this app's own server sent it.
+                    let own = self.keeper.process?.processIdentifier
+                    self.pageFrom = own != nil && said == own ? own! : 0
+                    self.keyGiven = 0
                     self.web.load(URLRequest(url: stripURL))
                 } else {
                     DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) { self.loadWhenReady() }
@@ -810,9 +821,39 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate, NSTo
         }.resume()
     }
 
+    // MARK: the window's key
+
+    // The page gets the key of the server's current start (src/keys.ts) only when that server
+    // is the process this app started, both when the page was loaded and now (/api/state names
+    // its pid): so a program that held the port in between, and the page it served, never get
+    // one. When the app's server starts again, with a new key, the page is loaded again from it.
+    var pageFrom: pid_t = 0 // the app's own server that sent the page now loaded, or 0
+    var keyGiven: pid_t = 0 // the server whose key the page has
+
+    nonisolated static func serverPid(_ data: Data?) -> pid_t? {
+        let json = data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] }
+        return ((json?["server"] as? [String: Any])?["pid"] as? NSNumber).map { pid_t($0.int32Value) }
+    }
+
+    func keyTick() {
+        guard pageLoaded, let own = keeper.process?.processIdentifier, keyGiven != own else { return }
+        if pageFrom != own { loadWhenReady(); return } // a page from before this start: load it from this one
+        var req = URLRequest(url: stateURL)
+        req.timeoutInterval = 1
+        URLSession.shared.dataTask(with: req) { data, _, _ in
+            let said = Self.serverPid(data)
+            Task { @MainActor in
+                guard said == own, self.keeper.process?.processIdentifier == own, self.pageFrom == own, self.keyGiven != own else { return }
+                self.keyGiven = own
+                self.web.evaluateJavaScript("window.csm?.setKey?.('\(PageKey.store.value)')", completionHandler: nil)
+            }
+        }.resume()
+    }
+
     nonisolated func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         Task { @MainActor in
             self.pageLoaded = true
+            self.keyTick() // this start's key, if the app's own server sent this page
             self.syncPageChrome()
             self.tellPageLanguage()
             if let r = self.availableUpdate { self.noteUpdate(r) } // a reloaded page shows it again
@@ -1968,4 +2009,27 @@ MainActor.assumeIsolated {
     app.delegate = delegate
     app.setActivationPolicy(.regular) // a Dock icon and Cmd-Tab, like any app
     app.run()
+}
+
+// The window's key (src/keys.ts): a new one at each start of the server, kept only in this
+// app's memory and given to its page (keyTick); the server gets only its SHA-256, in its
+// environment, which another process can read, so the key itself is never on disk or in any
+// process's environment.
+final class PageKeys: @unchecked Sendable {
+    private let lock = NSLock()
+    private var key = ""
+    var value: String { lock.withLock { key } }
+    // A new key; returns its SHA-256 for the server.
+    func renew() -> String {
+        var bytes = [UInt8](repeating: 0, count: 32)
+        if SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) != errSecSuccess {
+            bytes = (0..<32).map { _ in UInt8.random(in: 0...255) }
+        }
+        let fresh = bytes.map { String(format: "%02x", $0) }.joined()
+        lock.withLock { key = fresh }
+        return SHA256.hash(data: Data(fresh.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+enum PageKey {
+    static let store = PageKeys()
 }

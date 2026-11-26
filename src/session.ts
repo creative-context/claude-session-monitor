@@ -2,12 +2,19 @@
 
 import { existsSync, statSync } from "node:fs";
 import { nextRun, parseCron } from "../cron.ts";
-import { type Status, type Step, type Ev, type Session, sessions, bump } from "./state.ts";
+import { type Status, type Step, type Ev, type Session, sessions, bump, appAsk } from "./state.ts";
 import { readRange } from "./log.ts";
 import { hasAppFile, readAppFileSoon, readDesktopSoon } from "./desktop.ts";
 import { timeOf } from "./tasks.ts";
 import { answersOf, clearReply, forgetAnswer } from "./answers.ts";
 import { noteStatus } from "./worked.ts";
+
+// Taking over the screen, a new session offered to you, a setting to change (appAsk in
+// state.ts): the Claude app asks in its own dialog or card, not as a Claude Code permission,
+// so no permission event comes, and the tool waits until you answer. One that needs nothing
+// from you (an access already granted) answers at once, so it counts as waiting only past
+// APP_ASK_MS (checkAppAsks).
+export const APP_ASK_MS = 1500;
 
 // A repeating reminder stops after 7 days, as Claude Code does.
 const REMINDER_DAYS_MS = 7 * 24 * 60 * 60 * 1000;
@@ -60,7 +67,8 @@ export function applyPlan(plan: Step[] | undefined, x: any): Step[] | undefined 
   if (!x) return plan;
   if (Array.isArray(x.items)) {
     // Hook lines use {c, s}; the transcript keeps the original {content, status}.
-    return x.items.map((i: any) => ({ c: String(i.c ?? i.content ?? "").slice(0, 90), s: i.s ?? i.status }));
+    return x.items.filter((i: any) => i && typeof i === "object").slice(0, 20)
+      .map((i: any) => ({ c: String(i.c ?? i.content ?? "").slice(0, 90), s: typeof (i.s ?? i.status) === "string" ? i.s ?? i.status : "pending" }));
   }
   if (!plan) return plan;
   const p = plan.map((st) => ({ ...st }));
@@ -249,6 +257,7 @@ export function apply(e: Ev) {
       s.recap = s.ask = s.note = s.tool = s.detail = undefined;
       forgetAnswer(s); // your answer arrived, or you typed something else
       s.inFlight = 0;
+      s.askSoon = undefined;
       break;
 
     case "PreToolUse": {
@@ -275,6 +284,8 @@ export function apply(e: Ev) {
         setStatus(s, "working", e.t);
         s.tool = e.tool;
         s.detail = e.d;
+        const words = appAsk(e.tool, e.x);
+        s.askSoon = words ? { tool: e.tool!, text: words, at: e.t } : undefined;
       }
       break;
     }
@@ -285,6 +296,7 @@ export function apply(e: Ev) {
       if (fromSubagent) break;
       if (e.tool?.startsWith("mcp__ccd_turn__")) break;
       s.inFlight = Math.max(0, s.inFlight - 1);
+      if (s.askSoon?.tool === e.tool) s.askSoon = undefined; // answered, or it gave up
       // Lesson from Vibe Notch (#98): a PostToolUse that arrives after Stop
       // (a backgrounded Bash, for example) must not flip a finished session
       // back to "working".
@@ -312,6 +324,7 @@ export function apply(e: Ev) {
       setStatus(s, "done", e.t);
       s.since = e.t;
       s.inFlight = 0;
+      s.askSoon = undefined;
       s.tool = s.detail = undefined;
       s.classified = false; // checkTurns() reads how it ended
       // And the app's summary of the turn, for a desktop session; not for old lines read at startup.
@@ -328,4 +341,19 @@ export function apply(e: Ev) {
       break;
   }
   bump(s);
+}
+
+// Something asked in the Claude app's own dialog, still unanswered past APP_ASK_MS, needs you,
+// from when it asked. The tool's own result (PostToolUse) ends the wait, as for a question.
+export function checkAppAsks(now = Date.now()) {
+  for (const s of sessions.values()) {
+    const a = s.askSoon;
+    if (!a) continue;
+    if (s.status !== "working" || s.inFlight === 0) { s.askSoon = undefined; continue; }
+    if (now - a.at < APP_ASK_MS) continue;
+    s.askSoon = undefined;
+    setWaiting(s, "app", a.text, a.at);
+    s.tool = s.detail = undefined;
+    bump(s);
+  }
 }

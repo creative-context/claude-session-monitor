@@ -11,7 +11,8 @@ import { type FSWatcher, mkdirSync, statSync, watch } from "node:fs";
 import { join } from "node:path";
 import { DIR, LOG, PORT } from "./src/config.ts";
 import { bumpView, onBump, sessions, version } from "./src/state.ts";
-import { hydrate } from "./src/session.ts";
+import { hydrate, checkAppAsks } from "./src/session.ts";
+import { makePluginKey } from "./src/keys.ts";
 import { pump, replay, savePosition } from "./src/log.ts";
 import { checkProcesses, checkQuietTurns, checkRelayed, checkTurns, relinkRelays } from "./src/turns.ts";
 import { backfillWorked, db, forgetOld, history, loadRecent, openDatabase, persist, setPin } from "./src/db.ts";
@@ -44,8 +45,9 @@ function routes(req: Request, url: URL): Response | Promise<Response> | undefine
   if (url.pathname === "/api/history") {
     persist(); // so this week's latest changes are in it
     const q = (url.searchParams.get("q") ?? "").trim().slice(0, 100);
-    const limit = Math.min(200, Math.max(1, Number(url.searchParams.get("limit")) || 60));
-    const offset = Math.max(0, Number(url.searchParams.get("offset")) || 0);
+    const whole = (v: string | null, or: number) => { const n = Math.floor(Number(v)); return Number.isFinite(n) ? n : or; };
+    const limit = Math.min(200, Math.max(1, whole(url.searchParams.get("limit"), 60) || 60));
+    const offset = Math.min(1_000_000, Math.max(0, whole(url.searchParams.get("offset"), 0)));
     return Response.json(history(q, limit, offset, url.searchParams.get("pinned") === "1", url.searchParams.get("active") === "1"));
   }
 
@@ -204,6 +206,7 @@ export function start() {
     name: "Claude Session Monitor",
     port: PORT,
     publicDir: PUBLIC,
+    noFrames: true, // no page may frame this one and lay it under its own buttons (an Allow is one click)
     parentEnv: "CSM_PARENT_PID",
     serverVersion: SERVER.version,
     state: () => JSON.stringify(snapshot()),
@@ -214,6 +217,7 @@ export function start() {
     stop: () => { persist(true); savePosition(); db.close(); },
     start: () => {
       mkdirSync(DIR, { recursive: true, mode: 0o700 });
+      safe("pluginKey", makePluginKey)(); // the folder only for you, and this start's plugin key (src/keys.ts)
       openDatabase();
       safe("loadRecent", loadRecent)(); // the last week, as it was when the server stopped
       safe("replay", replay)(); // then whatever the hooks wrote since
@@ -252,6 +256,7 @@ export function start() {
     // could miss, so the server wakes about once in 3 s when nothing happens.
     ticks: [
       [1, "checkQuietTurns", checkQuietTurns],
+      [1, "checkAppAsks", () => checkAppAsks()], // what the Claude app asks in its own dialog or card
       [1, "checkRelayed", checkRelayed],
       [1, "scanAllAgents", scanAllAgents],
       [1, "scanAdvisors", scanAdvisors], // turning the advisor on or off has no hook event

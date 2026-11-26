@@ -5,7 +5,7 @@
 import { closeSync, copyFileSync, existsSync, openSync, readFileSync, readSync, renameSync, statSync, truncateSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DIR, LOG, MAX_LOG_BYTES, REPLAY_BYTES } from "./config.ts";
-import { sessions } from "./state.ts";
+import { cleanEvent, sessions } from "./state.ts";
 import { hydrate, apply } from "./session.ts";
 
 const OLD_LOG = join(DIR, "events.1.jsonl");
@@ -35,7 +35,8 @@ export function consume(text: string) {
   for (const line of lines) {
     if (!line) continue;
     try {
-      apply(JSON.parse(line));
+      const e = cleanEvent(JSON.parse(line));
+      if (e) apply(e);
     } catch {
       // A broken line never stops the rest.
     }

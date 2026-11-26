@@ -14,6 +14,9 @@
 // its chip after the model's tags, each tag's letters moved by the ink table and up by the
 // screen pixels the height table says for the scale (1×, 2×, and 1× zoomed 1.25), and the
 // order the tags give way in as a card narrows, in a wide, short 1568 × 324 window at 1× and 2×.
+// The app's page key (window.__csmKey, put in every page the way the app does): a button's answer and
+// Allow or Deny send it; a page without it, in a plain browser, only looks: its answers open
+// the session and no permission shows Allow or Deny.
 // In each window size the page has a layout for,
 // in a browser and inside the app (?embed). Opening a session is caught, never sent.
 // Screenshots of each state go in the folder given.
@@ -24,6 +27,7 @@
 import { mkdirSync, mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { DEMO_PAGE_KEY, demoKeyHash, pluginFetch } from "./keys.ts";
 
 const PW = join(import.meta.dir, "..", "..", "mac-app-design", "node_modules", "playwright", "index.mjs");
 const { webkit } = await import(PW).catch(() => {
@@ -42,9 +46,21 @@ const PORT = 4751;
 const demo = Bun.spawn(["bun", join(import.meta.dir, "demo.ts"), String(PORT), "--edge"], {
   // A permission decided while no mod holds its ask counts as not sent after 1.5 s, and the
   // demo's sessions run the tool 3 s after a click, so Allowed and Denied stay long enough to see.
-  stdout: "ignore", stderr: "ignore", env: { ...process.env, CSM_ANSWER_GIVE_UP_MS: "1500", CSM_DEMO_TURN_MS: "1500", CSM_PERMIT_GIVE_UP_MS: "1500", CSM_DEMO_PERMIT_MS: "3000" },
+  // The server checks the page key by its hash, the way the app gives it.
+  stdout: "pipe", stderr: "ignore", env: { ...process.env, CSM_ANSWER_GIVE_UP_MS: "1500", CSM_DEMO_TURN_MS: "1500", CSM_PERMIT_GIVE_UP_MS: "1500", CSM_DEMO_PERMIT_MS: "3000", CSM_PAGE_KEY_SHA256: demoKeyHash(DEMO_PAGE_KEY) },
 });
+// The demo says where its folder is (its plugin.key is there), and its output is read to the end.
+let demoDir = "";
+void (async () => {
+  let seen = "";
+  for await (const chunk of demo.stdout as ReadableStream<Uint8Array>) {
+    if (demoDir) continue;
+    seen += new TextDecoder().decode(chunk);
+    demoDir = seen.match(/Demo data in (\S+?)\. Open /)?.[1] ?? "";
+  }
+})().catch(() => {});
 const base = `http://127.0.0.1:${PORT}`;
+for (let i = 0; i < 80 && !demoDir; i++) await Bun.sleep(100);
 for (let i = 0; i < 80; i++) { try { if ((await fetch(base + "/api/state")).ok) break; } catch {} await Bun.sleep(100); }
 
 const SIZES = [
@@ -169,6 +185,14 @@ const footIs = async (page: any, title: string, sel: string) => {
 };
 
 const browser = await webkit.launch();
+// Every page has the key the app's page has: a read-only window.__csmKey, there from the start.
+// rawNewPage is a page without it, as in a plain browser.
+const rawNewPage = browser.newPage.bind(browser);
+browser.newPage = async (o?: any) => {
+  const page = await rawNewPage(o);
+  await page.addInitScript((k: string) => Object.defineProperty(window, "__csmKey", { value: k, writable: false }), DEMO_PAGE_KEY);
+  return page;
+};
 try {
   for (const size of SIZES) for (const mode of ["", "?embed"]) {
     const tag = `${size.name}${mode ? " in the app" : ""}`;
@@ -232,7 +256,7 @@ try {
     // window keeps only the first counts.
     const count = page.locator("#counts [data-pop]:visible").last();
     if (await count.isVisible()) {
-      await count.hover();
+      await count.click();
       await page.waitForSelector("#pop.open");
       await settle(page);
       let p = await pop(page);
@@ -246,6 +270,7 @@ try {
       const color = await page.evaluate(() => getComputedStyle(document.querySelector("#pop > .scroll-fade.down")!).backgroundImage);
       ok(color.includes("gradient"), `${tag}, popover: its fade is drawn`);
       await shot("popover");
+      await page.keyboard.press("Escape");
     }
 
     // A question's answers, on the cards in Last 7 Days.
@@ -348,8 +373,8 @@ try {
       await c.locator(allow ? ".ans.permit .pri" : ".ans.permit .sec").click();
       const sent = await req;
       const body = sent.postDataJSON();
-      ok(body.id === p.id && body.allow === allow && Object.keys(body).length === 2 && sent.headers()["x-csm"] === "1",
-        `permit: ${tag}: ${allow ? "Allow" : "Deny"} POSTs {"id": "${p.id}", "allow": ${allow}} with x-csm`);
+      ok(body.id === p.id && body.allow === allow && Object.keys(body).length === 2 && sent.headers()["x-csm"] === "1" && sent.headers()["x-csm-key"] === DEMO_PAGE_KEY,
+        `permit: ${tag}: ${allow ? "Allow" : "Deny"} POSTs {"id": "${p.id}", "allow": ${allow}} with x-csm and the page key`);
       await footIs(page, t, ".sentline");
       const m = await measure(c), a = await askOf(c);
       const word = allow ? "Allowed" : "Denied";
@@ -820,6 +845,126 @@ try {
       await page.close();
     }
 
+    // The week at its reset: the old week drains into the new one as ONE level on one clock
+    // (--ease-inertial, about 1.4 s for 74 points), in the tile and in the compact view's strip.
+    // Every frame: at most one day part full, none filled above it, the figure going down with
+    // the level, the column in place. A reading of the new week mid-roll only moves where it
+    // lands. Reduce Motion: no travel. A stand-in for the stream stays connected (a served one ends,
+    // and the page's Offline banner would move the column) and hands the page the week before, then after.
+    {
+      const demo = await (await fetch(`${base}/api/state`)).json();
+      const T = Date.now(), NEW = T - 60_000 + 7 * 864e5; // the new week began a minute ago
+      const state = (pct: number, resets: number, rolled = false) => ({ ...demo, now: Date.now(), usage: { ...demo.usage, week: { pct, resets, samples: [], ...(rolled ? { rolled: true } : {}) } } });
+      const run = async (tag: string, viewport: any, o: { still?: boolean; reading?: boolean } = {}) => {
+        const page = await browser.newPage({ viewport, deviceScaleFactor: 2, reducedMotion: o.still ? "reduce" : "no-preference" });
+        await catchOpens(page);
+        const send = (s: object) => page.evaluate((d: string) => (window as any).__es.onmessage({ data: d }), JSON.stringify(s));
+        // Every frame: which of the two shows, each day's share filled, the figure, the days' box.
+        await page.addInitScript(() => {
+          (window as any).EventSource = function () { const e = { close() {}, addEventListener() {} }; (window as any).__es = e; return e; };
+          const f: any[] = ((window as any).__f = []);
+          const tick = (t: number) => {
+            const el = [document.querySelector("#week .meter"), document.querySelector("#week .wstrip")].find((x: any) => x && !x.hidden && x.offsetParent !== null) as HTMLElement | undefined;
+            if (!el) f.push({ t, none: true });
+            else {
+              const tall = el.classList.contains("meter");
+              const len = (x: Element | null) => x ? (tall ? x.getBoundingClientRect().height : x.getBoundingClientRect().width) : 0;
+              const fills = [...el.querySelectorAll(tall ? ".m-seg" : ".ws-seg")].map((seg) => Math.round(((len(seg.querySelector("b")) + len(seg.querySelector("i"))) / len(seg)) * 1000) / 1000);
+              const days = el.querySelector(tall ? ".m-week" : ".ws-days")!.getBoundingClientRect();
+              f.push({ t, tall, rolling: el.classList.contains("rolling"), line: !!el.querySelector(".week-roll-now"), fig: Number(el.querySelector(tall ? ".m-pct" : ".ws-fig")!.textContent!.replace(/\D/g, "")), fills, box: [days.left, days.top, days.width, days.height].map(Math.round).join() });
+            }
+            requestAnimationFrame(tick);
+          };
+          requestAnimationFrame(tick);
+        });
+        await page.goto(base + "/");
+        await page.waitForFunction(() => (window as any).__es?.onmessage);
+        await page.evaluate(() => (window as any).__es.onopen?.());
+        await send(state(74, T + 30 * 60_000));
+        const target = viewport.width < 640 ? "#week .wstrip" : "#week .meter";
+        await page.waitForSelector(target);
+        await page.waitForTimeout(1600); // the first fill in, done
+        await send(state(0, NEW, true));
+        if (o.reading) { await page.waitForTimeout(300); await send(state(1, NEW, true)); }
+        if (o.still) await page.waitForFunction(() => (window as any).__f.some((x: any) => x.fig === 0), null, { timeout: 8000 });
+        else {
+          await page.waitForFunction(() => (window as any).__f.some((x: any) => x.rolling), null, { timeout: 8000 });
+          await page.waitForTimeout(450);
+          await page.locator(target).screenshot({ path: join(OUT, `${tag.replace(/\W+/g, "-")}-mid.png`) });
+          await page.waitForFunction(() => { const f = (window as any).__f, i = f.findIndex((x: any) => x.rolling); return i >= 0 && f.slice(i).some((x: any) => x.rolling === false); }, null, { timeout: 8000 });
+        }
+        await page.waitForTimeout(800);
+        await page.locator(target).screenshot({ path: join(OUT, `${tag.replace(/\W+/g, "-")}-landed.png`) });
+        const f = await page.evaluate(() => (window as any).__f);
+        const first = f.findIndex((x: any) => x.rolling), lastRoll = f.findLastIndex((x: any) => x.rolling);
+        const before = f.filter((x: any) => !x.none && x.fig === 74 && !x.rolling).at(-1);
+        const end = f.at(-1);
+        const after = await page.evaluate((sel: string) => { const el = document.querySelector(sel)!; return { now: !!el.querySelector(".m-now, .ws-now"), words: el.querySelector(".m-reset, .ws-say")?.textContent ?? "" }; }, target);
+        const landsAt = o.reading ? 1 : 0;
+        if (o.still) {
+          ok(first === -1 && end.fig === 0 && !!before && end.box.split(",").slice(0, 2).join() === before.box.split(",").slice(0, 2).join() && f.slice(f.findIndex((x: any) => !x.none)).every((x: any) => !x.none) && after.now && after.words.includes("Resets"),
+            `${tag}: the new week is drawn at once, nothing travels, the column stays put (${JSON.stringify({ first, fig: end.fig, box: [before?.box, end.box], after })})`);
+          await page.close();
+          return;
+        }
+        const r = f.slice(first, lastRoll + 1);
+        const T0 = r[0].t, ms = r.at(-1).t - T0;
+        const dropAt = (q: number) => { const x = r.find((y: any) => y.t - T0 >= q * ms); return x ? (74 - x.fig) / (74 - landsAt) : null; };
+        const oneLevel = r.every((x: any) => x.fills.filter((v: number) => v > 0.03 && v < 0.97).length <= 1 && x.fills.every((v: number, d: number) => d === 0 || v <= x.fills[d - 1] + 0.03));
+        const tracks = r.every((x: any) => Math.abs((x.fills.reduce((a: number, b: number) => a + b, 0) / 7) * 100 - x.fig) <= 3);
+        const later = f.slice(first);
+        const downOnly = later.filter((x: any) => !x.none).every((x: any, i: number, a: any[]) => i === 0 || x.fig <= a[i - 1].fig);
+        ok(r.length > 20 && r.every((x: any) => x.rolling) && oneLevel && tracks,
+          `${tag}: the week drains as one level: each frame at most one day part full and none filled above it, the figure reading the level (${r.length} frames)`);
+        // At landing the new words may take another line (in the tile) or another width (in the
+        // strip), and the days give or take that room; they keep their corner.
+        const near = (a: string, b: string) => a.split(",").slice(0, 2).every((v, i) => Math.abs(Number(v) - Number(b.split(",")[i])) <= 1);
+        ok(downOnly && later.every((x: any) => !x.none) && r.every((x: any) => x.box === before?.box) && near(end.box, before?.box ?? ""),
+          `${tag}: the figure only goes down, the column never goes away and its days don't move (${JSON.stringify({ box: before?.box, boxes: [...new Set(later.map((x: any) => x.box))] })})`);
+        ok(ms > 1150 && ms < 1650 && (dropAt(0.2) ?? 1) < 0.12 && Math.abs((dropAt(0.5) ?? 0) - 0.5) < 0.15,
+          `${tag}: on the inertial curve, about 1.4 s, slow to start, half the drop at half the time (${Math.round(ms)} ms; ${JSON.stringify([dropAt(0.2), dropAt(0.5), dropAt(0.8)].map((v) => v == null ? v : Math.round(v * 100)))}% done at a fifth, a half, four fifths)`);
+        ok(!end.rolling && !end.line && end.fig === landsAt && end.fills.every((v: number) => v <= (landsAt ? 0.1 : 0.01)) && after.now && after.words.includes("Resets"),
+          `${tag}: it lands on the new week: ${landsAt}%, the blue line back in its day, the new words in (${JSON.stringify({ fig: end.fig, fills: end.fills, after })})`);
+        await page.close();
+      };
+      await run("reset, tile", { width: 1280, height: 900 });
+      await run("reset, tile, a reading mid-roll", { width: 1280, height: 900 }, { reading: true });
+      await run("reset, strip", { width: 560, height: 900 });
+      await run("reset, tile, Reduce Motion", { width: 1280, height: 900 }, { still: true });
+    }
+
+    // The week's usage: a click opens its card and leaves the focus where it was, in the tile, in
+    // the compact strip and in the header's small version (another view). Before, a click focused
+    // it, the focus stayed after the pointer left, and a later key (Escape) lit its ring.
+    {
+      for (const [tag, viewport, sel, other] of [
+        ["usage, tile", { width: 1280, height: 900 }, "#week .meter", false],
+        ["usage, strip", { width: 560, height: 900 }, "#week .wstrip", false],
+        ["usage, header", { width: 1280, height: 900 }, "#usage", true],
+      ] as const) {
+        const page = await browser.newPage({ viewport });
+        await catchOpens(page);
+        await page.goto(base + "/");
+        await page.waitForSelector("#week .card");
+        if (other) { await page.evaluate(() => (document.querySelector('[data-view="history"]') as HTMLElement).click()); await page.waitForSelector("#usage:not([hidden])"); }
+        await page.locator(sel).click();
+        await page.waitForTimeout(150);
+        const clicked = await page.evaluate((sel: string) => ({ focused: document.activeElement === document.querySelector(sel), open: document.getElementById("ucard")!.classList.contains("open") }), sel);
+        await page.mouse.move(4, viewport.height - 4);
+        await page.waitForTimeout(250);
+        await page.keyboard.press("Escape");
+        await page.waitForTimeout(100);
+        const after = await page.evaluate((sel: string) => ({ ring: document.querySelector(sel)!.matches(":focus-visible"), open: document.getElementById("ucard")!.classList.contains("open") }), sel);
+        ok(!clicked.focused && clicked.open && !after.ring && !after.open,
+          `${tag}: a click opens the card at once without taking the focus; off it and a key later, no ring (${JSON.stringify({ clicked, after })})`);
+        await page.locator(sel).focus();
+        await page.waitForTimeout(100);
+        const keyed = await page.evaluate((sel: string) => ({ focused: document.activeElement === document.querySelector(sel), open: document.getElementById("ucard")!.classList.contains("open") }), sel);
+        ok(keyed.focused && keyed.open, `${tag}: reached from the keyboard, it still takes the focus and opens the card (${JSON.stringify(keyed)})`);
+        await page.close();
+      }
+    }
+
     // In the app: no toggle in the page; the toolbar's is told, and drives it.
     {
       const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
@@ -915,7 +1060,7 @@ try {
       const nsid = await sidOf(nc);
       if (size.name === "wide") {
         const nh = (await measure(nc)).h;
-        await fetch(`${base}/api/permission/${nsid}`, { method: "POST", headers: { "x-csm": "1" }, body: JSON.stringify({ id: "page-1", tool: "Bash", what: "git tag -a v3.1.0-rc.1 -m 'Release candidate 1'" }), signal: AbortSignal.timeout(300) }).catch(() => {});
+        await pluginFetch(`${base}/api/permission/${nsid}`, demoDir, { method: "POST", body: JSON.stringify({ id: "page-1", tool: "Bash", what: "git tag -a v3.1.0-rc.1 -m 'Release candidate 1'" }), signal: AbortSignal.timeout(300) }).catch(() => {});
         await footIs(page, NOPERMIT, ".ans.permit .pri");
         await nc.locator(".ans.permit .pri").click();
         await footIs(page, NOPERMIT, ".sentline:not(.failed)");
@@ -946,7 +1091,7 @@ try {
     const nomod = card(page, NOMOD);
     const nsid = await sidOf(nomod);
     if (size.name === "wide") {
-      await fetch(`${base}/api/answer/${nsid}/next`, { headers: { "x-csm": "1" }, signal: AbortSignal.timeout(300) }).catch(() => {});
+      await pluginFetch(`${base}/api/answer/${nsid}/next`, demoDir, { signal: AbortSignal.timeout(300) }).catch(() => {});
       await page.waitForFunction((s: string) => !document.querySelector(`#week .card[data-sid="${s}"] .a-b.opens`), nsid, { timeout: 10_000 });
       const nh = (await measure(nomod)).h;
       await nomod.locator(".ans .pri").click();
@@ -1047,12 +1192,13 @@ try {
     await page.close();
   }
 
-  // A window so short the count popover's list scrolls: its fades sit on its edges.
+  // A window so short the count popover's list scrolls (it takes the height below its count):
+  // its fades sit on its edges.
   {
-    const page = await browser.newPage({ viewport: { width: 1280, height: 380 }, deviceScaleFactor: 2 });
+    const page = await browser.newPage({ viewport: { width: 1280, height: 260 }, deviceScaleFactor: 2 });
     await page.goto(base + "/?embed");
     await page.waitForSelector("#week .card");
-    await page.locator("#counts [data-pop]").last().hover();
+    await page.locator("#counts [data-pop]").first().click();
     await page.waitForSelector("#pop.open");
     await settle(page);
     let p = await pop(page);
@@ -1067,6 +1213,101 @@ try {
     await settle(page);
     p = await pop(page);
     ok(p.up && !p.down, "a short window, popover at the end: a fade above, none below");
+    await page.close();
+  }
+
+  // The header's counts are menus, as in a menu bar: a click opens one and closes it, it stays
+  // open while the pointer goes elsewhere, pointing at the next count opens that one while one
+  // is open, a click outside or Escape closes it, and "Show these cards" at its foot goes to those
+  // cards. It takes the height the window has below its count, grows out of its count on a click
+  // (at once from the keyboard), doesn't repeat its count, and its rows carry the cards' marks, on
+  // one line. A wide, short 1568 × 324 window, then a narrow one where the counts are bare numbers.
+  {
+    const page = await browser.newPage({ viewport: { width: 1568, height: 324 } });
+    await page.goto(base + "/?embed");
+    await page.waitForSelector("#counts [data-pop]");
+    const menu = () => page.evaluate(() => {
+      const p = document.getElementById("pop")!, r = p.getBoundingClientRect(), a = document.querySelector("#counts [aria-expanded=true]") as HTMLElement | null;
+      return { open: p.classList.contains("open"), kind: a?.dataset.pop ?? null, bottom: r.bottom, room: innerHeight - 8, fits: p.scrollHeight <= p.clientHeight + 1, found: document.querySelectorAll(".found").length,
+        focus: (document.activeElement as HTMLElement)?.matches?.(".prow[data-all]") ? "all" : (document.activeElement as HTMLElement)?.matches?.(".prow") ? "row" : (document.activeElement as HTMLElement)?.dataset?.pop ?? "" };
+    });
+    const at = async (k: string) => { const b = (await page.locator(`#counts [data-pop="${k}"]`).boundingBox())!; return [b.x + b.width - 6, b.y + b.height / 2] as const; };
+    const [nx, ny] = await at("needs"), [wx, wy] = await at("week");
+    await page.mouse.move(nx, ny);
+    await page.waitForTimeout(400);
+    ok(!(await menu()).open, "counts: pointing at a count opens nothing");
+    await page.mouse.click(nx, ny);
+    await page.waitForTimeout(30);
+    const grow = await page.evaluate(() => {
+      const p = document.getElementById("pop")!, a = document.querySelector('#counts [data-pop="needs"]')!.getBoundingClientRect();
+      return { moving: getComputedStyle(p).transform !== "none", enter: p.classList.contains("enter"), ox: parseFloat(p.style.left) + parseFloat(getComputedStyle(p).transformOrigin), from: a.left, to: a.right };
+    });
+    ok(grow.moving && grow.enter, "counts: a click grows the menu and brings its rows in");
+    ok(grow.ox >= grow.from && grow.ox <= grow.to, `counts: it grows out of its count (${Math.round(grow.ox)} in ${Math.round(grow.from)}–${Math.round(grow.to)})`);
+    await page.waitForTimeout(200);
+    let m = await menu();
+    ok(m.open && m.kind === "needs", "counts: a click opens its menu");
+    const look = await page.evaluate(() => {
+      const p = document.getElementById("pop")!, head = p.querySelector(".pop-head") as HTMLElement | null, c = document.querySelector('#counts [data-pop="needs"]')!;
+      const marks = [...p.querySelectorAll(".prow[data-sid] .pi")].map((pi) => pi.firstElementChild as Element);
+      const xs = marks.map((k) => { const q = k.getBoundingClientRect(); return q.left + q.width / 2; });
+      return { head: !!head && getComputedStyle(head).display !== "none", tooltip: c.hasAttribute("title"), dots: marks.filter((k) => k.matches(".pdot")).length, spread: Math.max(...xs) - Math.min(...xs),
+        foot: !!p.querySelector(".pop-foot .prow[data-all]"), gray: [...p.querySelectorAll(".prow .ps")].every((e) => getComputedStyle(e).color === getComputedStyle(p.querySelector(".prow .ps")!).color) };
+    });
+    ok(!look.head && !look.tooltip, "counts: the menu doesn't repeat its count: no head, no tooltip");
+    ok(look.dots > 0, `counts: the rows that need you carry the card's beating dot (${look.dots})`);
+    ok(look.spread <= 0.5, `counts: every mark sits on one line (${look.spread.toFixed(2)} px apart)`);
+    ok(look.foot, "counts: Show these cards sits at the menu's foot");
+    ok(look.gray, "counts: every row's second line is the same gray, whatever its state");
+    ok(m.bottom <= m.room + 1, `counts: the menu stays inside the window (${Math.round(m.bottom)} ≤ ${m.room})`);
+    await page.screenshot({ path: join(OUT, "counts-menu.png") });
+    await page.mouse.move(700, 290, { steps: 6 });
+    await page.waitForTimeout(400);
+    ok((await menu()).open, "counts: the menu stays open when the pointer goes elsewhere");
+    const [kx, ky] = await at("working");
+    await page.mouse.move(kx, ky, { steps: 6 });
+    await page.waitForTimeout(150);
+    m = await menu();
+    const calm = await page.evaluate(() => [...document.querySelectorAll("#pop .prow[data-sid] .pi")].filter((pi) => pi.firstElementChild?.matches(".calm")).length);
+    ok(m.open && m.kind === "working", "counts: with a menu open, pointing at the next count opens that one");
+    ok(calm > 0, `counts: the working rows carry the card's three dots (${calm})`);
+    ok(!(await page.evaluate(() => document.getElementById("pop")!.classList.contains("enter"))), "counts: moving to the next count brings no rows in");
+    await page.mouse.move(wx, wy, { steps: 6 });
+    await page.waitForTimeout(150);
+    m = await menu();
+    ok(m.fits || Math.abs(m.bottom - m.room) <= 1, `counts: the 7 days menu takes the room below its count, to the window's edge (${Math.round(m.bottom)}, ${m.room})`);
+    await page.mouse.click(wx, wy);
+    await page.waitForTimeout(200);
+    ok(!(await menu()).open, "counts: a second click closes it");
+    await page.mouse.click(wx, wy);
+    await page.waitForTimeout(150);
+    await page.mouse.click(4, 4); // the window's corner: nothing there to open
+    await page.waitForTimeout(200);
+    ok(!(await menu()).open, "counts: a click outside closes it");
+    await page.mouse.click(nx, ny);
+    await page.waitForTimeout(150);
+    await page.locator("#pop .prow[data-all]").click();
+    await page.waitForTimeout(300);
+    m = await menu();
+    ok(!m.open && m.found > 1, `counts: "Show these cards" closes the menu and rings them (${m.found})`);
+    await page.locator('#counts [data-pop="needs"]').focus();
+    await page.keyboard.press("Enter");
+    await page.waitForTimeout(30);
+    m = await menu();
+    ok(m.open && m.focus === "row", "counts: Enter opens the menu on its first row");
+    ok(await page.evaluate(() => getComputedStyle(document.getElementById("pop")!).transform === "none"), "counts: from the keyboard it opens at once, with no motion");
+    await page.keyboard.press("ArrowDown");
+    ok((await menu()).focus === "row", "counts: the down arrow moves to the next row");
+    await page.keyboard.press("Escape");
+    await page.waitForTimeout(150);
+    m = await menu();
+    ok(!m.open && m.focus === "needs", "counts: Escape closes it and focus goes back to its count");
+    // A narrow window: the counts are bare numbers, so the menu's head says what it is.
+    await page.setViewportSize({ width: 560, height: 500 });
+    await page.waitForTimeout(300);
+    await page.locator('#counts [data-pop="needs"]').click();
+    await page.waitForTimeout(250);
+    ok(await page.evaluate(() => getComputedStyle(document.querySelector("#pop .pop-head")!).display !== "none"), "counts: where a count is a bare number, its menu's head says what it is");
     await page.close();
   }
 
@@ -1181,7 +1422,10 @@ try {
       const x = el.cloneNode(true) as HTMLElement;
       x.querySelector("[data-mic]")?.classList.remove("on");
       x.querySelector("[data-mic]")?.setAttribute("aria-expanded", "false");
-      return { html: x.innerHTML, top: el.querySelector(".top")!.getClientRects().length > 0 || getComputedStyle(el).display === "grid", inner: (el as any)._inner };
+      // The clock may tick in between ("10m ago" to "11m ago"), and Last 7 Days' layout motion
+      // marks the parts it moves while it runs: neither is the card changing.
+      const plain = (h: string) => String(h ?? "").replace(/(\d+[smhd]|just now)( ago)?(?=<)/g, "·").replace(/ data-layout-id="[^"]*"| style=""/g, "");
+      return { html: plain(x.innerHTML), top: el.querySelector(".top")!.getClientRects().length > 0 || getComputedStyle(el).display === "grid", inner: plain((el as any)._inner) };
     });
     // Where the composer is: inside the window, its parts inside it, a drawer flush with its card's
     // edge (below it, or above when there's no room), as wide as the card. Measured where it rests,
@@ -1214,10 +1458,14 @@ try {
     };
     const unchanged = async (before: any, what: string) => {
       const now = await cardNow();
-      ok(now.html === before.html && now.inner === before.inner && now.top, `${tag}: ${what}: the card under it is the same, its top row in sight`);
+      // On a failure, where the card's markup first differs, a little either side.
+      let i = 0;
+      while (i < now.html.length && now.html[i] === before.html[i]) i++;
+      const at = now.html === before.html ? "" : `; differs at ${i}: «${before.html.slice(Math.max(0, i - 60), i + 60)}» now «${now.html.slice(Math.max(0, i - 60), i + 60)}»`;
+      ok(now.html === before.html && now.inner === before.inner && now.top, `${tag}: ${what}: the card under it is the same, its top row in sight${at}${now.inner !== before.inner ? `; inner ${before.inner} now ${now.inner}` : ""}${now.top ? "" : "; top row out of sight"}`);
     };
     const closed = async (what: string) => {
-      // The close can lag the click (twice in a row in one run, cause not pinned down): give it a moment.
+      // The drawer slides back before it goes: give it a moment.
       await D.waitFor({ state: "detached", timeout: 2000 }).catch(() => {});
       const left = await D.count(), on = await mic.evaluate((el: HTMLElement) => el.classList.contains("on"));
       ok(!left && !on, `${tag}: ${what} closes it and the mic is off${left || on ? ` (still open: ${left}, phase ${await phase()}, mic on: ${on})` : ""}`);
@@ -1262,8 +1510,8 @@ try {
     // A click elsewhere doesn't lose the words.
     await page.mouse.click(4, 4);
     ok((await phase()) === "listening", `${tag}: a click outside leaves it open`);
-    // Only one popover: the counts' details don't open over it.
-    await page.locator("#counts [data-pop]").first().dispatchEvent("mouseover");
+    // Only one popover: a count's menu doesn't open over it.
+    await page.locator("#counts [data-pop]").first().dispatchEvent("click");
     await page.waitForTimeout(450);
     ok(!(await page.locator("#pop.open").count()), `${tag}: the counts' details stay shut while you dictate`);
     // It follows its card when the list scrolls.
@@ -1292,6 +1540,7 @@ try {
     const req1 = page.waitForRequest((r: any) => r.url().endsWith(`/api/answer/${sid}`) && r.method() === "POST");
     await app({ sid, state: "done", text: "  Yes, go ahead   and merge the test  ", lang: "es-MX" });
     const sent1 = await req1;
+    ok(sent1.headers()["x-csm"] === "1" && sent1.headers()["x-csm-key"] === DEMO_PAGE_KEY, `${tag}: dictated words go with x-csm and the page key`);
     const body1 = JSON.parse(sent1.postData() ?? "{}");
     ok(body1.text === "Yes, go ahead and merge the test" && typeof body1.since === "number", `${tag}: the final words go straight to the session, folded to one line (${body1.text})`);
     ok((await phase()) === "sending" && (await D.locator('[data-dict="send"]').innerText()) === "Sending…", `${tag}: from listening it goes straight to sending`);
@@ -1452,7 +1701,17 @@ try {
     ok(JSON.stringify(await said()) === JSON.stringify([{ cmd: "stop" }]) && (await phase()) === "stopping", `${tag}: Return while listening sends`);
     await app({ sid, state: "done", text: "Drop this one" });
     await D.locator(".d-say.note").waitFor({ timeout: 3000 });
+    // Scrolled to reach Cancel, a redraw keeps the composer on its side of the card, so Cancel
+    // stays under the pointer. It used to choose its side again from the scrolled list and jump
+    // to the card's other side mid-press, and the click was lost.
+    const sideOf = () => D.evaluate((d: HTMLElement) => d.classList.contains("above"));
+    const wasAbove = await sideOf();
+    await D.locator('[data-dict="cancel"]').scrollIntoViewIfNeeded();
     await replay();
+    await page.waitForTimeout(700); // past the placing that follows a redraw
+    const kept = await geo();
+    ok((await sideOf()) === wasAbove && !!kept?.side,
+      `${tag}: scrolled to reach Cancel, a redraw keeps the composer ${wasAbove ? "above" : "below"} its card, against it`);
     await D.locator('[data-dict="cancel"]').click();
     await closed("Cancel in review");
     await page.unroute(`**/api/answer/${sid}`);
@@ -1665,6 +1924,44 @@ try {
     await page.waitForSelector("#week .card");
     await page.waitForTimeout(1500);
     ok((await page.locator("[data-mic]").count()) === 0, "in a plain browser: no mic");
+    await page.close();
+  }
+
+  // A page without the app's key (a plain browser): it only looks. Its answer buttons open the
+  // session, no permission shows Allow or Deny, and clicking sends no answer or decision.
+  {
+    const page = await rawNewPage({ viewport: { width: 1280, height: 900 } });
+    const errors: string[] = [], posts: string[] = [];
+    page.on("pageerror", (e: any) => errors.push(String(e)));
+    page.on("console", (m: any) => { if (m.type() === "error") errors.push(m.text()); });
+    page.on("request", (r: any) => { if (r.method() === "POST" && /\/api\/(answer|permission)\//.test(r.url())) posts.push(r.url()); });
+    await catchOpens(page);
+    await page.goto(base + "/");
+    await page.waitForSelector("#week .card");
+    await page.waitForTimeout(2500); // long enough for the plugin sides to hold their asks
+    ok((await page.evaluate(() => (window as any).__csmKey)) === undefined, "no key: the page has no window.__csmKey");
+    const seen = await page.evaluate((t: string[]) => t.map((x) => {
+      const c = [...document.querySelectorAll("#week .card")].find((e) => e.querySelector(".title")?.textContent === x)!;
+      return { buttons: c.querySelectorAll(".ans .a-b[data-answer]").length, opens: c.querySelectorAll(".ans .a-b.opens").length, tips: [...c.querySelectorAll(".ans .a-b[data-answer]")].map((b) => b.getAttribute("title")), permit: c.querySelectorAll(".ans.permit").length };
+    }), [SEND, PERMIT, LONGCMD, NOPERMIT]);
+    ok(seen[0].buttons >= 1 && seen[0].opens === seen[0].buttons && seen[0].tips.every((t: string) => t === "Opens the session: answer there"),
+      `no key: a card whose mod is there still only opens the session: every answer carries the open mark and tip (${JSON.stringify(seen[0])})`);
+    const all = await page.evaluate(() => [document.querySelectorAll("#week .ans .a-b[data-answer]").length, document.querySelectorAll("#week .ans .a-b[data-answer]:not(.opens)").length]);
+    ok(all[0] >= 2 && all[1] === 0, `no key: and on every card, every answer button opens the session (${all[0]} buttons, ${all[1]} that don't)`);
+    ok(seen.slice(1).every((x: any) => x.permit === 0) && (await page.locator(".ans.permit").count()) === 0 && (await page.locator('[data-permit]').count()) === 0,
+      `no key: no card shows Allow or Deny, a permission is a plain wait (${seen.slice(1).map((x: any) => x.permit)})`);
+    ok((await page.locator("[data-mic]").count()) === 0, "no key: no mic");
+    const sid = await sidOf(card(page, SEND));
+    ok(await opensFor(page, sid, () => card(page, SEND).locator(".ans .pri").click()), "no key: a click on an answer opens the session");
+    await page.keyboard.press("Escape");
+    await card(page, SEND).focus().catch(() => {});
+    await page.keyboard.press("Meta+Enter");
+    await page.waitForTimeout(500);
+    ok(posts.length === 0, `no key: no answer or decision is sent (${posts.length})`);
+    await page.setViewportSize({ width: 1280, height: 560 });
+    await page.waitForTimeout(300);
+    await page.screenshot({ path: join(OUT, "no-key.png") });
+    ok(errors.length === 0, `no key: nothing errors (${errors.join(" | ").slice(0, 200)})`);
     await page.close();
   }
 

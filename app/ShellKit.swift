@@ -1,4 +1,4 @@
-// mac-app-kit 0.2.3 (ShellKit.swift). Vendored: don't edit here. Change it in the kit and vendor again.
+// mac-app-kit 0.3.1 (ShellKit.swift). Vendored: don't edit here. Change it in the kit and vendor again.
 // The native shell's shared parts for the family's Mac apps, compiled with each app's own
 // main.swift (build.sh passes both to swiftc):
 //   - ShellLog: one line in the server's log (server.log), which the app also writes to;
@@ -62,6 +62,15 @@ final class ServerKeeper {
         var bundleID: String? = nil // replace only a server inside an app with this bundle ID; nil: any app's
         var logStarts = false // a log line for each start
         var ownWords = "an app's" // in the log: "an app's server", "this app's server"
+        // More for the server's environment, the same at every start.
+        var extraEnv: [String: String] = [:]
+        // More for the server's environment, made anew at each start, such as the hash of a key
+        // only that start of the server knows (a key a page gave to a program that held the port
+        // in between is worthless to the next server).
+        var envAtStart: (() -> [String: String])? = nil
+        // A server of this version left from before (an app's own copy) is replaced too, not
+        // used: for an app whose server gets something new at each launch, such as that key.
+        var replaceSameVersion = false
     }
 
     let config: Config
@@ -122,7 +131,7 @@ final class ServerKeeper {
             let info = json?["server"] as? [String: Any]
             let version = info?["version"] as? String
             let given = (info?["pid"] as? NSNumber).map { pid_t($0.int32Value) }
-            if version == mine {
+            if version == mine && !self.config.replaceSameVersion {
                 Task { @MainActor in
                     self.launching = false
                     self.portTaken = 0
@@ -140,7 +149,7 @@ final class ServerKeeper {
                     }
                     return
                 }
-                ShellLog.write("stopping \(own) server of another version (\(what)) to start \(mine)")
+                ShellLog.write("stopping \(own) server \(version == mine ? "left from before" : "of another version") (\(what)) to start \(mine)")
                 let stopped = Self.stop(pid, port: port, bundleID: bundleID)
                 Task { @MainActor in
                     self.launching = false
@@ -177,6 +186,8 @@ final class ServerKeeper {
         env[config.versionEnv] = config.version
         env[config.parentEnv] = String(getpid())
         if let portEnv = config.portEnv { env[portEnv] = String(config.port) }
+        for (k, v) in config.extraEnv { env[k] = v }
+        if let fresh = config.envAtStart { for (k, v) in fresh() { env[k] = v } }
         p.environment = env
         let fd = ShellLog.open()
         if fd >= 0 {

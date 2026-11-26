@@ -9,7 +9,9 @@ import { Database } from "bun:sqlite";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describeCron, nextRun, parseCron, prevRun } from "../cron.ts";
+import { createHmac } from "node:crypto";
 import { playMod } from "./answer-mod.ts";
+import { DEMO_PAGE_KEY as TEST_PAGE_KEY, demoKeyHash, makeNonce, pageHeaders, pluginProofOf, proofOf, readPluginKey } from "./keys.ts";
 
 const PORT = 4749; // not the demo's 4748, so both can run at once
 const dir = mkdtempSync(join(tmpdir(), "csm-test-"));
@@ -72,6 +74,39 @@ ev(id(2), { ev: "SubagentStart", agent: "a2" });
 // 3. A question waits on you, and answering it resumes work
 ev(id(3), { ev: "UserPromptSubmit", prompt: "Pick one" });
 ev(id(3), { ev: "PreToolUse", tool: "AskUserQuestion", x: { q: "Which one do you prefer?" } });
+
+// 405. Taking over the screen: the computer-use tool asks in its own dialog in the Claude app,
+//      with no permission event, and waits; unanswered past a moment, it needs you.
+// 406. One already granted answers at once: it never asked you.
+ev(id(405), { ev: "UserPromptSubmit", prompt: "Check the window" });
+ev(id(405), { ev: "PreToolUse", tool: "mcp__computer-use__request_full_control" });
+ev(id(406), { ev: "UserPromptSubmit", prompt: "Open the app" });
+ev(id(406), { ev: "PreToolUse", tool: "mcp__computer-use__request_access" });
+ev(id(406), { ev: "PostToolUse", tool: "mcp__computer-use__request_access" });
+ev(id(406), { ev: "PreToolUse", tool: "mcp__computer-use__screenshot" });
+// 408. A new session offered to you (New session / Do it here) waits for your choice: it needs you.
+// 409. One it starts or proposes on its own doesn't wait on you, however long it takes.
+// 410. A setting it wants to change waits for your approval: it needs you.
+ev(id(408), { ev: "UserPromptSubmit", prompt: "Split this off" });
+ev(id(408), { ev: "PreToolUse", tool: "mcp__ccd_session__start_session", d: "Clean the old logs", x: { init: "offer" } });
+ev(id(409), { ev: "UserPromptSubmit", prompt: "Start the other one" });
+ev(id(409), { ev: "PreToolUse", tool: "mcp__ccd_session__start_session", d: "Clean the old logs", x: { init: "user_asked" } });
+ev(id(410), { ev: "UserPromptSubmit", prompt: "Keep the Mac awake" });
+ev(id(410), { ev: "PreToolUse", tool: "mcp__ccd_settings__set_setting" });
+
+// 411. A prompt with accents and capitals, for History's search.
+// 412. Fields of the wrong type from another writer: the event still counts, the field goes.
+// 413. A time hours ahead (a clock that ran ahead) is brought back to now.
+ev(id(411), { ev: "UserPromptSubmit", prompt: "Éxito del plan de Ñandú" });
+ev(id(412), { ev: "UserPromptSubmit", prompt: "Odd fields", cwd: { not: "a path" } as any });
+ev(id(412), { ev: "PreToolUse", tool: 42 as any, d: ["x"] as any, x: "not an object" as any });
+ev(id(413), { ev: "UserPromptSubmit", prompt: "From a clock ahead", t: Date.now() + 3 * 3600_000 });
+appendFileSync(log, JSON.stringify({ t: "soon", sid: id(414), ev: "UserPromptSubmit", prompt: "A time that isn't one" }) + "\n");
+// 415 and 416. A recap and question that arrive as an object and a list (another writer) are
+// left out at the door, so the database still saves 416, and 415 beside it.
+ev(id(415), { ev: "UserPromptSubmit", prompt: "Saved beside the odd one" });
+ev(id(416), { ev: "UserPromptSubmit", prompt: "The odd closing" });
+ev(id(416), { ev: "PreToolUse", tool: "mcp__ccd_turn__wrap_up", x: { recap: { a: 1 }, ask: ["q"], acts: "nope" } });
 
 // 4. A permission prompt waits until the next real activity (agents-observe)
 ev(id(4), { ev: "UserPromptSubmit", prompt: "Install it" });
@@ -354,6 +389,12 @@ for (const [n, other, answered, close] of [
     postTurnSummary: { status_category: "blocked", needs_action: "choose which to start with", summarizes_uuid: "u-last" },
   }));
 }
+
+// 417. A session only the Claude app knows (no event here), with an accented title.
+writeFileSync(join(appDir, `local_${id(417)}.json`), JSON.stringify({
+  sessionId: `local_${id(417)}`, cliSessionId: id(417), title: "Revisión del año 417", originCwd: "/tmp/demo",
+  createdAt: Date.now() - 3 * 86_400_000, lastActivityAt: Date.now() - 3 * 86_400_000 + 60_000,
+}));
 
 // 120. Like 89, but 121 asked, then got your answer and finished: 120 is answered, and stays
 // so after a restart, though the app's note on its turn still asks for the pick.
@@ -748,6 +789,8 @@ const start = (d = dir) => {
       // one handed over whose session still waits fails after 3 s.
       CSM_PERMIT_HOLD_MS: "1500", CSM_PERMIT_HEARD_MS: "3000", CSM_PERMIT_SHOW_MS: "3000", CSM_PERMIT_GIVE_UP_MS: "2000",
       CSM_APP_SESSIONS: join(d, "app"), CSM_PROJECTS: join(d, "no-projects"),
+      // What the app passes: the hash of the key it puts in its page. The plugin's key the server writes itself.
+      CSM_PAGE_KEY_SHA256: demoKeyHash(TEST_PAGE_KEY),
     },
     stdout: "pipe",
     stderr: "pipe",
@@ -885,11 +928,26 @@ try {
 
   // Answering from the card. The mod is there for 130 and 136 (the helper), and for 131 and 132
   // (one ask each by hand; 132's goes away at once).
-  const api = (path: string, init: RequestInit = {}, header = true) =>
-    fetch(`http://127.0.0.1:${PORT}/api/answer/${path}`, { ...init, headers: header ? { "x-csm": "1" } : {} });
-  const send = (n: number, i: number, header = true) => api(id(n), { method: "POST", body: JSON.stringify({ i }) }, header);
-  const mod = playMod({ port: PORT, log, sids: [id(130), id(136)] });
-  const sayMod = playMod({ port: PORT, log, sids: [id(160)] });
+  // Who calls: the window (the page key, for sending an answer and deciding), the plugin (its key
+  // and a nonce, for asking for an answer and holding a permission), or a stranger with only the header.
+  type Who = "auto" | "none" | "csm" | "page" | "wrong-page" | "plugin" | "wrong-plugin";
+  const pluginRoute = (kind: string, path: string) => kind === "answer" ? path.endsWith("/next") : !path.endsWith("/decide");
+  const call = async (kind: "answer" | "permission", path: string, init: RequestInit = {}, who: Who = "auto"): Promise<Response & { proven?: boolean }> => {
+    if (who === "auto") who = pluginRoute(kind, path) ? "plugin" : "page";
+    const nonce = makeNonce();
+    const key = who === "plugin" || who === "wrong-plugin" ? await readPluginKey(dir) : ""; // wrong-plugin: a proof made with another key
+    const headers: Record<string, string> =
+      who === "none" ? {} : who === "csm" ? { "x-csm": "1" } : who === "page" ? pageHeaders(TEST_PAGE_KEY) :
+      who === "wrong-page" ? pageHeaders("0".repeat(64)) :
+      { "x-csm": "1", "x-csm-plugin": pluginProofOf(who === "plugin" ? key : "f".repeat(64), nonce), "x-csm-nonce": nonce };
+    const res: Response & { proven?: boolean } = await fetch(`http://127.0.0.1:${PORT}/api/${kind}/${path}`, { ...init, headers });
+    res.proven = res.headers.get("x-csm-proof") === proofOf(key, nonce);
+    return res;
+  };
+  const api = (path: string, init: RequestInit = {}, who: Who | boolean = "auto") => call("answer", path, init, who === true ? "auto" : who === false ? "csm" : who);
+  const send = (n: number, i: number, who: Who = "auto") => api(id(n), { method: "POST", body: JSON.stringify({ i }) }, who);
+  const mod = playMod({ port: PORT, log, dir, sids: [id(130), id(136)] });
+  const sayMod = playMod({ port: PORT, log, dir, sids: [id(160)] });
   const say = (n: number, text: string) => api(id(n), { method: "POST", body: JSON.stringify({ text }) });
   for (const n of [161, 162, 163, 164]) api(`${id(n)}/next`).catch(() => {});
   const ask131 = api(`${id(131)}/next`);
@@ -910,7 +968,68 @@ try {
   check("answer: with no mod asking, 409 (the page opens the session)", (await send(133, 0)).status === 409);
   check("answer: an app action, a button it didn't offer and a session that doesn't ask are refused",
     (await send(134, 0)).status === 404 && (await send(130, 5)).status === 404 && (await send(1, 0)).status === 404);
-  check("answer: without the header, refused", (await send(130, 0, false)).status === 403 && (await api(`${id(130)}/next`, {}, false)).status === 403);
+  check("answer: without the header, refused", (await send(130, 0, "none")).status === 403 && (await api(`${id(130)}/next`, {}, "none")).status === 403);
+  // The keys. x-csm: 1 alone is no longer enough on any of the four routes; the window's key and the
+  // plugin's key each work on their own routes only.
+  {
+    const pid = id(130), body = JSON.stringify({ i: 0 });
+    const hold = JSON.stringify({ id: "pk", tool: "Bash", what: "x" }), dec = JSON.stringify({ id: "pk", allow: true });
+    const four = async (who: Who) => (await Promise.all([
+      call("answer", pid, { method: "POST", body }, who), call("answer", `${pid}/next`, {}, who),
+      call("permission", pid, { method: "POST", body: hold }, who), call("permission", `${pid}/decide`, { method: "POST", body: dec }, who),
+    ])).map((r) => r.status);
+    check("keys: x-csm: 1 alone gets 403 on all four routes", (await four("csm")).every((c) => c === 403), await four("csm"));
+    check("keys: with no header at all, 403 on all four routes", (await four("none")).every((c) => c === 403), await four("none"));
+    check("keys: a wrong page key gets 403 on the page routes (send an answer, decide)", (await send(130, 0, "wrong-page")).status === 403 &&
+      (await call("permission", `${pid}/decide`, { method: "POST", body: dec }, "wrong-page")).status === 403);
+    check("keys: a wrong plugin key gets 403 on the plugin routes (ask for an answer, hold)", (await call("answer", `${pid}/next`, {}, "wrong-plugin")).status === 403 &&
+      (await call("permission", pid, { method: "POST", body: hold }, "wrong-plugin")).status === 403);
+    check("keys: the page key on a plugin route gets 403", (await call("answer", `${pid}/next`, {}, "page")).status === 403 &&
+      (await call("permission", pid, { method: "POST", body: hold }, "page")).status === 403);
+    check("keys: the plugin key on a page route gets 403", (await call("answer", pid, { method: "POST", body }, "plugin")).status === 403 &&
+      (await call("permission", `${pid}/decide`, { method: "POST", body: dec }, "plugin")).status === 403);
+    check("keys: a refused call carries no proof", !(await call("answer", `${pid}/next`, {}, "wrong-plugin")).headers.has("x-csm-proof"));
+    // The proof: the plugin never sends the key. It sends HMAC-SHA256(key, "plugin:" + nonce), and the
+    // reply carries HMAC-SHA256(key, "server:" + nonce), whatever its status.
+    const key = await readPluginKey(dir);
+    const hmac = (msg: string) => createHmac("sha256", key).update(msg).digest("hex");
+    const nonce = "T3stN0nce" + "a1B2c3D4";
+    const hdr = (n: string | null, plugin: string) => ({ "x-csm": "1", "x-csm-plugin": plugin, ...(n ? { "x-csm-nonce": n } : {}) });
+    const at = (route: string, headers: Record<string, string>, method = "GET") => fetch(`http://127.0.0.1:${PORT}/api/${route}`, { method, headers });
+    const r = await at("answer/not-a-session/next", hdr(nonce, hmac("plugin:" + nonce)));
+    check("keys: a reply's x-csm-proof is HMAC-SHA256(plugin key, \"server:\" + nonce), even on a 404", r.status === 404 &&
+      r.headers.get("x-csm-proof") === hmac("server:" + nonce), [r.status, r.headers.get("x-csm-proof")]);
+    check("keys: and that proof isn't the plugin's own (a reply can't just echo the request) nor the nonce's bare HMAC",
+      r.headers.get("x-csm-proof") !== hmac("plugin:" + nonce) && r.headers.get("x-csm-proof") !== hmac(nonce));
+    const r2 = await at(`permission/${pid}`, hdr(nonce, hmac("plugin:" + nonce)));
+    check("keys: and on a 405 from the permission route", r2.status === 405 && r2.headers.get("x-csm-proof") === hmac("server:" + nonce), r2.status);
+    check("keys: the raw key in x-csm-plugin gets 403, on both plugin routes", (await at("answer/not-a-session/next", hdr(nonce, key))).status === 403 &&
+      (await at(`permission/${pid}`, hdr(nonce, key), "POST")).status === 403);
+    check("keys: a proof made for another nonce gets 403, on both plugin routes", (await at("answer/not-a-session/next", hdr(nonce, hmac("plugin:" + nonce + "x")))).status === 403 &&
+      (await at(`permission/${pid}`, hdr(nonce, hmac("plugin:" + makeNonce())), "POST")).status === 403);
+    check("keys: a proof with the server's prefix, or none, gets 403", (await at("answer/not-a-session/next", hdr(nonce, hmac("server:" + nonce)))).status === 403 &&
+      (await at("answer/not-a-session/next", hdr(nonce, hmac(nonce)))).status === 403);
+    check("keys: a right proof with no nonce, or a bad one, gets 403 with no proof", (await at("answer/not-a-session/next", hdr(null, hmac("plugin:" + nonce)))).status === 403 &&
+      (await at("answer/not-a-session/next", hdr("short", hmac("plugin:short")))).status === 403 && !(await at("answer/not-a-session/next", hdr("short", hmac("plugin:short")))).headers.has("x-csm-proof"));
+    check("keys: a refused call has no proof, even with a good nonce", !(await at("answer/not-a-session/next", hdr(nonce, key))).headers.has("x-csm-proof"));
+    check("keys: the proof of one nonce isn't the proof of another", proofOf(key, nonce) !== proofOf(key, nonce + "x"));
+    check("keys: the key the plugin reads is 64 hex characters", /^[0-9a-f]{64}$/.test(key), key.length);
+    const mode = (f: string) => (statSync(f).mode & 0o777).toString(8);
+    check("keys: plugin.key is mode 0600 and the data folder 0700", mode(join(dir, "plugin.key")) === "600" && mode(dir) === "700", [mode(join(dir, "plugin.key")), mode(dir)]);
+    check("keys: plugin.key is 64 hex characters and a newline, nothing else", /^[0-9a-f]{64}\n$/.test(readFileSync(join(dir, "plugin.key"), "utf8")));
+    check("keys: neither key is in the state the page gets", !JSON.stringify(snap).includes(key) && !JSON.stringify(snap).includes(TEST_PAGE_KEY));
+    // An ask's ID always asks the same thing: the same ID with another command is refused, so
+    // the card can't show one command while Allow goes to another.
+    {
+      const sid = "00000000-0000-4000-8000-000000000418";
+      const holdAs = (what: string) => call("permission", sid, { method: "POST", body: JSON.stringify({ id: "same-id-1", tool: "Bash", what }) });
+      const first = holdAs("ls");
+      await Bun.sleep(150);
+      const other = await holdAs("rm -rf ~/work");
+      check("keys: an ask's ID can't be held again for another command", other.status === 409 && other.proven === true, other.status);
+      await first.catch(() => {});
+    }
+  }
   check("answer: there's no taking one back", (await api(`${id(130)}/undo`, { method: "POST" })).status === 404);
   check("answer: 131, 132 and 136 sent", (await send(131, 0)).status === 204 && (await send(132, 1)).status === 204 && (await send(136, 0)).status === 204 &&
     (await send(137, 0)).status === 204 && (await send(138, 0)).status === 204);
@@ -932,7 +1051,7 @@ try {
   check("say: refused while it works, waits on a permission, ended, or with no mod (409)",
     (await say(162, "Go on")).status === 409 && (await say(163, "Go on")).status === 409 && (await say(164, "Go on")).status === 409 && (await say(165, "Go on")).status === 409);
   check("say: an unknown session is 404, and the header is needed",
-    (await say(9999, "Go on")).status === 404 && (await api(id(160), { method: "POST", body: JSON.stringify({ text: "Go on" }) }, false)).status === 403);
+    (await say(9999, "Go on")).status === 404 && (await api(id(160), { method: "POST", body: JSON.stringify({ text: "Go on" }) }, "none")).status === 403);
   const since160 = find(await state(), 160)?.since;
   const sayAt = (n: number, since: number) => api(id(n), { method: "POST", body: JSON.stringify({ text: "Go on", since }) });
   check("say: words for an earlier turn (a different since) get 409 and send nothing", (await sayAt(160, since160 - 1)).status === 409 && !find(await state(), 160)?.reply, find(await state(), 160)?.reply);
@@ -958,6 +1077,7 @@ try {
   s = await state();
   check("3 answering resumes work", find(s, 3)?.status === "working", find(s, 3));
   check("4 approving resumes work", find(s, 4)?.status === "working", find(s, 4));
+
   check("5 new prompt clears recap and ask", find(s, 5)?.status === "working" && !find(s, 5)?.ask && !find(s, 5)?.recap, find(s, 5));
 
   // The interrupt check needs 8 s of quiet
@@ -1081,11 +1201,12 @@ try {
   const SECRET_WHAT = "rsync --delete ./garden-notes/ backup-box:/srv/plots-ZQX41";
   {
     const at = (n: number, e: Record<string, unknown>) => ev(id(n), { ...e, t: Date.now() });
-    const papi = (path: string, body?: unknown, o: { header?: boolean; method?: string; signal?: AbortSignal } = {}) =>
-      fetch(`http://127.0.0.1:${PORT}/api/permission/${path}`, {
-        method: o.method ?? "POST", headers: o.header === false ? {} : { "x-csm": "1" },
+    // The plugin's calls (hold) carry its key and a nonce, the window's (decide) the page key.
+    const papi = (path: string, body?: unknown, o: { header?: boolean; who?: Who; method?: string; signal?: AbortSignal } = {}) =>
+      call("permission", path, {
+        method: o.method ?? "POST",
         body: body === undefined ? undefined : typeof body === "string" ? body : JSON.stringify(body), signal: o.signal,
-      });
+      }, o.who ?? (o.header === false ? "none" : "auto"));
     const decide = (n: number, pid: string, allow: boolean) => papi(`${id(n)}/decide`, { id: pid, allow });
     type Held = { rounds: number; status: number; decision?: string; endedAt: number; done: Promise<unknown> };
     const quit = new AbortController(); // ends the mods still asking at the end
@@ -1387,7 +1508,48 @@ try {
       Object.entries(w.d).every(([k, v]) => /^\d{4}-\d{2}-\d{2}$/.test(k) && typeof v === "number") && Object.values(w.d as Record<string, number>).reduce((a, b) => a + b, 0) === exact[301], w);
   }
 
+  // 407. A screen ask, live: still working a moment in, needs you past it, working once answered.
+  ev(id(407), { ev: "UserPromptSubmit", prompt: "Look at the dialog", t: Date.now() });
+  ev(id(407), { ev: "PreToolUse", tool: "mcp__computer-use__request_teach_access", t: Date.now() });
+  await Bun.sleep(300);
+  s = await state();
+  check("407 a screen ask a moment in is still working (one already granted answers at once)", find(s, 407)?.status === "working", find(s, 407));
+  await Bun.sleep(4500);
+  s = await state();
+  check("407 unanswered past that, it needs you", find(s, 407)?.status === "waiting" && find(s, 407)?.needsYou === true && find(s, 407)?.wait === "Wants to guide you on your screen", find(s, 407));
+  check("405 asking to take over the screen, unanswered, needs you, in the attention list", find(s, 405)?.status === "waiting" && find(s, 405)?.wait === "Wants to take over your screen" &&
+    snap.attention?.some((a: any) => a.sid === id(405)), [find(s, 405), snap.attention?.map((a: any) => a.sid)]);
+  check("406 an access granted at once never asked you", find(s, 406)?.status === "working", find(s, 406));
+  check("408 a new session offered to you, unchosen, needs you", find(s, 408)?.status === "waiting" && find(s, 408)?.wait === "Asks whether to start a new session" && find(s, 408)?.needsYou === true, find(s, 408));
+  check("409 a session it starts on its own doesn't wait on you", find(s, 409)?.status === "working", find(s, 409));
+  check("410 a setting to change, unapproved, needs you", find(s, 410)?.status === "waiting" && find(s, 410)?.wait === "Wants to change a setting", find(s, 410));
+  ev(id(407), { ev: "PostToolUse", tool: "mcp__computer-use__request_teach_access", t: Date.now() });
+  await Bun.sleep(1500);
+  s = await state();
+  check("407 answered, it works again", find(s, 407)?.status === "working", find(s, 407));
+
+  // The page can't be framed by another page (one click there would land on Allow here).
+  {
+    const r = await fetch(`http://127.0.0.1:${PORT}/`);
+    check("page: no other page may frame it", r.headers.get("content-security-policy") === "frame-ancestors 'none'" && r.headers.get("x-frame-options") === "DENY",
+      [r.headers.get("content-security-policy"), r.headers.get("x-frame-options")]);
+  }
+  // One check at the door: odd fields go, the events still count, and the window keeps working.
+  check("412 a field of the wrong type goes, the session still shows", find(s, 412)?.status === "working" && typeof find(s, 412)?.cwd !== "object", find(s, 412));
+  check("413 a time hours ahead is brought back to now", find(s, 413) && find(s, 413).last <= Date.now() + 5 * 60_000, find(s, 413)?.last);
+  check("414 a time that isn't a number counts as now", !!find(s, 414) && Math.abs(find(s, 414).first - Date.now()) < 120_000, find(s, 414));
+  // History: accents and capitals don't matter, and odd numbers don't break it.
+  for (const q of ["exito", "ÉXITO", "ñandu", "Nandú"]) check(`history: "${q}" finds "Éxito del plan de Ñandú"`, (await history(q)).sessions.some((x: any) => x.sid === id(411)), q);
+  check("415 and 416 are saved, though 416's closing came in odd shapes", (await history("saved beside")).sessions.some((x: any) => x.sid === id(415)) &&
+    (await history("odd closing")).sessions.some((x: any) => x.sid === id(416)), [(await history("saved beside")).total, (await history("odd closing")).total]);
+  check("417 a session only the app knows is found without accents", (await history("revision del ano")).sessions.some((x: any) => x.sid === id(417)), (await history("revision del ano")).total);
+  {
+    const r = await fetch(`http://127.0.0.1:${PORT}/api/history?limit=1e999&offset=1e999`);
+    check("history: odd limit and offset still answer", r.status === 200 && Array.isArray((await r.json()).sessions), r.status);
+  }
+
   // A restart loses nothing: the week comes back from the database.
+  const keyBefore = await readPluginKey(dir);
   server.kill();
   await server.exited;
   {
@@ -1422,6 +1584,13 @@ try {
   rmSync(tp195); // so after the restart, 195's advisor can only come from sessions.db
   server = start();
   s = await state();
+  {
+    let k = await readPluginKey(dir);
+    for (let i = 0; i < 50 && k === keyBefore; i++) { await Bun.sleep(100); k = await readPluginKey(dir); }
+    check("keys: a restart writes a new plugin key, in the same mode", k !== keyBefore && /^[0-9a-f]{64}$/.test(k) && (statSync(join(dir, "plugin.key")).mode & 0o777) === 0o600, [k.length]);
+    const asKey = (key: string) => { const n = makeNonce(); return fetch(`http://127.0.0.1:${PORT}/api/answer/not-a-session/next`, { headers: { "x-csm": "1", "x-csm-nonce": n, "x-csm-plugin": pluginProofOf(key, n) } }); };
+    check("keys: a proof made with the old plugin key no longer works, one with the new key does", (await asKey(keyBefore)).status === 403 && (await asKey(k)).status === 404);
+  }
   // The Claude app writes 147's file again after the restart (its last activity moves on):
   // the note is read again, and must not undo the box's question.
   {
@@ -1438,6 +1607,21 @@ try {
   check("33 after a restart, All Sessions still knows the tasks it set up",
     (await history("noon check")).sessions.find((x: any) => x.sid === id(33))?.made?.length === 2);
   check("usage: an older, lower share for the same week doesn't take the week back", snap.usage?.week?.pct === 45 && !snap.usage.week.samples.some((x: number[]) => x[1] === 12), snap.usage?.week);
+  // Past the week's reset, the week starts again at 0%, with its next reset a week on, until the
+  // next reading: the tile stays and goes to the new week.
+  {
+    const past = Date.now() - 60_000;
+    writeFileSync(join(dir, "usage.json"), JSON.stringify({ at: Date.now() / 1000, week: { used_percentage: 91, resets_at: past / 1000 }, five_hour: null })); // the held reading's reset has gone by
+    let w: any;
+    for (let i = 0; i < 40; i++) {
+      await state();
+      w = snap.usage?.week;
+      if (w?.rolled) break;
+      await Bun.sleep(200);
+    }
+    check("usage: past the week's reset, it starts again at 0% with the next reset a week on, until the next reading",
+      w?.rolled === true && w.pct === 0 && Math.abs(w.resets - (past + 7 * 86400_000)) < 2000 && w.samples?.length === 0, w);
+  }
   check("145 after a restart, its side session's question still shows only there", find(s, 145)?.status === "done" && find(s, 145)?.needsYou === false && find(s, 146)?.status === "asks", [find(s, 145), find(s, 146)]);
   check("87 after a restart, a question it passes on still shows only in its session", find(s, 87)?.status === "done" && find(s, 88)?.status === "asks", [find(s, 87), find(s, 88)]);
   check("120 after a restart, the answered pick stays answered", find(s, 120)?.status === "done" && find(s, 120)?.needsYou === false, find(s, 120));
@@ -1620,6 +1804,21 @@ check("cron: a bad expression is null", parseCron("61 * * * *") === null && pars
   check("hook: the first two answer buttons, cut to 40 characters, and an app action's name",
     JSON.stringify(lines[9]?.x?.acts) === JSON.stringify([{ l: `Yes, post it ${"x".repeat(27)}` }, { l: "Open", a: "create_pr" }]), lines[9]?.x);
   check("hook: buttons that aren't a list are left out", lines[10]?.x?.acts === null, lines[10]?.x);
+  // A line never passes 3,500 bytes, so lines from parallel sessions never mix (past about 4 KB
+  // they did, and both events were lost): a 20-step plan in three-byte characters is cut harder,
+  // every field is cut to its type, and the event is never dropped.
+  hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: "mcp__ccd_turn__update_plan",
+    tool_input: { items: [...Array.from({ length: 20 }, (_, i) => ({ content: `${"確認".repeat(45)} ${i}`, status: i ? "pending" : "in_progress" })), "not a step"], advance: true, done: [1, "x"], start: 2 } });
+  hook({ hook_event_name: "PreToolUse", session_id: "s".repeat(5000), agent_id: "a".repeat(5000), tool_name: "Bash", tool_input: { command: "𝒜".repeat(5000) } });
+  hook({ hook_event_name: "PreToolUse", session_id: "h", tool_name: "AskUserQuestion", tool_input: { questions: "not a list" } });
+  const more = (await Bun.file(join(hdir, "events.jsonl")).text()).trim().split("\n").slice(lines.length);
+  const big = more.map((l) => { try { return JSON.parse(l); } catch { return null; } });
+  check("hook: every line stays under 3,500 bytes and is whole", more.length === 3 && more.every((l) => Buffer.byteLength(l) <= 3500) && big.every(Boolean), more.map((l) => Buffer.byteLength(l)));
+  check("hook: the long plan keeps its 20 steps, with words, its step numbers and its current step",
+    big[0]?.x?.items?.length === 20 && big[0].x.items.every((i: any) => i.c.length > 0) && big[0].x.items[0].s === "in_progress" &&
+    JSON.stringify(big[0].x.done) === "[1]" && big[0].x.start === 2 && big[0].x.advance === true, big[0]?.x);
+  check("hook: IDs and names are cut too", big[1]?.sid?.length <= 80 && big[1]?.agent?.length <= 80 && big[1]?.tool === "Bash", { sid: big[1]?.sid?.length, agent: big[1]?.agent?.length });
+  check("hook: a question in an unexpected shape still writes its event", big[2]?.tool === "AskUserQuestion", big[2]);
   rmSync(hdir, { recursive: true, force: true });
 }
 

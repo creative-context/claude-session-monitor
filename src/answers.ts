@@ -15,6 +15,7 @@
 // permission) is dropped, never handed over.
 
 import { type Answer, type Reply, type Session, sessions, bump, bumpView } from "./state.ts";
+import { fromPage, fromPlugin, signed } from "./keys.ts";
 import { activeAgents } from "./agents.ts";
 import { safe } from "./server-kit.ts";
 import { shownStatus } from "./snapshot.ts";
@@ -157,8 +158,14 @@ export function answerRoutes(req: Request, url: URL): Response | Promise<Respons
   if (!m) return undefined;
   if (req.headers.get("x-csm") !== "1") return none(403);
   const sid = m[1];
+  // The plugin's ask needs the plugin key; sending an answer needs the window's (src/keys.ts).
+  if (m[2] === "/next") {
+    if (!fromPlugin(req)) return none(403);
+    if (!SID.test(sid)) return signed(req, none(404));
+    return signed(req, req.method === "GET" ? next(req, sid) : none(405));
+  }
+  if (!fromPage(req)) return none(403);
   if (!SID.test(sid)) return none(404);
-  if (m[2] === "/next") return req.method === "GET" ? next(req, sid) : none(405);
   if (req.method !== "POST") return none(405);
   return answer(req, sid);
 }

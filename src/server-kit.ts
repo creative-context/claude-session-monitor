@@ -1,4 +1,4 @@
-// mac-app-kit 0.2.3 (server-kit.ts). Vendored: don't edit here. Change it in the kit and vendor again.
+// mac-app-kit 0.3.1 (server-kit.ts). Vendored: don't edit here. Change it in the kit and vendor again.
 // The local server's life, shared by the family's Mac apps. Each app's server.ts keeps its
 // own data and routes; this holds what they all do the same way:
 //   - it listens on 127.0.0.1 only and answers only its own host name (no DNS rebinding);
@@ -63,6 +63,10 @@ export type ServerOptions = {
   startedWords?: () => string; // more for the log line: "(12 sessions from the log, …)"
   noStore?: boolean; // the state and the page's files with cache-control: no-store
   typed?: boolean; // the page's files with a content type from their extension (otherwise Bun's)
+  // The page's files can't be framed by another page (CSP frame-ancestors 'none' and
+  // X-Frame-Options DENY), so a page elsewhere can't lay this one under its own buttons and
+  // steal a click. Off for an app that frames its own page (a demo recorded in a frame).
+  noFrames?: boolean;
 };
 
 const TYPES: Record<string, string> = { html: "text/html; charset=utf-8", js: "text/javascript", css: "text/css", png: "image/png", svg: "image/svg+xml" };
@@ -121,6 +125,7 @@ export function createServer(o: ServerOptions) {
   }
 
   const noStore = o.noStore ? { "cache-control": "no-store" } : {};
+  const noFrames = o.noFrames ? { "content-security-policy": "frame-ancestors 'none'", "x-frame-options": "DENY" } : {};
 
   async function fetch(req: Request): Promise<Response> {
     // Blocks DNS-rebinding tricks: only answer to our own host name.
@@ -153,9 +158,9 @@ export function createServer(o: ServerOptions) {
     if (!/^[\w.-]+$/.test(file)) return new Response("Not found", { status: 404 });
     const f = Bun.file(join(o.publicDir, file));
     if (!(await f.exists())) return new Response("Not found", { status: 404 });
-    if (!o.typed && !o.noStore) return new Response(f);
+    if (!o.typed && !o.noStore && !o.noFrames) return new Response(f);
     const ext = file.split(".").pop() ?? "";
-    return new Response(f, { headers: { ...(o.typed ? { "content-type": TYPES[ext] ?? "application/octet-stream" } : {}), ...noStore } });
+    return new Response(f, { headers: { ...(o.typed ? { "content-type": TYPES[ext] ?? "application/octet-stream" } : {}), ...noStore, ...noFrames } });
   }
 
   // Only when run, so an app's parts can be imported without starting anything.

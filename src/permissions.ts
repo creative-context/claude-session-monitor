@@ -14,6 +14,7 @@
 // Both need the x-csm header, like /api/answer, and the kit's host check.
 
 import { type Session, sessions, bumpView } from "./state.ts";
+import { fromPage, fromPlugin, signed } from "./keys.ts";
 import { safe } from "./server-kit.ts";
 
 const ms = (name: string, fallback: number) => Number(process.env[name]) || fallback; // the tests shorten them
@@ -131,9 +132,15 @@ export function permissionRoutes(req: Request, url: URL): Response | Promise<Res
   if (!m) return undefined;
   if (req.headers.get("x-csm") !== "1") return none(403);
   const sid = m[1];
-  if (!SID.test(sid)) return none(404);
-  if (req.method !== "POST") return none(405);
-  return m[2] ? decide(req, sid) : hold(req, sid);
+  // Deciding needs the window's key; holding an ask needs the plugin's (src/keys.ts).
+  if (m[2]) {
+    if (!fromPage(req)) return none(403);
+    if (!SID.test(sid)) return none(404);
+    return req.method === "POST" ? decide(req, sid) : none(405);
+  }
+  if (!fromPlugin(req)) return none(403);
+  if (!SID.test(sid)) return signed(req, none(404));
+  return signed(req, req.method === "POST" ? hold(req, sid) : none(405));
 }
 
 async function body(req: Request): Promise<any> {
@@ -158,6 +165,9 @@ async function hold(req: Request, sid: string): Promise<Response> {
   if (gone.has(`${sid} ${b.id}`)) return none(410);
   const now = Date.now();
   let a = asks.get(sid)?.find((x) => x.id === b.id);
+  // The same ID always asks the same thing: a request that names another tool, line or agent
+  // for it is refused, so the card can't show one command while Allow goes to another.
+  if (a && (a.tool !== b.tool.replace(/\s+/g, " ").trim() || a.what !== oneLine(b.what) || (a.agent ?? "") !== (b.agent ?? ""))) return none(409);
   if (!a) {
     a = {
       sid, id: b.id, tool: b.tool.replace(/\s+/g, " ").trim(), what: oneLine(b.what),

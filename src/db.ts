@@ -4,11 +4,11 @@ import { Database } from "bun:sqlite";
 import { existsSync, readFileSync, renameSync } from "node:fs";
 import { basename, join } from "node:path";
 import { DIR, LOG, WEEK_MS, FORGET_MS, MAX_SESSIONS } from "./config.ts";
-import { type Status, type Session, type Reminder, tasks, sessions, pins, dirty, allDirty, clean, bump } from "./state.ts";
+import { type Status, type Session, type Reminder, tasks, sessions, pins, dirty, allDirty, clean, bump, FUTURE_SLACK_MS } from "./state.ts";
 import { relativesOf } from "./desktop.ts";
 import { madeTasks } from "./tasks.ts";
 import { activeAgents } from "./agents.ts";
-import { type Shown, needsYou, sessionNeedsYou, shownStatus, mostActive } from "./snapshot.ts";
+import { type Shown, brokenOnce, needsYou, sessionNeedsYou, shownStatus, mostActive } from "./snapshot.ts";
 import { addWorked, mergeWorked, parseWorked, setWorkedLoader, storedWorked, totalOf, workedMs, workedOf, workedFromLog } from "./worked.ts";
 
 // Every session is kept in ~/.claude-session-monitor/sessions.db: the main view shows
@@ -39,6 +39,20 @@ export function openDatabase() {
   }
 }
 
+// Without accents or capitals, for History's search: "Éxito", "ÉXITO" and "exito" are one word.
+export const fold = (text: string) => text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+const searchText = (r: { title?: string | null; prompt?: string | null; project?: string | null; recap?: string | null }) =>
+  fold([r.title, r.prompt, r.project, r.recap].filter(Boolean).join(" "));
+let textOf: ReturnType<Database["prepare"]> | undefined;
+let setSearch: ReturnType<Database["prepare"]> | undefined;
+const refused = new Set<string>();
+// A row's search text, from the row as saved: a title or prompt left out of a write keeps its
+// saved one. Every write of a row calls it, the Claude app's own rows included (src/desktop.ts).
+export function refreshSearch(sid: string) {
+  const saved = textOf?.get(sid) as any;
+  if (saved) setSearch!.run(searchText(saved), sid);
+}
+
 function open(file: string) {
   db = new Database(file);
   db.exec("PRAGMA busy_timeout = 5000");
@@ -60,9 +74,14 @@ function open(file: string) {
   // Its time working per day, the last 8 days, how far it was counted and when a turn still
   // working started (src/worked.ts). Times only.
   if (!cols.includes("worked")) db.exec("ALTER TABLE sessions ADD COLUMN worked TEXT");
+  // What History's search looks in (title, prompt, folder and recap), without accents or
+  // capitals: SQLite's lower() knows only A to Z, so "Éxito" was never found by "éxito".
+  if (!cols.includes("search")) db.exec("ALTER TABLE sessions ADD COLUMN search TEXT");
   // Things done once, such as filling in the working times from the log (backfillWorked).
   db.exec("CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT)");
   db.exec("CREATE INDEX IF NOT EXISTS sessions_last ON sessions(last_at)");
+  // A time saved past now (a clock that ran ahead) would keep its session on top for good.
+  db.query("UPDATE sessions SET last_at = ?1 WHERE last_at > ?2").run(Date.now(), Date.now() + FUTURE_SLACK_MS);
   db.exec("CREATE INDEX IF NOT EXISTS sessions_task ON sessions(task, first_at)");
   upsert = db.prepare(`INSERT INTO sessions
     (sid, title, prompt, project, cwd, app_cwd, tp, first_at, last_at, status, outcome, recap, ask, error, note, model, pid, archived, task, sched, wait, relay, advisor, advisor_read, worked)
@@ -82,6 +101,11 @@ function open(file: string) {
       advisor_read = coalesce(excluded.advisor_read, advisor_read),
       -- A session met again in memory reads its row's count first (src/worked.ts); one not read yet keeps it.
       worked = coalesce(excluded.worked, worked)`);
+  textOf = db.prepare("SELECT title, prompt, project, recap FROM sessions WHERE sid = ?");
+  setSearch = db.prepare("UPDATE sessions SET search = ?1 WHERE sid = ?2 AND search IS NOT ?1"); // only when it differs
+  // Rows from before the search column, or written by an older version, get theirs once.
+  const missing = db.query("SELECT sid, title, prompt, project, recap FROM sessions WHERE search IS NULL").all() as any[];
+  if (missing.length) db.transaction(() => { for (const r of missing) setSearch!.run(searchText(r), r.sid); })();
   const one = db.prepare("SELECT worked FROM sessions WHERE sid = ?");
   setWorkedLoader((sid) => parseWorked((one.get(sid) as { worked?: string } | null)?.worked));
   pins.clear();
@@ -128,13 +152,15 @@ export function backfillWorked() {
   if (!changed.length) bump();
 }
 
+// A text column gets text or nothing, whatever reached the session.
+const text = (v: unknown) => (typeof v === "string" ? v : v == null ? null : String(v));
 export const rowOf = (s: Session) => ({
-  $sid: s.sid, $title: s.title ?? null, $prompt: s.prompt ?? null,
+  $sid: s.sid, $title: text(s.title), $prompt: text(s.prompt),
   $project: s.appCwd ? basename(s.appCwd) : s.cwd ? basename(s.cwd) : null, // the app's folder is steadier than the shell's
   $cwd: s.cwd ?? null, $app_cwd: s.appCwd ?? null, $tp: s.tp ?? null,
   $first_at: s.first, $last_at: s.last, $status: s.status, $outcome: s.outcome ?? null,
-  $recap: s.recap ?? null, $ask: s.ask ?? s.askText ?? null, $error: s.errorText ?? null,
-  $note: s.note ?? null, $model: s.model ?? null, $pid: s.pid ?? null, $archived: s.archived ? 1 : 0,
+  $recap: text(s.recap), $ask: text(s.ask ?? s.askText), $error: text(s.errorText),
+  $note: text(s.note), $model: text(s.model), $pid: s.pid ?? null, $archived: s.archived ? 1 : 0,
   $task: s.task ?? null,
   $sched: s.reminders?.length || s.made?.length ? JSON.stringify({ r: s.reminders ?? [], m: s.made ?? [] }) : null,
   // The log resumes where it stopped, so a wait it read before a restart isn't read again.
@@ -181,24 +207,45 @@ const sameRow = (a: Row | undefined, b: Row) => {
   for (const k in b) if ((a as any)[k] !== (b as any)[k]) return false;
   return true;
 };
+// Whether SQLite refused a row for what's in it (a constraint, a type, a size), rather than
+// for the database's own trouble (locked, busy, full, a missing table), which stops every row.
+const rowsFault = (e: unknown) => {
+  const n = (e as any)?.errno;
+  return typeof n !== "number" || [18, 19, 20, 25].includes(n & 0xff); // TOOBIG, CONSTRAINT, MISMATCH, RANGE
+};
 export function persist(all = false) {
   if (!db || (!all && !allDirty && !dirty.size)) return;
   const look = all || allDirty ? [...sessions.values()] : [...dirty].flatMap((sid) => sessions.get(sid) ?? []);
   clean();
   const changed: Row[] = [];
   for (const s of look) {
-    const row = rowOf(s);
+    let row: Row;
+    try { row = rowOf(s); } catch (e) { brokenOnce(s.sid, "not saved", e); continue; } // the others still are
     if (!sameRow(written.get(s.sid), row)) changed.push(row);
   }
   if (!changed.length) return;
   try {
-    db.transaction(() => { for (const row of changed) upsert.run(row); })();
+    db.transaction(() => {
+      for (const row of changed) {
+        // One row SQLite refuses is left out alone (logged once); trouble with the database
+        // itself stops them all, to be tried again on the next write.
+        try {
+          upsert.run(row);
+        } catch (e) {
+          if (!rowsFault(e)) throw e;
+          brokenOnce(row.$sid, "not saved", e);
+          refused.add(row.$sid);
+          continue;
+        }
+        refreshSearch(row.$sid);
+      }
+    })();
   } catch (e) {
     for (const row of changed) dirty.add(row.$sid); // still to write: the next write tries them again
     throw e;
   }
   // Only once they're in: a write that failed leaves them as not written.
-  for (const row of changed) written.set(row.$sid, row);
+  for (const row of changed) if (!refused.delete(row.$sid)) written.set(row.$sid, row);
 }
 
 // On startup, the last week comes back from the database, so a restart loses nothing.
@@ -248,9 +295,11 @@ export function rowNeedsYou(r: { sid: string; status: string | null; outcome: st
 // first prompt, project or last recap, and to the pinned ones. activeOnly: the Most active
 // filter's sessions instead, the same ones as Last 7 Days, most time working first.
 export function history(q: string, limit: number, offset: number, pinnedOnly = false, activeOnly = false) {
-  const like = q ? `%${q.toLowerCase().replace(/[%_\\]/g, "\\$&")}%` : null;
+  const like = q ? `%${fold(q).replace(/[%_\\]/g, "\\$&")}%` : null;
   const conds = [
-    like ? "lower(coalesce(title,'') || ' ' || coalesce(prompt,'') || ' ' || coalesce(project,'') || ' ' || coalesce(recap,'')) LIKE $like ESCAPE '\\'" : "",
+    // A row without its search text yet (written by another version while this one runs) is
+    // looked at as before, by SQLite's lower().
+    like ? "(search LIKE $like ESCAPE '\\' OR (search IS NULL AND lower(coalesce(title,'') || ' ' || coalesce(prompt,'') || ' ' || coalesce(project,'') || ' ' || coalesce(recap,'')) LIKE $like ESCAPE '\\'))" : "",
     pinnedOnly ? "pinned_at IS NOT NULL" : "", // the Pinned filter
   ].filter(Boolean);
   const now = Date.now();

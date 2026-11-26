@@ -218,6 +218,11 @@
      from empty, in turn from the bottom. */
   @starting-style { .meter.intro .m-seg b, .meter.intro .m-seg i { height: 0; } }
   @media (prefers-reduced-motion: reduce) { .meter .m-seg b, .meter .m-seg i { transition: background-color 200ms linear; } }
+  /* The week's reset (rollWeek): one clock draws the fills and the blue line, which travels
+     across the days on its own. */
+  .rolling :is(.m-week, .ws-days) { position: relative; }
+  .rolling :is(.m-seg, .ws-seg) :is(b, i) { transition: none; }
+  .week-roll-now { position: absolute; border-radius: 1px; background: var(--color-text-accent); box-shadow: 0 0 0 1.6px var(--color-background-body); z-index: 1; pointer-events: none; }
 
   /* The rest of the week sits a step back from the active zone. */
   .group.active + .group { margin-top: 28px; }
@@ -497,7 +502,8 @@
   .card:is(.waiting, .asks, .needs):not(.stale) .sentline .a-b:hover { background: #0000002B; }
   .card:is(.waiting, .asks, .needs):not(.stale) .mic-b { background: var(--color-on-needs); color: var(--color-needs); }
   .card:is(.waiting, .asks, .needs):not(.stale) .mic-b:hover { background: var(--color-on-needs-hover); }
-  .card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on, .card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on:hover { background: var(--color-on-needs); color: var(--color-needs); box-shadow: 0 0 0 2px var(--color-needs), 0 0 0 3.5px var(--color-on-needs); }
+  /* Pressed, an amber card's mic keeps its look, with no ring: the drawer open under the card shows it listens. */
+  .card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on, .card:is(.waiting, .asks, .needs):not(.stale) .mic-b.on:hover { background: var(--color-on-needs); color: var(--color-needs); }
   .card:is(.waiting, .asks, .needs):not(.stale) :is(.ans .a-b, .mic-b):focus-visible { outline-color: var(--color-on-needs); }
   .content { position: relative; } /* the composer is placed in it */
   /* The composer is the design system's drawer (.pop.anchored.drawer) from under its card,
@@ -604,6 +610,9 @@
     .wstrip.limit { --fill: var(--color-error); --over: var(--color-error); --say: var(--color-text-red); }
     .wstrip .ws-fig { font-family: ui-rounded, var(--font-family-body); font-size: 26px; line-height: 28px; font-weight: var(--font-weight-heading); letter-spacing: -0.02em; font-variant-numeric: tabular-nums; color: var(--color-text-primary); }
     .wstrip .ws-fig small { font-size: 14px; letter-spacing: 0; color: var(--color-text-secondary); margin-left: 1px; }
+    /* 9% keeps 74%'s room, so the days don't move as it changes: two tabular digits (about 0.63 em
+       each with the tracking) and the small sign, a hair under, so 74% itself is as before. */
+    .wstrip .ws-fig { min-width: calc(1.25em + 13.3px); }
     .wstrip .ws-days { display: flex; gap: 3px; min-width: 0; }
     .wstrip .ws-day { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; min-width: 0; }
     .wstrip .ws-days.snap { gap: var(--gap); justify-content: center; }
@@ -686,6 +695,9 @@
     header .spacer { display: none; } /* no room to spare in a strip, and its gap is the counts' */
     header .pinf .n { display: none; }
   }
+  /* A count's menu starts on its rows: the count above already says what they are. Its head shows
+     only in a tight header, where the count is a bare number. */
+  #pop:not(.labeled) .pop-head { display: none; }
 </style>
 </head>
 <body>
@@ -707,7 +719,7 @@
     <span id="link" class="link off" title="Connection to the local server"><i></i><span>Connecting…</span></span>
     <button id="sound" class="icon-btn" type="button" aria-pressed="false"></button>
   </header>
-  <div id="pop" class="pop" role="group" aria-label="Details"></div>
+  <div id="pop" class="pop menu" role="group" aria-label="Details"></div>
   <div class="content" id="content" data-scroll-edge="whole">
     <i class="scroll-fade up" aria-hidden="true"></i>
     <div id="banner"></div>
@@ -891,6 +903,13 @@
   const answerSent = (s) => s.kind !== "task" && (s.status === "asks" || s.status === "done" || s.status === "error") && (s.reply?.state === "pending" || s.reply?.state === "sent");
   // A permission the session waits on that its mod holds (the plugin): what it asks, with
   // Allow and Deny on its card. Once you click one it's on its way, as a sent answer is.
+  // The window's key (src/keys.ts): answering a session and allowing or denying a permission need
+  // it. The app gives it to its page (window.csm.setKey) once its own server answers, and a new
+  // one each time that server starts; a test can put it in window.__csmKey. A page in a browser
+  // has none, so it only looks: its answer buttons open the session, and a permission shows as
+  // a plain wait.
+  let KEY = (() => { try { return typeof window.__csmKey === "string" ? window.__csmKey : ""; } catch { return ""; } })();
+  const actHeaders = () => ({ "x-csm": "1", "x-csm-key": KEY, "content-type": "application/json" });
   const permitOf = (s) => (s.kind !== "task" && s.status === "waiting" && s.permit) || null;
   const permitOut = (s) => permitOf(s)?.state === "sending" || permitOf(s)?.state === "sent";
   const sentOf = (s) => answerSent(s) || permitOut(s);
@@ -1076,7 +1095,7 @@
     const a = s?.answers?.[i];
     if (!a || a.app || !s.canAnswer || s.reply) return openSession(sid);
     const r = await fetch(`/api/answer/${encodeURIComponent(sid)}`, {
-      method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ i }),
+      method: "POST", headers: actHeaders(), body: JSON.stringify({ i }),
     }).catch(() => null);
     // 409: no mod is there to take it after all. Anything else unexpected: answer there.
     if (r?.status !== 204) openSession(sid);
@@ -1113,7 +1132,7 @@
     if (permitBusy.has(sid)) return; // one click at a time
     permitBusy.add(sid);
     const r = await fetch(`/api/permission/${encodeURIComponent(sid)}/decide`, {
-      method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ id: p.id, allow }),
+      method: "POST", headers: actHeaders(), body: JSON.stringify({ id: p.id, allow }),
     }).catch(() => null);
     permitBusy.delete(sid);
     // 409: settled in the meantime (answered in its dialog, or it moved on). Anything else: answer there.
@@ -1290,8 +1309,11 @@
   }
   // Under the card's mic, or above it when the list shows no room below; inside the list's
   // sides; the arrow on the mic. In the list that scrolls, so it moves with the card. Hidden
-  // while its card isn't on screen (another view).
-  function placeDict() {
+  // while its card isn't on screen (another view). The side is decided when it opens, when its
+  // phase changes and when the window resizes, from the room the list shows then, and kept on
+  // every other placing (a redraw, the cards gliding): if the list was scrolled since, a redraw
+  // would otherwise move it to the card's other side, under the pointer about to press it.
+  function placeDict(decide = false) {
     if (!dictEl || !dict) return;
     const card = cards.get(dict.sid);
     const shown = Boolean(card?.isConnected && card.getClientRects().length && view === "week");
@@ -1308,7 +1330,8 @@
     dictEl.style.setProperty("--pop-w", `${w}px`);
     const h = dictEl.querySelector(".drawer-in")?.offsetHeight || 0;
     const below = box.bottom - cr.bottom, above = cr.top - box.top;
-    const up = below < h - tuck + 4 && (above >= h - tuck + 4 || above > below);
+    const up = decide || !dictEl.dataset.side ? below < h - tuck + 4 && (above >= h - tuck + 4 || above > below) : dictEl.dataset.side === "up";
+    dictEl.dataset.side = up ? "up" : "down";
     const foot = cr.top + tuck; // above the card: where its foot stays
     const top = Math.round((up ? foot - (dictEl.classList.contains("open") ? h : 0) : cr.bottom - tuck) - box.top + $content.scrollTop);
     dictEl.classList.toggle("above", up);
@@ -1342,7 +1365,7 @@
     buildDict();
     dictLive();
     syncMic();
-    placeDict();
+    placeDict(true);
     if (first) { void dictEl.offsetWidth; dictEl.style.transition = ""; void dictEl.offsetWidth; dictEl.classList.add("open"); placeDict(); } // it grows out
     const focus = phase === "review" ? dictEl.querySelector("textarea") : phase === "listening" ? dictEl.querySelector('[data-dict="send"]')
       : phase === "error" ? dictEl.querySelector('[data-dict="retry"]') ?? dictEl.querySelector('[data-dict="cancel"]') : null;
@@ -1414,7 +1437,7 @@
     const since = dict.since;
     dictPhase("sending");
     const r = await fetch(`/api/answer/${encodeURIComponent(sid)}`, {
-      method: "POST", headers: { "x-csm": "1", "content-type": "application/json" }, body: JSON.stringify({ text: text.slice(0, 1000), since }),
+      method: "POST", headers: actHeaders(), body: JSON.stringify({ text: text.slice(0, 1000), since }),
     }).catch(() => null);
     if (dict?.sid !== sid || dict.phase !== "sending") return;
     if (r?.status === 204) return endDict(true); // the card shows Sending…, then Sent
@@ -2512,7 +2535,14 @@
   }
 
   // The app drives these from its toolbar.
-  window.csm = { setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); snapWeek(); },
+  window.csm = {
+    // The app's key for this start of its server: the cards can answer and allow from now on.
+    setKey: (k) => {
+      if (typeof k !== "string" || !/^[0-9a-f]{64}$/.test(k) || k === KEY) return;
+      KEY = k;
+      fetch("/api/state").then((r) => r.json()).then(receive).catch(() => {}); // what the keyless view left out
+    },
+    setView: (v) => setView(v, true), search: (q) => search(q, true), reportChrome: () => { fitCounts(); reportChrome(); snapWeek(); },
     endFamily: () => endFamily(), // the app calls these when the pointer enters or leaves the window, active or not
     pointer: (inside) => { appInside = Boolean(inside); pointerIn = false; if (!inside) { endFamily(); hideUsageCard(); holdEnd(); } },
     dictation: (m) => onDictation(m), // the app's dictation, for the card that asked
@@ -2930,10 +2960,121 @@
     el.addEventListener("pointerenter", () => { if (pointerIn) openSoon(el); });
     el.addEventListener("pointermove", (e) => { if (appInside && (e.movementX || e.movementY)) { pointerIn = true; openSoon(el); } });
     el.addEventListener("pointerleave", hideUsageCard);
+    // A click opens the card at once and leaves the focus where it was. Focused by a click, the
+    // column kept the focus after the pointer left, and a later key (Escape, say) lit its ring.
+    el.addEventListener("mousedown", (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      clearTimeout(ucardTimer);
+      ucardPending = null;
+      showUsageCard(el);
+    });
     el.addEventListener("focus", () => showUsageCard(el));
     el.addEventListener("blur", hideUsageCard);
   }
   addEventListener("keydown", (e) => { if (e.key === "Escape" && ucardFor) hideUsageCard(); });
+
+  // The week at its reset. The old week drains into the new one as one level: one clock on
+  // --ease-inertial (it gathers speed and slows down to land) moves the fill, the part ahead of
+  // pace and the blue line through all seven days, in the tile and in the compact view's strip,
+  // and the figure reads the same clock. The old words step out first; only at landing do the
+  // days' tracks, the bold day and the new words change. False when nothing is drawn to move.
+  const tok = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+  const tokMs = (name, or) => parseFloat(tok(name)) || or;
+  function rollWeek($m, from, to) {
+    if (document.hidden) return false; // no frames to draw it in
+    const k = drawScale();
+    const snap = (px) => Math.round(px * k) / k;
+    const views = [];
+    for (const [el, days, figure, words, tall] of [
+      [$m, ".m-week", ".m-pct", ".m-say, .m-reset", true],
+      [document.querySelector("#week .wstrip"), ".ws-days", ".ws-n", ".ws-say", false],
+    ]) {
+      if (!el || el.hidden || el.offsetParent === null) continue;
+      const $d = el.querySelector(days);
+      const segs = $d ? [...$d.querySelectorAll(".m-seg, .ws-seg")] : [];
+      if (segs.length !== 7) continue;
+      const dr = $d.getBoundingClientRect();
+      const box = segs.map((seg) => { const r = seg.getBoundingClientRect(); return tall ? { at: dr.bottom - r.bottom, len: r.height } : { at: r.left - dr.left, len: r.width }; });
+      const parts = segs.map((seg) => ({ b: seg.querySelector("b") || seg.appendChild(document.createElement("b")), i: seg.querySelector("i") || seg.appendChild(document.createElement("i")) }));
+      $d.querySelectorAll(".m-now, .ws-now").forEach((n) => n.remove());
+      const r0 = segs[0].getBoundingClientRect();
+      const line = document.createElement("span");
+      line.className = "week-roll-now";
+      if (tall) Object.assign(line.style, { left: `${snap(r0.left - dr.left - 5)}px`, width: `${snap(r0.width + 10)}px`, height: `${snap(2)}px` });
+      else Object.assign(line.style, { top: `${snap(r0.top - dr.top - 3)}px`, height: `${snap(r0.height + 6)}px`, width: `${snap(2)}px` });
+      $d.append(line);
+      const num = [...(el.querySelector(figure)?.childNodes ?? [])].find((n) => n.nodeType === 3 && /\d/.test(n.nodeValue));
+      for (const w of el.querySelectorAll(words)) w.animate([{ opacity: 1 }, { opacity: 0 }], { duration: tokMs("--duration-exit", 160), easing: tok("--ease-standard"), fill: "forwards" });
+      el.classList.add("rolling");
+      views.push({ el, segs, box, parts, line, num, tall });
+    }
+    if (!views.length) return false;
+    // 74 points down take about 1.4 s; a short drop, less; never past 1.7 s.
+    const clock = new Animation(new KeyframeEffect(null, null, { duration: Math.min(1700, 560 + 11 * Math.abs(from.pct - to.pct)), easing: tok("--ease-inertial") || "ease-in-out" }), document.timeline);
+    const lerp = (a, b, e) => a + (b - a) * e;
+    const share = (x, d) => Math.max(0, Math.min(1, x - d));
+    const paint = (e) => {
+      const t = job.to;
+      const used = lerp(from.used, t.used, e), even = lerp(from.even, t.even, e);
+      const base = from.oneColor ? used : Math.min(used, even); // the old week's colors until it lands
+      const at = from.at != null && t.at != null ? lerp(from.at, t.at, e) : null;
+      const pct = String(Math.round(lerp(from.pct, t.pct, e)));
+      for (const v of views) {
+        v.parts.forEach(({ b, i }, d) => {
+          const len = v.box[d].len;
+          const fill = share(base, d) * len;
+          const overFrom = share(even, d) * len;
+          const over = from.oneColor ? 0 : Math.max(0, (used > even ? share(used, d) * len : 0) - overFrom);
+          b.style[v.tall ? "height" : "width"] = `${snap(fill)}px`;
+          i.style[v.tall ? "bottom" : "left"] = `${snap(overFrom)}px`;
+          i.style[v.tall ? "height" : "width"] = `${snap(over)}px`;
+          b.classList.toggle("seam", over > 0 && fill > 0);
+          i.classList.toggle("seam", over > 0 && fill > 0);
+        });
+        if (at == null) v.line.style.opacity = "0";
+        else {
+          const d = Math.max(0, Math.min(6, Math.floor(at)));
+          v.line.style[v.tall ? "bottom" : "left"] = `${snap(v.box[d].at + share(at, d) * v.box[d].len - 1)}px`;
+        }
+        if (v.num) v.num.nodeValue = pct;
+      }
+    };
+    const end = (landing) => {
+      if ($m._roll !== job) return;
+      $m._roll = null;
+      // How each day looked, so its track and letter can fade to the new week's.
+      if (landing) $m._landing = new Map(views.map((v) => [v.el, v.segs.map((seg) => ({ track: getComputedStyle(seg).backgroundColor, letter: getComputedStyle(seg.parentElement.querySelector(".m-dl, .ws-dl")).color }))]));
+      for (const v of views) { v.el.classList.remove("rolling"); v.line.remove(); v.el._html = ""; } // drawn anew
+      if (landing) renderMeter();
+    };
+    const job = { to, stop: () => { clock.cancel(); end(false); } };
+    $m._roll = job;
+    const frame = () => {
+      if ($m._roll !== job) return;
+      const done = clock.playState === "finished";
+      paint(done ? 1 : clock.effect.getComputedTiming().progress ?? 0);
+      if (done) end(true);
+      else requestAnimationFrame(frame);
+    };
+    clock.play();
+    frame();
+    return true;
+  }
+  // The landing: the fills are already where the new week has them, so only the days' tracks and
+  // the bold day fade to the new week's, and the new words come in.
+  function landWeek(looks) {
+    const color = { duration: tokMs("--duration-color", 450), easing: tok("--ease-standard") };
+    for (const [el, was] of looks) {
+      el.querySelectorAll(".m-seg, .ws-seg").forEach((seg, d) => {
+        const dl = seg.parentElement.querySelector(".m-dl, .ws-dl");
+        const track = getComputedStyle(seg).backgroundColor, letter = getComputedStyle(dl).color;
+        if (was[d] && track !== was[d].track) seg.animate([{ backgroundColor: was[d].track }, { backgroundColor: track }], color);
+        if (was[d] && letter !== was[d].letter) dl.animate([{ color: was[d].letter }, { color: letter }], color);
+      });
+      for (const w of el.querySelectorAll(".m-say, .m-reset, .ws-say")) w.animate([{ opacity: 0, transform: "translateY(2px)" }, { opacity: 1, transform: "none" }], { duration: tokMs("--duration-enter", 320), easing: tok("--ease-enter") });
+    }
+  }
 
   function renderMeter() {
     const $m = document.querySelector("#week .meter");
@@ -2957,7 +3098,19 @@
     const even = p.gone != null ? (p.gone / 100) * 7 : used;
     const oneColor = !["fast", "hot"].includes(p.key);
     const base = oneColor ? used : Math.min(used, even);
-    const lighting = !$m._lit && !matchMedia("(prefers-reduced-motion: reduce)").matches; // the first time, they fill in turn
+    // A new week (its reset moved on past the one drawn) drains from the old one as one level.
+    // While that runs, a new reading of the same week only moves where it lands.
+    const geo = { used, even, at: start ? (now() - start) / DAY : null, pct, oneColor, resets: w.resets };
+    if ($m._roll) {
+      if ($m._roll.to.resets === w.resets) { $m._roll.to = geo; $m._geo = geo; return; }
+      $m._roll.stop(); // another week came in: it's drawn as it is
+    }
+    const was = $m._geo;
+    $m._geo = geo;
+    const rolled = !!(was?.resets && w.resets && w.resets - was.resets > 36e5);
+    const still = matchMedia("(prefers-reduced-motion: reduce)").matches;
+    if (rolled && !still && rollWeek($m, was, geo)) return;
+    const lighting = !$m._lit && !still; // the first time, they fill in turn
     if (lighting) {
       $m._lit = true;
       $m._intro = true;
@@ -2998,7 +3151,7 @@
     // The compact view's strip: the figure, the seven days, how it's going.
     const $s = document.querySelector("#week .wstrip");
     if ($s) {
-      const shtml = `<span class="ws-fig">${pct}<small>%</small></span><span class="ws-days" aria-hidden="true">${strip.join("")}</span><span class="ws-say">${p.say ? `<span class="ws-pace">${p.say}</span>` : ""}${fc ? `<span class="ws-out">Out ${outWords(fc.at)}</span>` : w.resets ? `<span>Resets ${resetWords(w.resets)}</span>` : ""}</span>`;
+      const shtml = `<span class="ws-fig"><span class="ws-n">${pct}</span><small>%</small></span><span class="ws-days" aria-hidden="true">${strip.join("")}</span><span class="ws-say">${p.say ? `<span class="ws-pace">${p.say}</span>` : ""}${fc ? `<span class="ws-out">Out ${outWords(fc.at)}</span>` : w.resets ? `<span>Resets ${resetWords(w.resets)}</span>` : ""}</span>`;
       $s.hidden = false;
       $s.className = `wstrip ${p.key}`;
       $s.setAttribute("aria-valuenow", String(pct));
@@ -3013,6 +3166,8 @@
       if ($s) $m._sizes.observe($s);
     }
     snapWeek();
+    if ($m._landing) { landWeek($m._landing); $m._landing = null; }
+    else if (rolled && still) for (const el of document.querySelectorAll("#week :is(.m-week, .m-pct, .ws-days, .ws-fig)")) el.animate([{ opacity: 0.35 }, { opacity: 1 }], { duration: 240, easing: "linear" });
     if (ucardFor) showUsageCard(ucardFor); // open: it follows the new numbers
     renderUsage();
   }
@@ -3095,10 +3250,10 @@
     const list = state.sessions;
     const { needs, working } = headCounts(state);
     const agents = list.reduce((k, s) => k + (s.agentCount || 0), 0);
-    // Each count is a button: hover or focus shows what's behind it.
+    // Each count is a menu button: a click shows what's behind it.
     // The number and its words are apart, so a tight header can keep just the number.
     const count = (kind, icon, n, words, cls) =>
-      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-label="${n} ${words}" title="${n} ${words}">${icon}<span>${n}<span class="word"> ${words}</span></span>${ICON.chev}</span>`;
+      `<span class="tag ${cls}" data-pop="${kind}" tabindex="0" role="button" aria-haspopup="true" aria-expanded="false" aria-label="${n} ${words}">${icon}<span>${n}<span class="word"> ${words}</span></span>${ICON.chev}</span>`;
     const counts = [
       needs ? count("needs", PDOT, needs, needs === 1 ? "needs you" : "need you", "s-waiting") : "",
       working ? count("working", '<span class="sdot" aria-hidden="true"></span>', working, "working", "low working") : "", // neutral and still: only what needs you moves
@@ -3125,10 +3280,6 @@
   const $pop = document.getElementById("pop");
   let popKind = null; // which count's card is open
   let popAnchor = null;
-  let popShowTimer;
-  let popHideTimer;
-  const POP_DELAY = 250; // a pause before the first card, so passing over the header opens nothing
-  const POP_GRACE = 150; // time to move from a count into its card
   const POP_MAX = 8;
   $pop.addEventListener("scroll", () => fades($pop), { passive: true });
 
@@ -3137,11 +3288,12 @@
 
   function popRow(s, text, meta) {
     return `<button type="button" class="prow s-${s.status}" data-sid="${esc(s.sid)}" title="Show its card">
-      <span class="pi">${still(statusIcon(s))}</span><span class="pt">${esc(s.title)}</span><span class="pm">${esc(meta)}</span>
+      <span class="pi">${cardIcon(s)}</span><span class="pt">${esc(s.title)}</span><span class="pm">${esc(meta)}</span>
       <span class="ps">${esc(text)}</span></button>`;
   }
   const popHead = (icon, text) => `<div class="pop-head">${still(icon)}<span>${esc(text)}</span></div>`;
   const popMore = (n) => (n > 0 ? `<div class="pop-more">and ${n} more</div>` : "");
+  const popAll = (kind, n) => (n > 1 ? `<div class="pop-foot"><button type="button" class="prow" data-all="${kind}"><span class="pi">${ICON.arrowDown}</span><span class="pt">Show these ${n} cards</span></button></div>` : "");
 
   function doing(s) {
     if (s.background) {
@@ -3163,14 +3315,14 @@
     if (kind === "needs") {
       const items = withBlocked(list).filter(needsYou);
       const what = (s) => (s.status === "waiting" ? s.wait || "Waiting for your answer" : s.status === "asks" ? s.ask || "It asked you something" : s.error || "The turn ended with an error");
-      return popHead(ICON.alert, items.length === 1 ? "1 needs you" : `${items.length} need you`) +
-        items.slice(0, POP_MAX).map((s) => popRow(s, what(s), s.kind === "task" || s.status === "error" ? ago(s.since) : span2(s.since || s.last))).join("") + popMore(items.length - POP_MAX);
+      return popHead(PDOT, items.length === 1 ? "1 needs you" : `${items.length} need you`) +
+        items.slice(0, POP_MAX).map((s) => popRow(s, what(s), s.kind === "task" || s.status === "error" ? ago(s.since) : span2(s.since || s.last))).join("") + popMore(items.length - POP_MAX) + popAll("needs", items.length);
     }
     if (kind === "working") {
       const items = list.filter((s) => s.status === "working");
-      return popHead(ICON.spinner, `${items.length} working`) +
+      return popHead(CALM, `${items.length} working`) +
         items.slice(0, POP_MAX).map((s) => popRow(s, doing(s), s.plan?.current && !s.background ? `Step ${s.plan.index} of ${s.plan.total}` : ago(s.last))).join("") +
-        popMore(items.length - POP_MAX);
+        popMore(items.length - POP_MAX) + popAll("working", items.length);
     }
     if (kind === "agents") {
       const total = list.reduce((k, s) => k + (s.agentCount || 0), 0);
@@ -3178,14 +3330,14 @@
       const rows = pairs.slice(0, POP_MAX).map(({ s, a }) => {
         const doing = a.tool ? act(a.tool, a.detail) : "Thinking…";
         return `<button type="button" class="prow s-working" data-sid="${esc(s.sid)}" title="Show the card of ${esc(s.title)}">
-          <span class="pi">${still(ICON.bot)}</span><span class="pt">${esc(a.label || "Agent")}</span><span class="pm">${a.tokens ? `${kTokens(a.tokens)} tokens` : ""}</span>
+          <span class="pi">${ICON.bot}</span><span class="pt">${esc(a.label || "Agent")}</span><span class="pm">${a.tokens ? `${kTokens(a.tokens)} tokens` : ""}</span>
           <span class="ps">${esc(s.title)} · ${esc(doing)}</span></button>`;
       }).join("");
-      return popHead(ICON.agents, plural(total, "agent", "agents")) + rows + popMore(total - Math.min(pairs.length, POP_MAX));
+      return popHead(ICON.agents, plural(total, "agent", "agents")) + rows + popMore(total - Math.min(pairs.length, POP_MAX)) + popAll("agents", list.filter((s) => (s.agentCount || 0) > 0).length);
     }
     // In the last 7 days: how many in each state, most urgent first.
     const order = ["Needs you", "Error", "Asked you", "Working", "Agents working", "In the background", "Done", "Idle", "Closed"];
-    const color = { "Needs you": "var(--color-warning)", Error: "var(--color-error)", "Asked you": "var(--color-warning-muted)",
+    const color = { "Needs you": "var(--color-needs)", Error: "var(--color-error)", "Asked you": "var(--color-warning-muted)",
       Working: "var(--color-mark-working)", "Agents working": "var(--color-text-working)", "In the background": "var(--color-text-working)", Done: "var(--color-success)" };
     const by = new Map();
     for (const s of list) by.set(label(s), (by.get(label(s)) || 0) + 1);
@@ -3199,7 +3351,7 @@
 
   function fillPop() {
     const html = popHtml(popKind);
-    if ($pop._html !== html) { $pop.innerHTML = FADES + html + FADES_END; $pop._html = html; }
+    if ($pop._html !== html) { $pop.innerHTML = FADES + html + FADES_END; $pop._html = html; syncIcons($pop); } // its marks in step with the cards'
     fades($pop);
   }
 
@@ -3208,27 +3360,42 @@
     if (!popAnchor) return;
     const r = popAnchor.getBoundingClientRect();
     const w = $pop.offsetWidth;
-    $pop.style.left = `${Math.max(8, Math.min(r.left, innerWidth - w - 8))}px`;
-    $pop.style.top = `${r.bottom + 6}px`;
+    const left = Math.round(Math.max(8, Math.min(r.left, innerWidth - w - 8))); // whole pixels: its marks stay sharp
+    $pop.style.left = `${left}px`;
+    $pop.style.top = `${Math.round(r.bottom + 6)}px`;
+    $pop.style.setProperty("--ox", `${Math.round(r.left + r.width / 2 - left)}px`); // it grows out of its count
+    $pop.style.maxHeight = `${Math.max(120, Math.min(420, innerHeight - r.bottom - 6 - 8))}px`;
+    fades($pop); // its height changed: the fades follow
   }
 
+  let popKeys = false; // opened from the keyboard: no motion
+  let popEnterTimer;
   function showPop(anchor) {
     if (dict) return; // one popover at a time: a composer you're dictating in stays
-    clearTimeout(popShowTimer);
-    clearTimeout(popHideTimer);
+    const fresh = !$pop.classList.contains("open");
     if (popAnchor && popAnchor !== anchor) popAnchor.setAttribute("aria-expanded", "false");
     popKind = anchor.dataset.pop;
     popAnchor = anchor;
     anchor.setAttribute("aria-expanded", "true");
     fillPop();
     placePop();
+    if (fresh && popKeys) {
+      $pop.classList.add("instant");
+      requestAnimationFrame(() => requestAnimationFrame(() => $pop.classList.remove("instant")));
+    } else if (fresh) {
+      [...$pop.querySelectorAll(".prow")].forEach((r, i) => r.style.setProperty("--i", String(Math.min(i, 5))));
+      $pop.classList.add("enter");
+      clearTimeout(popEnterTimer);
+      popEnterTimer = setTimeout(() => $pop.classList.remove("enter"), 600);
+    }
+    popKeys = false;
+    const word = anchor.querySelector(".word"); // a head only where the count is a bare number
+    $pop.classList.toggle("labeled", !word || getComputedStyle(word).display === "none");
     $pop.classList.add("open");
     reportChrome();
   }
 
   function hidePop() {
-    clearTimeout(popShowTimer);
-    clearTimeout(popHideTimer);
     popAnchor?.setAttribute("aria-expanded", "false");
     popKind = null;
     popAnchor = null;
@@ -3236,32 +3403,16 @@
     reportChrome();
   }
 
+  // Each count is a menu, as in a menu bar: a click opens it and closes it, and while one is
+  // open, pointing at the next count opens that one at once. A click outside or Escape closes it.
   const toCountOrPop = (el) => el && ($pop.contains(el) || el.closest?.("#counts [data-pop]"));
-  function leavePop(e) {
-    if (toCountOrPop(e.relatedTarget)) return;
-    clearTimeout(popShowTimer);
-    clearTimeout(popHideTimer);
-    popHideTimer = setTimeout(hidePop, POP_GRACE);
-  }
   $counts.addEventListener("pointerover", (e) => {
     const t = e.target.closest("[data-pop]");
-    if (!t) return;
-    clearTimeout(popHideTimer);
-    if (popAnchor === t) return;
-    clearTimeout(popShowTimer);
-    popShowTimer = setTimeout(() => showPop(t), popKind ? 0 : POP_DELAY); // from one count to the next, at once
+    if (!t || popAnchor === t || !popKind) return;
+    showPop(t);
   });
-  $counts.addEventListener("pointerout", (e) => { if (e.target.closest("[data-pop]")) leavePop(e); });
-  $pop.addEventListener("pointerenter", () => clearTimeout(popHideTimer));
-  $pop.addEventListener("pointerleave", leavePop);
-  let popQuietFocus = false; // focus coming back after Escape doesn't reopen the card
-  $counts.addEventListener("focusin", (e) => {
-    const t = e.target.closest("[data-pop]");
-    if (t && !popQuietFocus) showPop(t);
-    popQuietFocus = false;
-  });
-  // A click goes to those cards: back to Last 7 Days if needed, up (or down) to the
-  // first of them, and a ring on each for a moment. The details stay on hover.
+  // A menu's first row (or a row of its own) goes to those cards: back to Last 7 Days if
+  // needed, up (or down) to the first of them, and a ring on each for a moment.
   const FOR_COUNT = {
     needs: (s) => needsYou(s),
     working: (s) => s.status === "working",
@@ -3303,25 +3454,28 @@
     if (view !== "week") setView("week");
     $content.scrollTo({ top: 0, behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
   }
-  $counts.addEventListener("click", (e) => { const t = e.target.closest("[data-pop]"); if (t) goToCount(t.dataset.pop); });
+  $counts.addEventListener("click", (e) => { const t = e.target.closest("[data-pop]"); if (!t) return; if (popAnchor === t) hidePop(); else showPop(t); });
   document.addEventListener("pointerdown", (e) => { if (popKind && !toCountOrPop(e.target)) hidePop(); });
   $counts.addEventListener("keydown", (e) => {
     const t = e.target.closest("[data-pop]");
     if (!t) return;
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
-      goToCount(t.dataset.pop); // the same as a click
+      if (popAnchor === t) return hidePop(); // the same as a click
+      popKeys = true;
+      showPop(t);
+      $pop.querySelector(".prow[data-all], .prow[data-sid], .prow[data-state], .prow[data-go]")?.focus();
     } else if (e.key === "ArrowDown") {
       // Down arrow steps into the card's rows; up and down move between them.
       e.preventDefault();
-      if (popAnchor !== t) showPop(t);
-      $pop.querySelector(".prow[data-sid], .prow[data-state], .prow[data-go]")?.focus();
+      if (popAnchor !== t) { popKeys = true; showPop(t); }
+      $pop.querySelector(".prow[data-all], .prow[data-sid], .prow[data-state], .prow[data-go]")?.focus();
     }
   });
   $pop.addEventListener("keydown", (e) => {
     if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
     e.preventDefault();
-    const rows = [...$pop.querySelectorAll(".prow[data-sid], .prow[data-state], .prow[data-go]")];
+    const rows = [...$pop.querySelectorAll(".prow[data-all], .prow[data-sid], .prow[data-state], .prow[data-go]")];
     const i = rows.indexOf(document.activeElement);
     if (e.key === "ArrowUp" && i <= 0) return popAnchor?.focus();
     rows[Math.max(0, Math.min(rows.length - 1, i + (e.key === "ArrowDown" ? 1 : -1)))]?.focus();
@@ -3331,10 +3485,12 @@
     if (e.key !== "Escape" || !popKind) return;
     const back = popAnchor;
     hidePop();
-    if (back && document.activeElement !== back) { popQuietFocus = true; back.focus({ preventScroll: true }); }
+    if (back && document.activeElement !== back) back.focus({ preventScroll: true });
   });
-  addEventListener("resize", () => { if (popKind) placePop(); placeDict(); });
+  addEventListener("resize", () => { if (popKind) placePop(); placeDict(true); });
   $pop.addEventListener("click", (e) => {
+    const all = e.target.closest("[data-all]");
+    if (all) return goToCount(all.dataset.all);
     const go = e.target.closest("[data-go]");
     if (go) { hidePop(); return setView(go.dataset.go); }
     // A row goes to its card (or a state to its cards); the card itself opens the session.
@@ -3479,6 +3635,7 @@
 
   function receive(next) {
     const first = !ready;
+    if (!KEY) for (const s of next.sessions) { s.canAnswer = false; s.canSay = false; delete s.permit; } // no key: it only looks
     const changed = [];
     for (const s of [...next.sessions, ...blockedCards(next)]) {
       const key = alertKey(s);

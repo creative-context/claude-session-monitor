@@ -24,7 +24,7 @@ bun test/demo.ts --hot   # the same, with a week running hot (--limit: a week us
 sh app/build.sh --release  # the universal app, zipped for a release
 ```
 
-The pictures in the README and the guide are drawn by scripts, in a window that never shows on screen and with the page's clock in UTC: `docs/screenshot.swift` (the command is at its top) and `docs/demo-gif.swift`, which starts its own demo.
+The pictures in the README and the guide are drawn by scripts, in a window that never shows on screen and with the page's clock in UTC: `docs/screenshot.swift` and `docs/card-anatomy.swift` (the commands are at their tops; the second lays out its three cards with `docs/card-anatomy.js`, on `bun test/demo.ts --anatomy`), and `docs/demo-gif.swift`, which starts its own demo.
 
 None of them reads your sessions or the Claude app's files. The app runs its own copy of the server, so rebuild it after changing `server.ts`, `src/`, `closing.ts`, `cron.ts` or `public/`.
 

@@ -19,6 +19,7 @@
 //   swift docs/demo-gif.swift docs/demo.gif --dictate   (the README's)
 //   swift docs/demo-gif.swift docs/demo.gif             (an answer from a button)
 import AppKit
+import CryptoKit
 import WebKit
 
 let args = CommandLine.arguments
@@ -53,12 +54,18 @@ let wordEvery = 0.24 // seconds between one word or two and the next
 let frames = FileManager.default.temporaryDirectory.appendingPathComponent("csm-gif-\(getpid())")
 try? FileManager.default.createDirectory(at: frames, withIntermediateDirectories: true)
 
+// The app's page key: made up, and the same as DEMO_PAGE_KEY in test/keys.ts.
+let pageKeyText = "d3a0c4e81f5b2976a4d8e0c3b71f5a29c6e84d0b3f7a15e92c8b6d4f0a3e7c15"
+
 // The demo, in UTC, with its story waiting for a line on stdin.
 let demo = Process()
 demo.executableURL = URL(fileURLWithPath: "/usr/bin/env")
 demo.arguments = ["bun", "test/demo.ts", "--gif", String(port)]
 demo.currentDirectoryURL = root
-demo.environment = ProcessInfo.processInfo.environment.merging(dictate ? ["TZ": "UTC", "CSM_DEMO_TURN_MS": turnMs] : ["TZ": "UTC"]) { _, new in new }
+// The server takes the hash of the page key, as the app gives it; the page key is set below.
+let pageKeyHash = SHA256.hash(data: Data(pageKeyText.utf8)).map { String(format: "%02x", $0) }.joined()
+demo.environment = ProcessInfo.processInfo.environment.merging(
+  (dictate ? ["TZ": "UTC", "CSM_DEMO_TURN_MS": turnMs] : ["TZ": "UTC"]).merging(["CSM_PAGE_KEY_SHA256": pageKeyHash]) { _, new in new }) { _, new in new }
 let cue = Pipe()
 demo.standardInput = cue
 demo.standardOutput = FileHandle.nullDevice
@@ -156,7 +163,14 @@ let pointer = """
     };
   })();
   """
+// The app's page key, as the app puts it in its page (a read-only window.__csmKey, there from the
+// start): without it the page only looks, and its answers and permissions would be drawn as plain
+// ones. Made up, and the same as DEMO_PAGE_KEY in test/keys.ts, whose hash the demo takes by default.
+let pageKey = pageKeyText
+let keyScript = WKUserScript(source: "Object.defineProperty(window, \"__csmKey\", { value: \"\(pageKey)\", writable: false });",
+                             injectionTime: .atDocumentStart, forMainFrameOnly: true)
 let config = WKWebViewConfiguration()
+config.userContentController.addUserScript(keyScript)
 config.userContentController.addUserScript(utc)
 config.userContentController.add(dictation, name: "dictate")
 let web = WKWebView(frame: window.contentLayoutRect, configuration: config)

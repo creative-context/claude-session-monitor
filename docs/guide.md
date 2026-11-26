@@ -4,22 +4,13 @@ Everything Claude Session Monitor shows, and the optional pieces.
 
 ![The monitor with demo data: an Active zone of cards with sessions that need you, one asking permission to run a command with Allow and Deny, one with a mic for a spoken answer whose model, effort, ultracode and advisor show as tags, a scheduled task that can't run, an error, one working and one whose agents are working, and at the right the week's usage running hot, with its card open: it runs out tomorrow, almost two days before the reset, and the week's curve climbs above the even-week diagonal](screenshot.png)
 
-## What it does differently
-
-- **What needs you comes first.** A session blocked on a permission or a question, one whose turn ended asking you something, and one that stopped on an error get the strongest colors and the top of the screen, and so does a scheduled task the Claude app can't start. The same count shows in the window, on the Dock icon and in the menu bar, whose menu lists them with why each one needs you; pick one to open it.
-- **It reads how a turn ended.** A closing question, a request without a question mark ("let me know which one"), an API error, and a turn the Claude app itself marks as needing you each count as needing you. Courtesy closings don't: "anything else?", or an open offer like "if you want another change, let me know".
-- **It sees the work behind a session.** The tool it's using and on what, the step of its plan, and its subagents and workflows with their phase and tokens.
-- **Scheduled tasks too.** When each task runs next, how its last run went, and which runs never happened. A session that set itself a reminder or set up a task says so on its card.
-- **A real Mac app.** A standard window with the usual menus, Settings, a right-click menu, keyboard navigation and VoiceOver labels. Calm motion, with Reduce Motion respected.
-- **It never slows Claude down.** The hook writes one short line and exits, never with an error, so it can't block or break a session.
-
 ## Install in detail
 
 **Requirements:** macOS 14 or later on Apple silicon or Intel, Claude Code signed in with a Claude plan that includes it (Pro, Max, Team or Enterprise), [Bun](https://bun.sh) and `jq`. macOS 15 and later ship `jq`. On macOS 14, `brew install jq`.
 
-**Status:** 0.x. It reads files Claude Code and the Claude app keep but don't document, so a future version of either can take some detail away.
+**Status:** 0.x. It reads files that Claude Code and the Claude app keep but don't document, so a new version of either can take a detail away.
 
-1. If you don't have Claude Code yet, install it in Terminal with its installer, or with Homebrew:
+1. If you don't have Claude Code yet, install it in Terminal with its installer or with Homebrew:
 
    ```bash
    curl -fsSL https://claude.ai/install.sh | bash
@@ -29,18 +20,16 @@ Everything Claude Session Monitor shows, and the optional pieces.
    brew install --cask claude-code
    ```
 
-   Then run `claude` once and sign in with your Claude account in the browser it opens. [Claude Code's setup page](https://code.claude.com/docs/en/setup) has the other ways to install it. The app finds `claude` where these installers put it (`~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin`, `/usr/local/bin`), even when you open the app from Finder, and starts it only to read your [weekly usage](#weekly-usage).
+   Then run `claude` once and sign in with your Claude account in the browser. [Claude Code's setup page](https://code.claude.com/docs/en/setup) has the other ways to install it. The app finds `claude` where these installers put it (`~/.local/bin`, `~/.claude/local`, `/opt/homebrew/bin`, `/usr/local/bin`), even when you open it from Finder.
 2. Download the zip from the [latest release](https://github.com/creative-context/claude-session-monitor/releases/latest), unzip it and move the app to Applications.
-3. Open it. The app isn't notarized, so the first time macOS says it can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**. Or run:
+3. Open it. The app isn't notarized, so the first time macOS can't check it. Open **System Settings › Privacy & Security** and click **Open Anyway**, or run:
 
    ```bash
    xattr -dr com.apple.quarantine "/Applications/Claude Session Monitor.app"
    ```
-4. The app asks to connect Claude Code. **Install Hook** adds the hook to `~/.claude/settings.json`, and a status line for your weekly usage if you have none. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
+4. Click **Install Hook** when the app asks. It adds the hook to `~/.claude/settings.json`, and a status line for your [weekly usage](#weekly-usage) if you have none. It saves a copy of the file first and changes nothing else. You can install or remove it later in Settings (⌘,).
 
-Sessions show up as soon as they do something. Open at Login is off until you turn it on in Settings.
-
-The app tells you when a newer version is out, with a notification and a notice in the window, and **Check for Updates…** in its menu looks right away. To update, download the new version and put it in Applications in place of the old one.
+Sessions show up as soon as they do something. Open at Login stays off until you turn it on in Settings. When a new version is out, the app tells you with a notification and a notice in the window, and **Check for Updates…** looks right away. To update, put the new version in Applications in place of the old one.
 
 ## Uninstall in detail
 
@@ -58,88 +47,102 @@ claude plugin uninstall session-monitor@claude-session-monitor
 
 ## The views
 
-- **Last 7 Days** (⌘1). **Active** comes as cards: what needs you, what's working, anything touched in the last two hours (pick 4, 8, 12 or 24 in its header) and anything set to pick up again on its own, most urgent first. Under it, the rest of today, yesterday and earlier come as rows, and a long day splits into two columns in a wide window. After 7 days a session leaves this view on its own. While the pointer is on a card or a row, nothing changes place, so what you're about to click stays put; once it leaves, the list glides into its new order.
-- **All Sessions** (⌘2). Every session ever, grouped by day and searchable by title, first prompt, project or last recap. The ones still going keep their color and update as they change. A long day splits into two columns in a wide window, as in Last 7 Days. On first run it fills in from the sessions the Claude app already has.
-- **Scheduled** (⌘3). The tasks you scheduled in the Claude app: when each one runs, when it runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. One the Claude app tried to start and couldn't says Can't run, in red, with why, usually that its last run is still open. It shows in Active too and counts as needing you, and a click opens the run that holds it up. A one-time task moves to Ran once after it runs. Its runs show up in the other views too, with a calendar clock by their time.
+- **Last 7 Days** (⌘1). **Active** shows cards, most urgent first: what needs you, what's working, anything touched in the last two hours (pick 4, 8, 12 or 24 in its header) and anything set to pick up again on its own. Under it, the rest of the week comes as rows by day. While the pointer is on a card or a row, nothing moves.
+- **All Sessions** (⌘2). Every session by day, searchable by title, first prompt, project or last recap; accents and capitals don't matter. On first run it fills in from the sessions the Claude app already has.
+- **Scheduled** (⌘3). Your scheduled tasks from the Claude app, with when each one runs next, how its last run went and a dot for each of its last seven runs. A task that should have run and didn't says Missed. One the Claude app couldn't start says Can't run, in red, with why. It shows in Active too and counts as needing you, and a click opens the run that holds it up. A one-time task moves to Ran once after it runs. A task's runs show in the other views with a calendar clock by their time.
 
-To keep a session at hand, pin it: point at its card or its row and click the pin at the end of its top line, by the time (or Return on the pin from the keyboard; in the app, Pin in the card's right-click menu). Every card shows its pin faintly, and pointing at the card brings it up. A pinned session shows its pin filled and moves up in its group, right after what needs you, and the pin stays when it moves to another day or out of the last 7 days. Click it again to unpin. The pins are kept with your sessions, so they're still there after a restart.
+**Pins.** Click the pin at the end of a card's or a row's top line to pin a session (in the app, Pin is also in the right-click menu). A pinned session moves up in its group, right after what needs you, and keeps its pin after a restart. Click it again to unpin.
 
-**Pinned**, before the view tabs (in the app, in the toolbar), shows only the pinned sessions in Last 7 Days and All Sessions, with how many there are; searching with it on searches only them. Active keeps the week's usage beside it, and says so when none of your pinned sessions is there. Scheduled lists tasks, not sessions, so it's the same with Pinned on or off. The counts in the header, the Dock and the menu bar always count every session. A browser remembers whether Pinned was on. In the app's narrowest window, where the toolbar steps aside, Pinned goes off so nothing that needs you is hidden, and comes back on when the window widens.
+**Pinned**, before the view tabs, shows only the pinned sessions in Last 7 Days and All Sessions, and search looks only through them. In the app it's in the toolbar, and it turns off in the narrowest window. The counts in the header, the Dock and the menu bar still count every session.
 
-**Most active**, right after Pinned, shows only the 10 sessions Claude spent the most time working in over the last 7 days (today and the six days before it), most first in each group, each with its time beside its state, such as 3h 20m; a session working right now adds up as it goes. The time counts only while a session's own turn is working: waiting on a permission or a question doesn't count, and neither do subagents or background commands still running after its turn ended. Last 7 Days and All Sessions keep their usual look, and Scheduled isn't filtered. Turning one filter on turns the other off. Until a session has worked, Most active says nothing is counted yet. A browser remembers whether it was on. The first time it starts, the app fills in the time from the turns already in its event log, so the last few days count too.
+**Most active** shows only the 10 sessions Claude spent the most time working in over the last 7 days, each with its time, such as 3h 20m. Only a session's own turn counts, not the time it waits on you or its subagents and background commands. Turning on one filter turns off the other. The first time, the app fills in the time from its event log.
 
-A session that set itself a reminder, with `/loop`, a cron job or a wakeup, shows when it picks up again by an alarm clock, until its time comes or the session closes. One that set up a scheduled task shows the task's name; click it to see the task in Scheduled.
+**Reminders, tasks and side sessions.** A session that set itself a reminder (`/loop`, a cron job or a wakeup) shows by an alarm clock when it picks up again. One that set up a scheduled task shows the task's name, and a click shows it in Scheduled. A side session, one the Claude app started from another, says where it came from, and the other one says how many it started. Point at either one and the rest of the window steps back, and click the tag to open the other session. Sessions started with `claude` in a terminal don't have side sessions.
 
-A side session, one the Claude app started from another session, says which one it came from on its card, and that session says how many side sessions it started. Point at either one and its family stays in focus while everything else steps back, wherever they are on screen, and click the tag to open it. In a full footer the name shortens; the whole name is in the tag's tip and in what VoiceOver reads. Only the Claude app records this, so sessions you start with `claude` in a terminal never show it.
+## A card's parts
+
+![Three demo cards with each part named. One needs you, with its state, model, effort, ultracode and advisor tags, time, pin, title, question, answers and mic, and the mic's drawer open under it. One is working, with the tool it's using, its plan step and its plan progress. One is done, with its folder, side sessions and a scheduled task it created](card-anatomy.png)
+
+A card has the same parts in every state, and shows only some of them at a time.
+
+- **Top line.** The state, the model and its tags (see [States](#states)), the time and the pin. The time is how long it has been waiting or working, or how long ago it finished.
+- **Title and two lines.** The question it's asking you, the tool it's using and the step of its plan, or a recap of its last turn.
+- **Foot.** The project folder, side sessions, agents, and a reminder or a task it created. A plan in progress shows its progress bar there instead. A question shows its answers, and in the app a mic that opens a drawer to [dictate your own answer](#dictating-an-answer).
 
 ## Weekly usage
 
- At the right of Active, a narrow column, which stays in sight while you scroll through Active's cards, shows how much of your plan's weekly limit you've used: the figure, then the week as seven blocks from the reset, bottom up, filled up to what you've used, with an indigo line for now, where an even week would be. Under it, how that compares: Plenty left, On pace, A little fast, Running hot, Almost at the limit or, at 100%, Limit reached, and the day it resets. On plans with a 5-hour limit, a last line shows how much of the current 5 hours you've used. The column spans Active's first two rows of cards, from their top edge to the second row's bottom edge, and the week's blocks take the room in between. Only the part ahead of the blue line takes a color, orange when you run hot, and the whole fill turns red at 90%. In its card, the date of "Runs out" carries the color, orange, or red when the week is used up. Ahead of pace, once a day of the week has gone by (sooner near the limit), the reset gives way to when you'd run out at the week's average pace, to the hour, if that comes before the reset: "Out Wed 1 PM". Pointing at the column, or reaching it with the keyboard, opens a card with that forecast, the week as a curve against the blue diagonal of an even week (today has its band and a dot at now, and a dashed line goes on at the same pace to where it ends, with a dotted line down to the day it reaches 100% when that comes before the reset), how much you have left beyond an even pace (Extra left) or how far past it you are (Over pace), your pace a day once the first day has gone by, the most a day that lasts until the reset, the last 5 hours on plans that have that limit, and when it resets. The curve comes from the readings the app keeps through the week. In a narrow window and in the other views, a small version sits in the header instead. Claude Code only hands these numbers to a status line, and the Claude app doesn't run one, so the hook installer adds a small status line to `~/.claude/settings.json` (only when you have none), and, when the numbers are more than a few minutes old and you've used Claude Code since, at most every 10 minutes the app opens Claude Code in a hidden terminal for a few seconds, in its own empty folder and without your settings, so it runs that status line. Nothing is sent to Claude and no session is saved. Allow that folder once, from a terminal:
+At the right of Active, a narrow column shows how much of your plan's weekly limit you've used. Under the figure, the week shows as seven blocks from the reset, filled up to what you've used, with an indigo line where an even week would be now. Under that, how you compare (Plenty left, On pace, A little fast, Running hot, Almost at the limit or Limit reached) and the day it resets. On plans with a 5-hour limit, a last line shows the current 5 hours. The fill turns orange when you run hot and red at 90%. Once you're ahead of pace, the reset gives way to when you'd run out at the week's average pace, such as "Out Wed 1 PM". At the reset the column stays: the old week drains to the new one's 0% as one level, and it starts again from the bottom.
+
+Point at the column, click it, or reach it with the keyboard, to open its card. It has the forecast, the week as a curve against an even week, how much you have left beyond an even pace or how far past it you are, your pace per day, the most per day that lasts until the reset, and the last 5 hours. In a narrow window and in the other views, a small version sits in the header.
+
+Claude Code hands these numbers only to a status line, and the Claude app doesn't run one. So the hook installer adds a small status line to `~/.claude/settings.json` (only when you have none). When the numbers are old and you've used Claude Code since, the app opens Claude Code in a hidden terminal for a few seconds, at most every 10 minutes. It runs in its own empty folder, without your settings. Nothing is sent to Claude and no session is saved. Allow that folder once, from a terminal:
 
 ```bash
 mkdir -p ~/.claude-session-monitor/probe && cd ~/.claude-session-monitor/probe && claude --setting-sources project --strict-mcp-config
 ```
 
-Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal. With the [plugin](#the-plugin), none of this is needed: every session hands the app its numbers, and the hidden check doesn't run while they're fresh.
+Choose **Yes, I trust this folder**, then quit with Ctrl-C. Until then, the meter updates only when you use `claude` in a terminal. With the [plugin](#the-plugin), every session hands the app its numbers and none of this is needed.
 
-**Card size.** Cards are the same size in every window (134 px tall), with titles at 13.5 points on one line, so a tall window shows more of them instead of bigger ones.
+## The window
 
-**The list's edge.** Under the top of the list, a card is cut at the edge with its rounded corners and fades as it goes, gone by about 70% under; a group's heading only fades. At the bottom the list is cut plain.
+**Card size.** Cards are the same size in every window, 134 px tall with the title on one line. A tall window shows more of them.
 
-**View tabs and search.** In a browser they sit in the header row, before the status; in a narrow window the tabs keep only their icons and the counts only the first ones. In the app, the window's toolbar holds them.
+**View tabs and search.** In a browser they sit in the header, and in the app the window's toolbar holds them.
 
-**Compact view.** In a window narrower than 640 points, as on a laptop screen on its own, Active turns into rows: a dot in the state's color, the title and time, the question or what the session is doing, its folder and relations on one line, and the plan's bar, on the same backgrounds as the cards. The weekly usage becomes one line above it, and the view switch keeps only its icons. Under 300 points it becomes a strip for the side of the screen: how many sessions need you, the week in two lines, and each session's dot, title, time and question. The window goes down to 171 points wide at 100% zoom, and proportionally more when the page is zoomed in.
+**Compact view.** In a window narrower than 640 points, as on a laptop screen on its own, Active turns into rows with the same colors, and the weekly usage becomes one line above them. Under 300 points it becomes a strip for the side of the screen, with how many sessions need you, the week, and each session's dot, title, time and question.
 
-Hover a count in the header (needs you, working, agents, last 7 days) to see what's behind it, and click the count or one of its rows to jump to those cards. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
+Click a count in the header (needs you, working, agents, last 7 days) to open its menu with what's behind it; while one is open, point at the next count to see that one. Click Show these cards, or one of its rows, to jump to those cards; click outside or press Escape to close it. Click a card or a row of All Sessions to open that session in the Claude app, or a task's last run. Right-click to copy its title or show its project or task file in Finder. Arrow keys move between cards, and an optional sound tells you when something new needs you.
 
 ## States
 
-Most urgent first. A card takes its state's tint on a dark surface. What needs you is the exception: its card is bright amber with near-black words, the only light surface in the window, so it reads first. Tags at a card's top are the state's word and mark in its color, with no fill.
+Most urgent first. What needs you gets a bright amber card, the only light one in the window, and the other states tint the card. The count of what needs you also shows on the Dock icon and in the menu bar, whose menu lists each one with why it needs you. Pick one to open it.
 
-Beside its time, a card shows the session's model and effort, with UC in an outlined tag when ultracode is on, as the Claude app sets them. The effort is its initial in a small solid square: L for Low, M for Medium, H for High, X for Extra, and MAX written whole. A session with an advisor turned on (Claude Code's `/advisor`, a stronger model it asks for advice while it works) shows that model's initial in a round tag after the others, F for Fable, from the moment it's turned on, and turning it off takes the tag away. An open session keeps the advisor it had when you change `/advisor` until a `/clear` or `/compact`, so it can show O for Opus while new ones show F. A session in a terminal shows only its model. A narrow card drops the model's name, then the effort, then the advisor, and the time's tip and VoiceOver always say all of it in words, "Advised by Fable 5.2" among them. The compact view keeps them to that tip.
+The model and its tags show beside the time, as the Claude app sets them. The effort is a letter in a solid square (L for Low, M for Medium, H for High, X for Extra, MAX for Max). UC in an outline means ultracode is on. A round tag with an initial is the model of the advisor the session turned on with Claude Code's `/advisor`, such as F for Fable. A session in a terminal shows only its model. A narrow card drops the model's name first, then the effort, then the advisor, and the time's tooltip always says all of it.
 
 | State | Color | When |
 |---|---|---|
-| Needs you | Amber card, black words | Blocked mid-turn: it asks for permission, asks a question, waits for a plan approval or needs input. Or its turn ended asking you something: the app's next-step question, a question in the last two sentences of its closing message or at the end of a point in the list it ends on, a request without a question mark, or the Claude app's own summary of the turn saying you need to do something, unless the session closed with its next-step box and asked nothing in it. Questions count for a day; after that the card turns dark and its state word orange |
-| Error | Crimson tint, plain once old | An API error ended the turn, such as a server error or a usage limit. Caught with or without a `Stop` event. Errors count for a day |
+| Needs you | Amber card, black words | It's blocked on a permission, a question, a plan approval or input. Or it asked something in the Claude app's own dialog or card and you haven't answered: to take over your screen, use your apps or guide you on screen, whether to start a new session, to change a setting or a session's permissions, or to open a folder. Or its turn ended asking you something, with a closing question, a request without a question mark ("let me know which one") or the Claude app's own summary saying you need to act. Courtesy closings like "anything else?" don't count. After a day, a question no longer counts and the card turns dark |
+| Error | Crimson tint | An API error ended the turn, such as a server error or a usage limit. It counts for a day |
 | Working | Blue tint | Thinking or using a tool |
-| Agents working | Blue tint | Its own turn ended, but subagents or a workflow are still running |
-| In the background | Blue tint | Its own turn ended, but a shell command it started is still running; Claude Code wakes the session when it ends. The card shows the command's description. It counts until Claude Code says the command ended or it's stopped, for two hours at most |
-| Done | Dark green tint in Active, plain after that | Finished its turn, or you stopped it |
+| Agents working | Blue tint | Its turn ended, but subagents or a workflow are still running |
+| In the background | Blue tint | Its turn ended, but a shell command it started is still running, for two hours at most. The card shows the command |
+| Done | Green tint in Active | It finished its turn, or you stopped it |
 | Idle | None | Open, with no turn yet |
 | Closed | None | Its process is gone |
 
-A question that belongs to another session needs you there, not here: when a closing links or names the session that waits for your answer, or says a side session it's about to start will ask you ("la sesión te va a preguntar…"), this card turns Done once you answer in that session or start that side session.
-
-A card that starts needing you breathes for its first minute, then holds still. How a turn ended is read from the end of its transcript about a second after `Stop`. Errors are the lines Claude Code marks with `isApiErrorMessage`.
+When a closing names another session that waits for your answer, or says a side session it's starting will ask you, the card turns Done once you answer there. A card that starts needing you pulses for its first minute.
 
 ## Answering from the card
 
-When a session ends its turn with the Claude app's next-step question and answer buttons, its Needs you card shows the first two buttons in its footer, in place of the folder. Click one to answer without opening the session: the answer goes at once to the session as your next message, exactly the button's words, and the card turns blue and says Sent while the session starts working on it. There's no taking it back, so click the one you mean. From the click on, it no longer counts as needing you.
+When a session ends its turn with the Claude app's next-step question and answer buttons, its card shows the first two buttons in place of the folder. Click one to answer without opening the session. The button's words go at once as your next message, and the card turns blue and says Sent while the session works on it. You can't take it back. On a focused card, ⌘↩ answers with the first button.
 
-This needs the [plugin](#the-plugin) in that session. Without it, and for a button only the Claude app can do (Commit, Create PR, Merge and the like), the button carries ↗ and opens the session, as a click on the card does. If no session takes the answer within 20 seconds of your click, or one takes it but its message doesn't reach the session within 30 seconds after that, the card says it couldn't send it and needs you again. On a focused card, ⌘↩ answers with the first button.
+This needs the [plugin](#the-plugin) in that session, and the app's window: the page in a browser only shows the cards, and its buttons open the session. Without the plugin, and for buttons only the Claude app can do (Commit, Create PR, Merge and the like), the button carries ↗ and opens the session. If no session takes the answer within 20 seconds, or its message doesn't arrive within 30 seconds after that, the card says it couldn't send it and needs you again.
 
 ### Allowing or denying a permission
 
-When a session waits on a permission, its Needs you card shows what it's for under the wait text, on one line: the command, the file, the address or the search, cut to the card's width, with the whole text in a tooltip. In the footer, in place of the folder, are **Allow** and **Deny**. Click one and the session runs the tool or refuses it at once, with its own dialog going away; the card says Allowing… or Denying…, then Allowed or Denied, and from the click on it no longer counts as needing you. If it can't be sent, the card says so and needs you again, and a click on it opens the session.
+When a session waits on a permission, its card shows what it's for (the command, the file, the address or the search) and **Allow** and **Deny** in place of the folder. Click one and the session runs the tool or refuses it at once, and its own dialog goes away. The card says Allowing… or Denying…, then Allowed or Denied. If it can't be sent, the card says so and needs you again.
 
-This needs the [plugin](#the-plugin) in that session, at 0.3.0 or later. Without it, the card is as before and a click opens the session. What the card shows is held in the app's memory only, never saved, and is dropped as soon as the permission is settled. If you answer in the session's own dialog instead, the card keeps Allow and Deny until the tool finishes (Claude Code doesn't tell the plugin about a dialog answer), then moves on; a click on the card in that time doesn't change what you chose in the dialog. A click on an ask that's already settled opens the session.
+This needs the [plugin](#the-plugin) in that session, 0.3.1 or later. Without it, a click opens the session. What the card shows stays in the app's memory and goes once the permission is settled. If you answer in the session's own dialog, the card keeps Allow and Deny until the tool finishes, then moves on.
 
-Limits: when several agents of one session ask at once, the card shows the oldest ask, and when the session moves on, the others fall back to their dialogs. There's no keyboard shortcut that allows: ⌘↩ on the card opens the session. A question or a plan the session shows you (not a permission) keeps its own dialog. There's no mic on a permission card.
+When several agents of one session ask at once, the card shows the oldest ask. ⌘↩ opens the session, and no shortcut allows. Questions and plans keep their own dialogs, and a permission card has no mic.
 
 ### Dictating an answer
 
-In the app, a card whose session waits on you (Done, Needs you or Error, not a permission and not working) has a mic at the end of its footer, when the [plugin](#the-plugin) is in that session. Press it and a composer opens out from under the card, a dark tray as wide as it (or from above it, when the card is near the bottom of the window); the card itself doesn't change, its color included, so its question stays in sight, and the mic stays lit. While you dictate, the cards hold their places. Speak: the words show in the composer as they come, with five bars that follow your voice and the language beside them. Press Return or Send when you're done, or end with “enviar mensaje” (“send message” in English) and pause: the composer says Sending… for a moment, and talking on or pressing Esc stops it. Only as your last words does a phrase send. Settings › Send by voice changes those words, one or more for each language, and can keep them in your answer, for words that are the answer itself; by default they don't go with it. Your words go to the session as your next message, as one line; then the composer closes and the card says Sending… and Sent, as for a button. If they can't be sent, they wait in a text box, where you can fix a word by typing and press Return or Send again. Cancel, Close or Esc drops it at any point; a click elsewhere in the window leaves it open, so a stray click doesn't lose your words. If the session moves on before you send, the composer says the words weren't sent and shows them. One card listens at a time, for 60 seconds at most. Two soft notes going up say the mic is listening, and the same two going down say it stopped and has your words; Settings › Send by voice turns them off. To play your own sounds instead, give the app their files: `defaults write com.creativecontext.ClaudeSessionMonitor dictationStartSound ~/Sounds/start.mp3`, and the same with `dictationStopSound`.
+In the app, a card that waits on you (Done, Needs you or Error, but not a permission) has a mic at the end of its footer when the [plugin](#the-plugin) is in that session. Press it and a drawer opens under the card (above it near the bottom of the window), and the cards hold their places. Speak, and your words show as they come, with the language beside them. Press Return or Send when you're done, or end with “send message” (“enviar mensaje” in Spanish) and pause. Your words go to the session as your next message, and the card says Sending…, then Sent. If they can't be sent, they wait in a text box where you can fix them and send again. If the session moves on first, the drawer says so and keeps your words. Cancel or Esc drops them, and a click elsewhere leaves the drawer open.
 
-The words are recognized on your Mac, never over the network, and nothing is kept: see [privacy](privacy.md). The first time, macOS asks to let the app use the microphone and speech recognition; if you said no, the composer says where to allow it in System Settings. It listens in your Mac's language, English (US) or Spanish (Mexico); change it in the menu bar menu. If the composer says dictation isn't ready for the language, download it in System Settings, under Keyboard, Dictation. If the microphone gives no sound for a few seconds, it stops and says so. In a browser there's no mic: only the app can listen.
+Settings › Send by voice changes the closing words for each language and can keep them in your answer. One card listens at a time, for 60 seconds at most. Two soft notes say the mic started and stopped, and the same setting turns them off. To use your own sounds, run `defaults write com.creativecontext.ClaudeSessionMonitor dictationStartSound ~/Sounds/start.mp3`, and the same with `dictationStopSound`.
+
+The words are recognized on your Mac, never over the network, and nothing is kept (see [privacy](privacy.md)). The first time, macOS asks to let the app use the microphone and speech recognition, and if you said no, the drawer says where to allow it. If the microphone gives no sound for a few seconds, it stops and says so. It listens in English (US) or Spanish (Mexico), set in the menu bar menu. If dictation isn't ready for the language, download it in System Settings › Keyboard › Dictation. In a browser there's no mic.
 
 ## The plugin
 
-A small Claude Code plugin, `session-monitor`, is the app's side inside each session. It does three things, and shows nothing and adds no command:
+A small Claude Code plugin, `session-monitor`, is the app's side inside each session. It adds no command, shows nothing and does three things:
 
-- **Usage, sooner.** Each time Claude Code measures your plan's limits, in a terminal or in the Claude app, it saves the two percentages for the app, so the weekly usage comes faster and the app never opens Claude Code in a hidden terminal.
-- **Answers from the card.** In the background, with no turn and nothing in the conversation, it asks the app's server, at `127.0.0.1` only, whether you sent an answer for this session, and when you did, it submits that answer as your next message. The server only hands it the words of a button that session offered, or the words you dictated and sent from its card, only after your click. With the app closed, it asks again every 15 seconds and does nothing else.
-- **Permissions from the card.** When a session asks for a permission, it tells the app's server (`127.0.0.1` only) what the permission is for, so the card can show it with Allow and Deny, and returns your click to the session. See [Allowing or denying a permission](#allowing-or-denying-a-permission).
+- **Usage, sooner.** Each time Claude Code measures your plan's limits, in a terminal or in the Claude app, it saves the two percentages for the app. The weekly usage comes sooner, and the app never opens Claude Code in a hidden terminal.
+- **Answers from the card.** In the background, with nothing in the conversation, it asks the app's server (at `127.0.0.1` only) whether you sent an answer for this session, and submits it as your next message. The server hands over only a button's words or the words you dictated, and only after your click. With the app closed, it asks every 15 seconds and does nothing else.
+- **Permissions from the card.** When the session asks for a permission, it tells the app's server what it's for and returns your click. See [Allowing or denying a permission](#allowing-or-denying-a-permission).
+
+It talks to the app's server with a key the server writes at each start, and believes a reply only when the server proves it knows that key (see [privacy](privacy.md)). A plugin older than the app can't answer: the card's buttons open the session, as without the plugin. Update both.
 
 In a terminal session:
 
@@ -147,9 +150,9 @@ In a terminal session:
 /plugin install session-monitor --marketplace creative-context/claude-session-monitor
 ```
 
-Answer `y` to add the marketplace and choose the user scope, so every session loads it. In the Claude app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `creative-context/claude-session-monitor`, then **Add plugin**. It's in `plugin/` in this repository. If you installed the earlier `session-usage`, uninstall it first: this plugin replaces it.
+Answer `y` to add the marketplace and choose the user scope, so every session loads it. In the Claude app, click + next to the prompt box, then **Plugins**, **Add marketplace** with `creative-context/claude-session-monitor`, then **Add plugin**. It's in `plugin/` in this repository. If you installed the earlier `session-usage`, uninstall it first, because this plugin replaces it.
 
-Sessions already open load it on their own a moment after you install or update it. If one doesn't, run `/reload-plugins` there or open a new session; until then its usage comes from the app's own check, up to 10 minutes late, and its answer buttons open the session.
+Open sessions load it on their own a moment after you install or update it. If one doesn't, run `/reload-plugins` there or open a new session. Until then, its usage comes from the app's own check, up to 10 minutes late, and its answer buttons open the session.
 
 ## Build from source
 

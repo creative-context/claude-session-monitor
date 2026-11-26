@@ -8,7 +8,7 @@ import { APP_SESSIONS, PROJECTS, WEEK_MS } from "./config.ts";
 import { type Session, type Task, tasks, taskChanged, sessions, bump, localToCli, appTitles } from "./state.ts";
 import { hydrate } from "./session.ts";
 import { closingContext } from "./turns.ts";
-import { db, rowOf } from "./db.ts";
+import { db, refreshSearch, rowOf } from "./db.ts";
 import { readTasks } from "./tasks.ts";
 
 // Where a session's transcript lives: ~/.claude/projects/<folder>/<sid>.jsonl.
@@ -358,6 +358,7 @@ export function readDesktopSessions() {
           $tp: row.$tp, $first_at: row.$first_at, $last_at: row.$last_at, $status: row.$status,
           $model: row.$model, $archived: row.$archived, $task: row.$task,
         });
+        refreshSearch(row.$sid); // History finds it by its title, without accents or capitals
       }
     })();
     for (const s of changed) appRows.set(s.sid, sigs.get(s.sid)!);

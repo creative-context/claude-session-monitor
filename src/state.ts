@@ -54,7 +54,8 @@ export type Session = {
   tool?: string;
   detail?: string;
   wait?: string; // what it needs from you
-  waitKind?: "permission" | "question" | "plan" | "input";
+  waitKind?: "permission" | "question" | "plan" | "input" | "app";
+  askSoon?: { tool: string; text: string; at: number }; // asked in the Claude app's own dialog, not answered yet (checkAppAsks)
   waitAgent?: string; // the subagent whose permission request it waits on, if it's one
   waitPrev?: Status; // what it was doing before it started waiting
   prompt?: string;
@@ -158,3 +159,62 @@ export const localToCli = new Map<string, string>();
 
 // Session titles from the desktop app's files, by Claude Code session ID.
 export const appTitles = new Map<string, string>();
+
+// What a session waits on in the Claude app's own dialog or card, which no permission event
+// announces: the words for it, or undefined for any other tool. Taking over the screen, using
+// apps or guiding you on screen (computer-use), a new session offered to you (an offer only:
+// the hook keeps its initiation), changing a session's permissions or a setting, opening a folder.
+const APP_ASKS: [RegExp, string][] = [
+  [/^mcp__computer[-_]use__request_full_control$/, "Wants to take over your screen"],
+  [/^mcp__computer[-_]use__request_access$/, "Wants access to apps on your Mac"],
+  [/^mcp__computer[-_]use__request_teach_access$/, "Wants to guide you on your screen"],
+  [/^mcp__ccd_session__start_session$/, "Asks whether to start a new session"],
+  [/^mcp__ccd_session_mgmt__set_session_permission_mode$/, "Wants to change a session's permissions"],
+  [/^mcp__ccd_settings__set_setting$/, "Wants to change a setting"],
+  [/^mcp__ccd_directory__request_directory$/, "Wants access to a folder"],
+];
+export function appAsk(tool?: string, x?: Record<string, unknown>): string | undefined {
+  if (!tool || (tool === "mcp__ccd_session__start_session" && x?.init !== "offer")) return undefined;
+  return APP_ASKS.find(([re]) => re.test(tool))?.[1];
+}
+
+// One check at the door, for every line the log hands the state machine. The hook writes these
+// fields as strings, cut; anything else in the log (another writer, a damaged line, a newer
+// Claude Code) is set to its shape here: a field of the wrong type goes, text is capped, a time
+// that isn't a number becomes now, and one past now (a clock set back after it ran ahead) is
+// brought back to now, so a session can't sit at the top of the lists for good. A line with no
+// session ID or event name isn't an event.
+const TEXT_CAPS: Record<string, number> = { cwd: 1000, tp: 1000, pm: 40, agent: 120, tool: 200, d: 400, nt: 80, msg: 400, src: 60, why: 120, prompt: 400 };
+export const FUTURE_SLACK_MS = 5 * 60_000;
+export function cleanEvent(raw: unknown, now = Date.now()): Ev | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  if (typeof r.sid !== "string" || !r.sid || r.sid.length > 120 || typeof r.ev !== "string" || r.ev.length > 60) return null;
+  const t = typeof r.t === "number" && Number.isFinite(r.t) && r.t > 0 ? Math.min(r.t, now + FUTURE_SLACK_MS) : now;
+  const e: Ev = { t, ev: r.ev, sid: r.sid };
+  if (typeof r.pid === "number" && Number.isFinite(r.pid)) e.pid = r.pid;
+  for (const [k, cap] of Object.entries(TEXT_CAPS)) {
+    const v = r[k];
+    if (typeof v === "string") (e as Record<string, unknown>)[k] = v.length > cap ? v.slice(0, cap) : v;
+  }
+  if (r.x && typeof r.x === "object" && !Array.isArray(r.x)) e.x = cleanX(r.x as Record<string, unknown>);
+  return e;
+}
+
+// The extra fields the hook keeps (a plan's steps, a closing recap and question, a reminder's
+// time): text, numbers and flags as they are, text capped; the plan's steps, step numbers and
+// answer buttons in their own shape; anything else nested goes. So a recap that arrives as an
+// object can't reach the database, where one bad value would stop every row from being written.
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+const str = (v: unknown, cap: number) => (typeof v === "string" ? v.slice(0, cap) : undefined);
+function cleanX(x: Record<string, unknown>): Record<string, unknown> {
+  const o: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(x)) {
+    if (typeof v === "string") o[k] = v.slice(0, 400);
+    else if ((typeof v === "number" && Number.isFinite(v)) || typeof v === "boolean" || v === null) o[k] = v;
+    else if (k === "items" && Array.isArray(v)) o.items = v.filter(isObj).slice(0, 20).map((i) => ({ c: str(i.c ?? i.content, 200) ?? "", s: str(i.s ?? i.status, 30) }));
+    else if (k === "acts" && Array.isArray(v)) o.acts = v.filter(isObj).slice(0, 2).map((a) => ({ l: str(a.l, 60), a: str(a.a, 40) }));
+    else if ((k === "done" || k === "start") && Array.isArray(v)) o[k] = v.filter((n) => typeof n === "number" && Number.isFinite(n)).slice(0, 20);
+  }
+  return o;
+}

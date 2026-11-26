@@ -8,7 +8,7 @@
 // where reading stopped is lost), so the same turn can be seen twice: `to` is how far time has
 // been counted, and only what comes after it is ever added.
 
-import type { Session } from "./state.ts";
+import { type Session, appAsk } from "./state.ts";
 
 export type Worked = {
   to: number; // counted up to here
@@ -147,7 +147,7 @@ export function workedFromLog(texts: string[]): Map<string, Worked> {
         case "PreToolUse":
           if (sub || String(e.tool ?? "").startsWith("mcp__ccd_turn__")) break;
           x.inFlight++;
-          if (e.tool === "AskUserQuestion" || e.tool === "ExitPlanMode") waitFor();
+          if (e.tool === "AskUserQuestion" || e.tool === "ExitPlanMode" || appAsk(e.tool, e.x)) waitFor();
           else { x.wait = undefined; open(x, e.t); }
           break;
         case "PostToolUse": case "PostToolUseFailure":

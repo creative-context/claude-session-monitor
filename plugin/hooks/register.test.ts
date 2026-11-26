@@ -1,14 +1,50 @@
 import { expect, mock, test } from 'claude-code/testing'
-import { whatOf } from './register.ts'
+import { headersFor, hex, hmac, nonce, proved, sha256, utf8, whatOf } from './register.ts'
+
+// The key the app's server writes at its start, in a made-up home folder: no test ever reads a
+// real one. The stand-in server checks the mod's proof of the key and signs its replies with it,
+// unless a reply says to leave the proof out ('none'), to sign with the wrong key ('bad'), or to
+// send back the mod's own proof as its own ('echo').
+const HOME = '/home/someone'
+const KEY_FILE = `${HOME}/.claude-session-monitor/plugin.key`
+const KEY = 'a1'.repeat(32)
+const OTHER = 'b2'.repeat(32)
+type Proof = 'none' | 'bad' | 'echo'
+// What the mod sends for a key, given the nonce it sent.
+const mine = (key: string, h: any) => hmac(key, `plugin:${h['x-csm-nonce']}`)
+// The files the mod can read, and the key the server holds; tests change them.
+function keys(on: any, o: { file?: string | null; server?: string } = {}) {
+  const k = { file: o.file === undefined ? KEY + '\n' : o.file, server: o.server ?? KEY }
+  on('fs.read', (_: any, e: any) => {
+    if (e.path !== KEY_FILE || k.file === null) throw new Error('no such file')
+    return { value: k.file }
+  })
+  return k
+}
+// A reply from the stand-in: 403 at once and without proof when the mod's proof is wrong, else
+// signed as the app's server signs (src/keys.ts).
+const refused = (k: { server: string }, e: any) => {
+  const h = e.init?.headers ?? {}
+  return h['x-csm'] !== '1' || typeof h['x-csm-nonce'] !== 'string' || h['x-csm-plugin'] !== mine(k.server, h)
+}
+const forbidden = { value: { status: 403, ok: false, headers: {}, text: '' } }
+function reply(k: { server: string }, e: any, status: number, text = '', proof?: Proof) {
+  const h = e.init?.headers ?? {}
+  if (refused(k, e)) return forbidden
+  const p = proof === 'echo' ? h['x-csm-plugin'] : hmac(proof === 'bad' ? OTHER : k.server, `server:${h['x-csm-nonce']}`)
+  const headers = proof === 'none' ? {} : { 'x-csm-proof': p }
+  return { value: { status, ok: status < 300, headers, text } }
+}
 
 // The answers side of the mod against a stand-in for the app's server, which holds each ask 20 s: it asks for its
-// own session with the x-csm header, submits exactly the answer it gets, asks again at once,
+// own session with the x-csm header and its proof of the key, submits exactly the answer it gets, asks again at once,
 // waits 15 s when the app is closed, and never runs in the app's usage check.
 const SID = '00000000-0000-4000-8000-00000000abcd'
-type Reply = { status: number; text?: string } | 'down'
-function setup(on: any, o: { env?: Record<string, string>; replies?: Reply[] } = {}) {
+type Reply = { status: number; text?: string; proof?: Proof } | 'down'
+function setup(on: any, o: { env?: Record<string, string>; replies?: Reply[]; file?: string | null; server?: string } = {}) {
   const clock = mock.clock(on, { now: 1_000_000 })
-  mock.env(on, o.env ?? {})
+  mock.env(on, { HOME, ...o.env })
+  const k = keys(on, o)
   const asks: { url: string; headers: any; at: number }[] = []
   const prompts: string[] = []
   const asUser: boolean[] = []
@@ -16,13 +52,14 @@ function setup(on: any, o: { env?: Record<string, string>; replies?: Reply[] } =
   on('session.id', () => ({ value: SID }))
   on('http.fetch', async (_: any, e: any) => {
     asks.push({ url: e.url, headers: e.init?.headers, at: clock.now() })
+    if (refused(k, e)) return forbidden
     const r = replies.shift()
     if (r === 'down') throw new Error('connection refused')
     if (!r) {
       await clock.sleep(20_000) // nothing clicked: the server lets the ask go after 20 s
-      return { value: { status: 204, ok: true, headers: {}, text: '' } }
+      return reply(k, e, 204)
     }
-    return { value: { status: r.status, ok: r.status < 300, headers: {}, text: r.text ?? '' } }
+    return reply(k, e, r.status, r.text, r.proof)
   })
   on('prompt.submit', (_: any, e: any) => {
     prompts.push(e.text)
@@ -30,7 +67,7 @@ function setup(on: any, o: { env?: Record<string, string>; replies?: Reply[] } =
     return { text: e.text }
   })
   on('session.start', (_: any, e: any) => ({ cwd: e.cwd }))
-  return { clock, asks, prompts, asUser }
+  return { clock, asks, prompts, asUser, k }
 }
 const start = ($: any) => $.session.start({ cwd: '/work/notes', surface: 'desktop', isInteractive: false })
 
@@ -40,8 +77,81 @@ test('it asks the app for its own session and keeps asking, with nothing to subm
   await s.clock.advance(65_000)
   expect(s.asks.length).toBe(4) // one at the start, then again as each 20 s ask ends
   expect(s.asks[0].url).toBe(`http://127.0.0.1:4747/api/answer/${SID}/next`)
-  expect(s.asks[0].headers).toEqual({ 'x-csm': '1' })
+  expect(Object.keys(s.asks[0].headers).sort()).toEqual(['x-csm', 'x-csm-nonce', 'x-csm-plugin'])
+  expect(s.asks[0].headers['x-csm']).toBe('1')
+  expect(s.asks[0].headers['x-csm-plugin']).toBe(mine(KEY, s.asks[0].headers)) // from the file's key, trimmed
+  expect(s.asks[0].headers['x-csm-nonce']).toMatch(/^[0-9a-f]{32}$/)
+  expect(s.asks[1].headers['x-csm-nonce']).not.toBe(s.asks[0].headers['x-csm-nonce']) // new each time
   expect(s.prompts).toEqual([])
+})
+
+test('an answer without the proof, with a wrong one, or with its own proof sent back, is never submitted', async ($, on) => {
+  const answer = { status: 200, text: JSON.stringify({ text: 'Yes, ship it' }) }
+  const s = setup(on, { replies: [{ ...answer, proof: 'none' }, { ...answer, proof: 'bad' }, { ...answer, proof: 'echo' }] })
+  await start($)
+  await s.clock.advance(14_000)
+  expect(s.asks.length).toBe(1) // an unproved reply is treated like an error: it waits 15 s
+  await s.clock.advance(2_000)
+  expect(s.asks.length).toBe(2)
+  await s.clock.advance(60_000)
+  expect(s.asks.length).toBeGreaterThan(3)
+  expect(s.prompts).toEqual([])
+})
+
+// No header name or value of any request holds the key, or any half of it.
+function keyNeverIn(all: unknown[]) {
+  expect(all.length).toBeGreaterThan(0)
+  for (const h of all) {
+    for (const [name, value] of Object.entries(h as Record<string, string>)) {
+      for (const part of [KEY, KEY.slice(0, 32), KEY.slice(32)]) {
+        expect(name.toLowerCase().includes(part)).toBe(false)
+        expect(String(value).toLowerCase().includes(part)).toBe(false)
+      }
+    }
+  }
+}
+
+test('the key itself is never sent, in any header of an ask for an answer', async ($, on) => {
+  const s = setup(on, { replies: [{ status: 200, text: '{"text":"Go on"}' }, 'down'] })
+  await start($)
+  await s.clock.advance(65_000)
+  expect(s.prompts).toEqual(['Go on'])
+  keyNeverIn(s.asks.map((a) => a.headers))
+})
+
+test('a 204 without the proof is treated like an error: it waits 15 s', async ($, on) => {
+  const s = setup(on, { replies: [{ status: 204, proof: 'none' }] })
+  await start($)
+  await s.clock.advance(14_000)
+  expect(s.asks.length).toBe(1)
+  await s.clock.advance(2_000)
+  expect(s.asks.length).toBe(2)
+})
+
+test('with no key file it asks nothing, and starts once the file is there', async ($, on) => {
+  const s = setup(on, { file: null, replies: [{ status: 200, text: '{"text":"Go on"}' }] })
+  await start($)
+  await s.clock.advance(60_000)
+  expect(s.asks.length).toBe(0)
+  s.k.file = KEY
+  await s.clock.advance(15_500)
+  expect(s.asks.length).toBeGreaterThan(0)
+  expect(s.asks[0].headers['x-csm-plugin']).toBe(mine(KEY, s.asks[0].headers))
+  expect(s.prompts).toEqual(['Go on'])
+})
+
+test('a 403 (an old key) makes it read the key file again', async ($, on) => {
+  const s = setup(on, { server: OTHER }) // the server started again since the file was read
+  await start($)
+  await s.clock.settle()
+  expect(s.asks.length).toBe(1)
+  expect(s.asks[0].headers['x-csm-plugin']).toBe(mine(KEY, s.asks[0].headers))
+  s.k.file = OTHER + '\n' // the new key reaches the file
+  await s.clock.advance(16_000)
+  expect(s.asks.length).toBe(2)
+  expect(s.asks[1].headers['x-csm-plugin']).toBe(mine(OTHER, s.asks[1].headers))
+  await s.clock.advance(21_000)
+  expect(s.asks.length).toBe(3) // accepted now: the next ask follows the 20 s hold at once
 })
 
 test('a clicked answer is submitted as the prompt, exactly, and it asks again', async ($, on) => {
@@ -128,8 +238,7 @@ test('an older loop does not submit an answer that reaches it after a newer sess
 
 // The usage side: every open session writes the same usage.json, so a reading never replaces
 // a newer one, and a session's start (numbers it saw who knows when) only fills an empty file.
-const HOME = '/home/someone'
-const FILE = `${HOME}/.claude-session-monitor/usage.json`
+const FILE =`${HOME}/.claude-session-monitor/usage.json`
 const week = (pct: number) => [{ kind: 'seven_day', percentUsed: pct, resetsAt: '2030-01-03T00:00:00Z' }]
 function usageSetup(on: any, held?: { at: number; pct: number }) {
   const clock = mock.clock(on, { now: 2_000_000_000 })
@@ -183,10 +292,11 @@ test('an older measurement never replaces a newer one in the file', async ($, on
 // asks again on 204, and returns your decision; on 410, an error or anything it doesn't
 // expect, the session's own dialog decides.
 const PSID = '00000000-0000-4000-8000-00000000beef'
-type PermitReply = { status: number; text?: string; after?: number } | 'down'
-function permitSetup(on: any, o: { env?: Record<string, string>; replies?: PermitReply[] } = {}) {
+type PermitReply = { status: number; text?: string; after?: number; proof?: Proof } | 'down'
+function permitSetup(on: any, o: { env?: Record<string, string>; replies?: PermitReply[]; file?: string | null; server?: string } = {}) {
   const clock = mock.clock(on, { now: 3_000_000 })
-  mock.env(on, o.env ?? {})
+  mock.env(on, { HOME, ...o.env })
+  const k = keys(on, o)
   const posts: { url: string; init: any; body: any }[] = []
   const replies = [...(o.replies ?? [])]
   let passed = 0
@@ -194,23 +304,24 @@ function permitSetup(on: any, o: { env?: Record<string, string>; replies?: Permi
   on('http.fetch', async (_: any, e: any) => {
     if (!e.url.includes('/api/permission/')) {
       await clock.sleep(20_000) // the answers loop, if it runs: nothing to submit
-      return { value: { status: 204, ok: true, headers: {}, text: '' } }
+      return reply(k, e, 204)
     }
     posts.push({ url: e.url, init: e.init, body: JSON.parse(e.init?.body ?? 'null') })
+    if (refused(k, e)) return forbidden
     const r = replies.shift()
     if (r === 'down') throw new Error('connection refused')
     if (!r) {
       await clock.sleep(20_000)
-      return { value: { status: 204, ok: true, headers: {}, text: '' } }
+      return reply(k, e, 204)
     }
     if (r.after) await clock.sleep(r.after)
-    return { value: { status: r.status, ok: r.status < 300, headers: {}, text: r.text ?? '' } }
+    return reply(k, e, r.status, r.text, r.proof)
   })
   on('classic.PermissionRequest', () => {
     passed++ // the dialog decides
     return {}
   })
-  return { clock, posts, passed: () => passed }
+  return { clock, posts, passed: () => passed, k }
 }
 // Raises the ask and runs the clock past the server's replies.
 const askPermit = async ($: any, s: { clock: any }, tool_name: string, tool_input: unknown, extra: Record<string, unknown> = {}) => {
@@ -229,9 +340,118 @@ test('a permission allowed on the card is allowed', async ($, on) => {
   expect(s.posts[0].url).toBe(`http://127.0.0.1:4747/api/permission/${PSID}`)
   expect(s.posts[0].init.method).toBe('POST')
   expect(s.posts[0].init.headers['x-csm']).toBe('1')
+  expect(s.posts[0].init.headers['x-csm-plugin']).toBe(mine(KEY, s.posts[0].init.headers))
+  expect(s.posts[0].init.headers['x-csm-nonce']).toMatch(/^[0-9a-f]{32}$/)
   expect(Object.keys(s.posts[0].body).sort()).toEqual(['id', 'tool', 'what'])
   expect(s.posts[0].body.tool).toBe('Bash')
   expect(s.posts[0].body.what).toBe('make test')
+})
+
+test('the key itself is never sent, in any header of a held permission', async ($, on) => {
+  const s = permitSetup(on, { replies: [{ status: 204, after: 20_000 }, decided('allow')] })
+  const r = await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(r.decision).toEqual({ behavior: 'allow' })
+  expect(s.posts.length).toBe(2)
+  keyNeverIn(s.posts.map((x) => x.init.headers))
+})
+
+const proofWords = { none: 'no proof', bad: 'a wrong proof', echo: 'its own proof sent back' }
+for (const proof of ['none', 'bad', 'echo'] as Proof[]) {
+  for (const d of ['allow', 'deny']) {
+    test(`a decision to ${d} with ${proofWords[proof]} is never returned: the dialog decides`, async ($, on) => {
+      const s = permitSetup(on, { replies: [{ ...decided(d), proof }] })
+      const r = await askPermit($, s, 'Bash', { command: 'ls' })
+      expect(r.decision).toBeUndefined()
+      expect(s.passed()).toBe(1)
+      expect(s.posts.length).toBe(1)
+    })
+  }
+}
+
+for (const status of [204, 409, 410]) {
+  test(`a ${status} without the proof: the dialog decides at once`, async ($, on) => {
+    const s = permitSetup(on, { replies: [{ status, after: 1_000, proof: 'none' }, decided('allow')] })
+    const r = await askPermit($, s, 'Bash', { command: 'ls' })
+    expect(r.decision).toBeUndefined()
+    expect(s.passed()).toBe(1)
+    expect(s.posts.length).toBe(1) // never asked again, so the allow after it never comes
+  })
+}
+
+test('with no key file it sends nothing and the dialog decides', async ($, on) => {
+  const s = permitSetup(on, { file: null, replies: [decided('allow')] })
+  const r = await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(r.decision).toBeUndefined()
+  expect(s.posts.length).toBe(0)
+  expect(s.passed()).toBe(1)
+})
+
+test('a 403 (an old key) steps aside, and the next ask reads the new key', async ($, on) => {
+  const s = permitSetup(on, { server: OTHER, replies: [decided('allow'), decided('allow')] })
+  const first = await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(first.decision).toBeUndefined()
+  expect(s.posts[0].init.headers['x-csm-plugin']).toBe(mine(KEY, s.posts[0].init.headers))
+  s.k.file = OTHER + '\n'
+  const second = await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(second.decision).toEqual({ behavior: 'allow' })
+  expect(s.posts[1].init.headers['x-csm-plugin']).toBe(mine(OTHER, s.posts[1].init.headers))
+  expect(s.passed()).toBe(1)
+})
+
+test('each round of a held ask has a new nonce, and each reply is checked', async ($, on) => {
+  const s = permitSetup(on, { replies: [{ status: 204, after: 20_000 }, { ...decided('allow'), proof: 'bad' }] })
+  const r = await askPermit($, s, 'Bash', { command: 'ls' })
+  expect(r.decision).toBeUndefined() // the first round was proved, the second wasn't
+  expect(s.posts.length).toBe(2)
+  expect(s.posts[1].init.headers['x-csm-nonce']).not.toBe(s.posts[0].init.headers['x-csm-nonce'])
+})
+
+// The proof: SHA-256 and HMAC-SHA256 against known answers.
+test('SHA-256 and HMAC-SHA256 give the known answers', async () => {
+  expect(hex(sha256(utf8('')))).toBe('e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855')
+  expect(hex(sha256(utf8('abc')))).toBe('ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad')
+  // Two blocks of padding: 56 bytes leave no room for the length in the first.
+  expect(hex(sha256(utf8('abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq')))).toBe(
+    '248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1',
+  )
+  // RFC 4231, test case 2.
+  expect(hmac('Jefe', 'what do ya want for nothing?')).toBe('5bdcc146bf60754e6a042426089575c75a003f089d2739839dec58b964ec3843')
+  // A key like the app's, 64 hex characters: exactly one block, so it is neither hashed nor
+  // padded. Built here from HMAC's definition, with no shortcut through hmac().
+  const k = utf8(KEY)
+  const n = '0123456789abcdef0123456789abcdef'
+  const inner = sha256([...k.map((b) => b ^ 0x36), ...utf8(n)])
+  expect(hmac(KEY, n)).toBe(hex(sha256([...k.map((b) => b ^ 0x5c), ...inner])))
+  // The same key and nonce, with the values node:crypto's createHmac gives, as the server computes them.
+  expect(hmac(KEY, n)).toBe('b7a997d0984067092815b2fe91612ca818b74b6da48bd54370f32ec4746b8ebe')
+  expect(hmac(KEY, `plugin:${n}`)).toBe('5421020a64927c839dff2c076c6aa031d6e1cc17614094395e1992ff54999b0b')
+  expect(hmac(KEY, `server:${n}`)).toBe('a3ad64d936eab5a111f016485a528b4b405f53721b866084beee119256e151ff')
+})
+
+test('the request carries the plugin side HMAC of its nonce, never the key', async () => {
+  const n = '0123456789abcdef0123456789abcdef'
+  expect(headersFor(KEY, n)).toEqual({
+    'x-csm': '1',
+    'x-csm-plugin': '5421020a64927c839dff2c076c6aa031d6e1cc17614094395e1992ff54999b0b',
+    'x-csm-nonce': n,
+  })
+})
+
+test('a proof is checked whole, in any letter case, only for its own nonce and only from the server side', async () => {
+  const n = nonce()
+  expect(n).toMatch(/^[0-9a-f]{32}$/)
+  expect(nonce()).not.toBe(n)
+  const p = hmac(KEY, `server:${n}`)
+  expect(proved({ 'x-csm-proof': p }, KEY, n)).toBe(true)
+  expect(proved({ 'X-CSM-Proof': p.toUpperCase() }, KEY, n)).toBe(true)
+  expect(proved({ 'x-csm-proof': p.slice(0, 63) }, KEY, n)).toBe(false)
+  expect(proved({ 'x-csm-proof': p }, KEY, nonce())).toBe(false)
+  expect(proved({ 'x-csm-proof': hmac(OTHER, `server:${n}`) }, KEY, n)).toBe(false)
+  expect(proved({ 'x-csm-proof': hmac(KEY, `plugin:${n}`) }, KEY, n)).toBe(false) // the request's own proof, sent back
+  expect(proved({ 'x-csm-proof': hmac(KEY, n) }, KEY, n)).toBe(false) // no side named
+  expect(proved({ 'x-csm-proof': KEY }, KEY, n)).toBe(false)
+  expect(proved({}, KEY, n)).toBe(false)
+  expect(proved(undefined, KEY, n)).toBe(false)
 })
 
 test('a permission denied on the card is denied, with a message', async ($, on) => {

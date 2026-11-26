@@ -1,6 +1,6 @@
 {
   "name": "session-monitor",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Claude Session Monitor's side in each session: saves the plan's usage for the app, sends the answer you click or dictate on a session's card, and allows or denies a permission from that card. Nothing on screen.",
   "license": "MIT",
   "repository": "https://github.com/creative-context/claude-session-monitor"

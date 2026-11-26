@@ -71,7 +71,8 @@ export function snapshot() {
     // Most urgent first. Working sessions keep a fixed order (newest started first):
     // sorting them by last activity would swap two busy cards every few seconds.
     .sort((a, b) => ORDER[a.shown] - ORDER[b.shown] || (a.shown === "working" ? b.s.first - a.s.first : b.s.last - a.s.last))
-    .map(({ s, agents, shown }) => {
+    // One session whose view throws is left out (logged once), and the rest still show.
+    .flatMap(({ s, agents, shown }) => { try { return [(() => {
       const total = s.plan?.length ?? 0;
       const done = s.plan?.filter((st) => st.s === "completed").length ?? 0;
       const current = s.plan?.find((st) => st.s === "in_progress");
@@ -151,12 +152,22 @@ export function snapshot() {
         reminder: reminderView(s, now),
         made: madeTasks(s.made, now),
       };
-    });
+    })()]; } catch (e) { brokenOnce(s.sid, "left out of the window", e); return []; } });
   // A scheduled task the app can't start needs you too, like a session that stopped on an error.
   const taskViews = taskList(now);
   const attention = attentionOf(list, taskViews, now);
   // pins: every pinned session's ID, older ones too, for the Pinned filter's count and History's rows.
   return { now, server: SERVER, needs: attention.length, attention, sessions: list, tasks: taskViews, usage: usageView(now), pins: [...pins] };
+}
+
+// A session the server can't show or save, said once in the log, so one bad session
+// doesn't break the window or the database for the others.
+const broken = new Set<string>();
+export function brokenOnce(sid: string, what: string, e: unknown) {
+  const key = `${sid} ${what}`;
+  if (broken.has(key)) return;
+  broken.add(key);
+  console.error(`${new Date().toISOString()} session ${sid} ${what}: ${e instanceof Error ? e.message : e}`);
 }
 
 // Which server answers: the app starts its own with its version, and replaces one that

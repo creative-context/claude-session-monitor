@@ -9,7 +9,7 @@ import { bump } from "./state.ts";
 // The status line (hooks/statusline.sh) saves the plan's weekly and 5-hour usage after
 // each reply: two percentages and when they reset, nothing else.
 const USAGE = join(DIR, "usage.json");
-export type UsageWindow = { pct: number; resets: number | null };
+export type UsageWindow = { pct: number; resets: number | null; rolled?: true }; // rolled: a new week no reading has measured yet
 let usage: { at: number; week: UsageWindow | null; five: UsageWindow | null } | null = null;
 let usageMtime = 0;
 // Claude Code gives epoch seconds; milliseconds and ISO dates are taken too, in case.
@@ -187,7 +187,16 @@ export function usageView(now: number) {
   // Past its reset a window's number no longer holds, so it goes until the next reply.
   // One with no reset time goes after a week.
   const live = (w: UsageWindow | null) => (w && (w.resets == null ? now - usage!.at < WEEK_MS : w.resets > now) ? w : null);
-  const live7 = live(usage.week);
+  // Except the week's: it starts again at 0%, with its next reset a week on, until the next
+  // reading says how much of the new week is gone (rolled). So the tile stays and goes to the
+  // new week, where it used to go away until then.
+  const rolled = (w: UsageWindow | null): UsageWindow | null => {
+    if (!w?.resets || w.resets > now) return null;
+    let resets = w.resets;
+    while (resets <= now) resets += WEEK_MS;
+    return { pct: 0, resets, rolled: true };
+  };
+  const live7 = live(usage.week) ?? rolled(usage.week);
   // This week's readings, oldest first, as [time, share]: the page draws the week's curve.
   // A reading lower than one before it in the week is an old one (see readUsage): left out.
   const samples: [number, number][] = [];
