@@ -1,6 +1,6 @@
 # Changelog
 
-## Unreleased
+## 0.11.0
 
 - The header's counts are menus: a click opens one and a second click closes it, pointing at the next count switches while one is open, and a click outside or Escape closes it. Show these cards, at the menu's foot, does what a click on the count did. The menu takes the window's height below its count, so it fits in a short window. Before, they opened on hover and a click closed them.
 - In the 7 days menu, Needs you has the amber dot.
