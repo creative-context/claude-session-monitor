@@ -16,13 +16,13 @@ import type { EngineInterface, Register, SessionRateLimit } from 'claude-code'
 // a button's words or the words you sent from that session's card (one line, up to 1,000
 // characters) and nothing more, which starts a turn once the session is idle. The server only
 // hands over a label the session itself offered or your own words, and only after your click.
-// It sends the session's ID in the address and the key and a nonce (below) in its headers, nothing else,
+// It sends the session's ID in the address and a nonce with its HMAC (below) in its headers, nothing else,
 // and with the app closed it just asks again every 15 s. It never runs in the app's own usage
 // check (CSM_PROBE).
 //
 // Permissions: when the session asks for a permission, its card in the app shows what it asks
 // for with Allow and Deny. This sends the app's local server (127.0.0.1 only) the session's ID
-// in the address, the key and a nonce (below) in its headers and, in the body, the tool's name, what it asks
+// in the address, a nonce with its HMAC (below) in its headers and, in the body, the tool's name, what it asks
 // for as one line of up to 300 characters (the command, the file, the address…), an ID for the
 // ask and the subagent's ID if one asks; then it waits for your click and returns it to the
 // session as the hook's decision. The session's own dialog shows all the while: answered
